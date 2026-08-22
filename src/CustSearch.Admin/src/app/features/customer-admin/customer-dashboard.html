@@ -1,0 +1,26 @@
+<app-admin-shell adminType="customer" eyebrow="Acme Retail · May 1–31, 2026" pageTitle="Dashboard">
+  <section class="stats-grid" aria-label="Customer overview">
+    @for (stat of stats; track stat.label) { <app-stat-card [label]="stat.label" [value]="stat.value" [trend]="stat.trend" [icon]="stat.icon" /> }
+  </section>
+  <section class="dashboard-grid">
+    <article class="panel sales-panel">
+      <div class="panel-heading"><div><p>Revenue performance</p><h2>Sales trend</h2></div><span class="badge success">+12.6%</span></div>
+      <div class="chart" role="img" aria-label="Sales rose steadily over the last eight months">
+        <div class="chart-lines"></div><svg viewBox="0 0 600 170" preserveAspectRatio="none" aria-hidden="true"><path d="M0 145 L75 120 L150 132 L225 80 L300 96 L375 42 L450 62 L525 18 L600 34" /></svg>
+        <div class="chart-labels"><span>Oct</span><span>Dec</span><span>Feb</span><span>Apr</span><span>Jun</span></div>
+      </div>
+    </article>
+    <article class="panel segment-panel">
+      <div class="panel-heading"><div><p>Customer mix</p><h2>Top segments</h2></div></div>
+      <div class="donut-row"><div class="donut"><b>12.5k</b><span>Total</span></div><ul><li><i class="premium"></i>Premium <b>34%</b></li><li><i class="loyal"></i>Loyal <b>28%</b></li><li><i class="regular"></i>Regular <b>26%</b></li><li><i class="new"></i>New <b>12%</b></li></ul></div>
+    </article>
+    <article class="panel table-panel">
+      <div class="panel-heading"><div><p>Customer intelligence</p><h2>Recent customers</h2></div><button class="text-button">View all</button></div>
+      <div class="table-scroll"><table><thead><tr><th>Name</th><th>Segment</th><th>Total spend</th><th>Status</th></tr></thead><tbody>@for (customer of customers; track customer[0]) {<tr><td><b>{{ customer[0] }}</b></td><td>{{ customer[1] }}</td><td>{{ customer[2] }}</td><td><span class="badge" [class.success]="customer[3] === 'Active'" [class.warning]="customer[3] === 'Pending'" [class.danger]="customer[3] === 'Inactive'">{{ customer[3] }}</span></td></tr>}</tbody></table></div>
+    </article>
+    <article class="panel activity-panel">
+      <div class="panel-heading"><div><p>Live feed</p><h2>Recent activity</h2></div><span class="live"><i></i>Live</span></div>
+      <ol><li><span>Invoice paid</span><b>INV-1468</b><small>10:43 AM</small></li><li><span>New customer added</span><b>CUST-0081</b><small>10:20 AM</small></li><li><span>Payment failed</span><b>INV-1432</b><small>09:52 AM</small></li><li><span>Visit detected</span><b>CAM-03</b><small>09:31 AM</small></li></ol>
+    </article>
+  </section>
+</app-admin-shell>

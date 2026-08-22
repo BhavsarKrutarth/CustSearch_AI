@@ -315,6 +315,23 @@ paket-files/
 # Python Tools for Visual Studio (PTVS)
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Angular / Node build and test output
+dist/
+.angular/
+playwright-report/
+test-results/
+coverage/
+
+# Local runtime configuration and structured logs
+.env
+.env.*
+!.env.example
+logs/
+**/logs/
 
 # Cake - Uncomment if you are using it
 # tools/**

@@ -1,0 +1,227 @@
+using CustSearch.API.Middleware;
+using CustSearch.API.Security;
+using CustSearch.API.PlatformTenancy;
+using CustSearch.Application.Authentication;
+using CustSearch.Application.Authorization;
+using CustSearch.Infrastructure;
+using CustSearch.Infrastructure.Security;
+using CustSearch.Infrastructure.Persistence;
+using CustSearch.Integrations;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using Serilog;
+using System.Globalization;
+using System.Security.Claims;
+using System.Text;
+using System.Threading.RateLimiting;
+
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
+    .CreateBootstrapLogger();
+
+try
+{
+    var builder = WebApplication.CreateBuilder(args);
+    builder.Host.UseSerilog((context, services, configuration) => configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext());
+
+    var connectionString = builder.Configuration.GetConnectionString("CustSearchDatabase")
+        ?? throw new InvalidOperationException("ConnectionStrings:CustSearchDatabase is required.");
+
+    // Controls brute-force protection without hard-coding an environment-specific request budget.
+    var authRateLimitPermitCount = builder.Configuration.GetValue<int>("AuthRateLimiting:PermitLimit");
+    if (authRateLimitPermitCount is < 1 or > 10_000)
+    {
+        throw new InvalidOperationException("AuthRateLimiting:PermitLimit must be between 1 and 10000.");
+    }
+
+    builder.Services.AddInfrastructure(connectionString);
+    builder.Services.AddCustSearchIntegrations();
+    builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddHttpContextAccessor();
+    builder.Services.AddScoped<ICurrentUserContext, HttpCurrentUserContext>();
+    builder.Services.AddSingleton<IValidateOptions<JwtOptions>, JwtOptionsValidator>();
+    builder.Services.AddOptions<JwtOptions>()
+        .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
+        ?? throw new InvalidOperationException($"Configuration section '{JwtOptions.SectionName}' is required.");
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.MapInboundClaims = false;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = jwtOptions.Issuer,
+                ValidateAudience = true,
+                ValidAudience = jwtOptions.Audience,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
+                ValidateLifetime = true,
+                RequireExpirationTime = true,
+                RequireSignedTokens = true,
+                ClockSkew = TimeSpan.FromSeconds(jwtOptions.ClockSkewSeconds),
+                NameClaimType = "unique_name",
+                RoleClaimType = System.Security.Claims.ClaimTypes.Role,
+            };
+            options.Events = new JwtBearerEvents
+            {
+                OnTokenValidated = async context =>
+                {
+                    // Active sessions are checked server-side so disabling a user, suspending a
+                    // tenant or rotating its security stamp takes effect before JWT expiry.
+                    var principal = context.Principal;
+                    var userIdValue = principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
+                    var securityStamp = principal?.FindFirst(CustomClaimTypes.SecurityStamp)?.Value;
+                    if (!long.TryParse(userIdValue, NumberStyles.None, CultureInfo.InvariantCulture, out var userId)
+                        || string.IsNullOrWhiteSpace(securityStamp))
+                    {
+                        context.Fail("The access token has no valid session identity.");
+                        return;
+                    }
+
+                    try
+                    {
+                        var authenticationService = context.HttpContext.RequestServices
+                            .GetRequiredService<IAuthenticationService>();
+                        var currentUser = await authenticationService.GetCurrentUserAsync(
+                            userId,
+                            securityStamp,
+                            context.HttpContext.Connection.RemoteIpAddress?.ToString(),
+                            context.HttpContext.TraceIdentifier,
+                            context.HttpContext.RequestAborted).ConfigureAwait(false);
+
+                        // The signed tenant scope must still match the authoritative user row.
+                        // This prevents any endpoint from accepting a tenant identifier supplied by request data.
+                        var tenantClaimValue = principal!.FindFirst(CustomClaimTypes.TenantId)?.Value;
+                        var hasTenantClaim = long.TryParse(
+                            tenantClaimValue,
+                            NumberStyles.None,
+                            CultureInfo.InvariantCulture,
+                            out var tenantClaimId);
+                        var expectedScope = currentUser.IsPlatformAdmin ? "Platform" : "Tenant";
+                        if (principal.FindFirst(CustomClaimTypes.UserScope)?.Value != expectedScope
+                            || (currentUser.TenantId is null && hasTenantClaim)
+                            || (currentUser.TenantId is { } tenantId
+                                && (!hasTenantClaim || tenantClaimId != tenantId)))
+                        {
+                            context.Fail("The access token scope does not match the server identity.");
+                            return;
+                        }
+
+                        // Roles and permissions are refreshed from the database on every request, so a
+                        // revoked grant stops working immediately even if the signed JWT has time left.
+                        if (principal.Identity is ClaimsIdentity identity)
+                        {
+                            foreach (var claim in identity.Claims.Where(claim => claim.Type is ClaimTypes.Role
+                                         or CustomClaimTypes.Permission or CustomClaimTypes.StoreId).ToArray())
+                            {
+                                identity.RemoveClaim(claim);
+                            }
+
+                            identity.AddClaims(currentUser.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
+                            identity.AddClaims(currentUser.Permissions.Select(permission =>
+                                new Claim(CustomClaimTypes.Permission, permission)));
+                            identity.AddClaims(currentUser.StoreIds.Select(storeId => new Claim(
+                                CustomClaimTypes.StoreId,
+                                storeId.ToString(CultureInfo.InvariantCulture))));
+                        }
+                    }
+                    catch (AuthenticationFailureException)
+                    {
+                        context.Fail("The access session is no longer valid.");
+                    }
+                },
+            };
+        });
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy(AuthorizationPolicyNames.PlatformScope, policy => policy
+            .RequireAuthenticatedUser()
+            .RequireClaim(CustomClaimTypes.UserScope, "Platform")
+            .RequireAssertion(context => !context.User.HasClaim(claim => claim.Type == CustomClaimTypes.TenantId)));
+        options.AddPolicy(AuthorizationPolicyNames.TenantScope, policy => policy
+            .RequireAuthenticatedUser()
+            .RequireClaim(CustomClaimTypes.UserScope, "Tenant")
+            .RequireClaim(CustomClaimTypes.TenantId));
+    });
+    builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+    builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+    builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ApiAuthorizationResultHandler>();
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.AddPolicy("auth", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = authRateLimitPermitCount,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true,
+            }));
+    });
+    builder.Services.AddControllers(options =>
+        options.Filters.Add<PlatformManagementExceptionFilter>());
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen();
+    builder.Services.AddHealthChecks()
+        .AddDbContextCheck<CustSearchDbContext>("sql-server", tags: ["ready"]);
+
+    var app = builder.Build();
+
+    app.UseMiddleware<CorrelationIdMiddleware>();
+    app.UseSerilogRequestLogging(options =>
+    {
+        options.EnrichDiagnosticContext = (diagnostics, httpContext) =>
+        {
+            diagnostics.Set("CorrelationId", httpContext.TraceIdentifier);
+            diagnostics.Set("RequestHost", httpContext.Request.Host.Value);
+        };
+    });
+
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
+
+    app.UseHttpsRedirection();
+    app.UseRateLimiter();
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.MapControllers();
+    app.MapHealthChecks("/health/live", new HealthCheckOptions
+    {
+        Predicate = _ => false,
+    });
+    app.MapHealthChecks("/health/ready", new HealthCheckOptions
+    {
+        Predicate = registration => registration.Tags.Contains("ready"),
+    });
+
+    app.Run();
+}
+catch (Exception exception)
+{
+    Log.Fatal(exception, "CustSearch API terminated unexpectedly");
+    Environment.ExitCode = 1;
+}
+finally
+{
+    Log.CloseAndFlush();
+}
+
+/// <summary>
+/// Exposes the entry point to the integration-test host.
+/// </summary>
+public partial class Program;

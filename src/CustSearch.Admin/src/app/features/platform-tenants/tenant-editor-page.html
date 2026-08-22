@@ -1,0 +1,12 @@
+<app-admin-shell adminType="platform" eyebrow="Platform / Tenant Management" [pageTitle]="tenantId ? 'Edit tenant' : 'Create tenant'">
+  <section class="panel"><div class="detail-heading"><div><p class="section-kicker">Tenant profile</p><h2>{{ tenantId ? 'Update client account' : 'Onboard a client tenant' }}</h2><p class="muted">Identity, regional defaults and primary contact. Lifecycle changes happen from the tenant detail page.</p></div><a class="secondary-action" [routerLink]="tenantId ? ['/admin/tenants',tenantId] : ['/admin/tenants']">Cancel</a></div></section>
+  <form class="panel" [formGroup]="form" (ngSubmit)="save()">
+    @if(error()){<p class="error" role="alert">{{error()}}</p>}
+    <div class="form-grid">
+      <label><span>Legal name</span><input formControlName="legalName"></label><label><span>Display name</span><input formControlName="displayName"></label>
+      <label><span>Primary contact</span><input formControlName="primaryContactName"></label><label><span>Email</span><input type="email" formControlName="primaryEmail"></label><label><span>Mobile</span><input formControlName="primaryMobile"></label>
+      <label><span>Country</span><input formControlName="countryCode" maxlength="2"></label><label><span>Time zone</span><input formControlName="timeZone"></label><label><span>Currency</span><input formControlName="currencyCode" maxlength="3"></label>
+      @if(!tenantId){<label><span>Initial plan</span><select formControlName="planId"><option value="">No plan</option>@for(p of plans();track p.id){<option [value]="p.id">{{p.planName}}</option>}</select></label><label><span>Store quota override</span><input type="number" min="1" formControlName="maxStores"></label><label><span>User quota override</span><input type="number" min="1" formControlName="maxUsers"></label><label><span>Camera quota override</span><input type="number" min="1" formControlName="maxCameras"></label><label class="span-all"><span>Quota override audit reason</span><textarea formControlName="auditReason" maxlength="500" aria-describedby="quota-reason-help"></textarea><small id="quota-reason-help">Required when any custom quota is entered.</small></label>}
+    </div><div class="actions"><button type="submit" [disabled]="busy()">{{busy()?'Saving...':'Save tenant'}}</button></div>
+  </form>
+</app-admin-shell>

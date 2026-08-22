@@ -1,0 +1,23 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${SQLSERVER_SA_PASSWORD:?Set SQLSERVER_SA_PASSWORD in a local .env file}
+    ports:
+      - "1433:1433"
+    volumes:
+      - custsearch-sql-data:/var/opt/mssql
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - custsearch-redis-data:/data
+
+volumes:
+  custsearch-sql-data:
+  custsearch-redis-data:

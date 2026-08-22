@@ -1,0 +1,6 @@
+@CustSearch.API_HostAddress = http://localhost:5002
+
+GET {{CustSearch.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

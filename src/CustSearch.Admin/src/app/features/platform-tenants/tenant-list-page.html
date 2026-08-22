@@ -1,0 +1,30 @@
+<app-admin-shell adminType="platform" eyebrow="Platform / Tenant Management" pageTitle="Tenants">
+  <section class="toolbar panel" aria-label="Tenant directory controls">
+    <div><p class="section-kicker">Portfolio control</p><h2>Client tenants</h2><span>{{ totalCount() }} organizations across the platform</span></div>
+    @if (session.hasPermission(permissions.tenantsCreate)) { <a class="primary-action" routerLink="/admin/tenants/new">+ Create tenant</a> }
+  </section>
+  <form class="filters panel" (ngSubmit)="applyFilters()" aria-label="Filter tenants">
+    <label><span>Search</span><input name="search" [(ngModel)]="search" placeholder="Name, tenant code or contact"></label>
+    <label><span>Status</span><select name="status" [(ngModel)]="status"><option value="">All statuses</option><option>Active</option><option>Suspended</option><option>Inactive</option></select></label>
+    <label><span>Plan</span><select name="plan" [(ngModel)]="planId"><option value="">All plans</option>@for(plan of plans();track plan.id){<option [value]="plan.id">{{ plan.planName }}</option>}</select></label>
+    <button type="submit">Apply filters</button>
+  </form>
+  <section class="panel directory" aria-live="polite" [attr.aria-busy]="loading()">
+    @if (error()) { <div class="state error" role="alert">{{ error() }} <button type="button" (click)="load()">Retry</button></div> }
+    @else if (loading()) { <div class="state">Loading tenants...</div> }
+    @else if (!tenants().length) { <div class="state"><b>No tenants found</b><span>Adjust the filters or create the first client account.</span></div> }
+    @else {
+      <div class="table-scroll"><table><thead><tr><th>Tenant</th><th>Status</th><th>Plan</th><th>Usage footprint</th><th>Contact</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+        @for (tenant of tenants(); track tenant.id) { <tr>
+          <td><a class="tenant-name" [routerLink]="['/admin/tenants', tenant.id]">{{ tenant.displayName }}</a><small>{{ tenant.tenantCode }} · {{ tenant.legalName }}</small></td>
+          <td><span class="badge" [class]="statusClass(tenant.status)">{{ tenant.status }}</span></td>
+          <td>{{ tenant.plan?.planName ?? 'Unassigned' }}<small>{{ tenant.subscriptionStatus }}</small></td>
+          <td><b>{{ tenant.storeCount }}</b> stores · {{ tenant.userCount }} users · {{ tenant.cameraCount }} cameras<small>{{ tenant.shopperCustomerCount }} shoppers</small></td>
+          <td>{{ tenant.primaryContactName }}<small>{{ tenant.primaryEmail }}</small></td>
+          <td><a class="row-action" [routerLink]="['/admin/tenants', tenant.id]" [attr.aria-label]="'Open ' + tenant.displayName">View →</a></td>
+        </tr> }
+      </tbody></table></div>
+      <footer class="pagination"><span>Page {{ page }} · {{ totalCount() }} total</span><div><button type="button" (click)="changePage(-1)" [disabled]="page === 1">Previous</button><button type="button" (click)="changePage(1)" [disabled]="page * pageSize >= totalCount()">Next</button></div></footer>
+    }
+  </section>
+</app-admin-shell>

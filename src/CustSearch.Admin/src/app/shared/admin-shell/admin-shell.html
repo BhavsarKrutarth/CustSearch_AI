@@ -1,0 +1,41 @@
+<div class="shell" [class.platform]="adminType() === 'platform'">
+  <aside class="sidebar" aria-label="Primary navigation">
+    <a class="brand" [routerLink]="adminType() === 'platform' ? '/platform-admin' : '/customer-admin'">
+      <span class="brand-mark" aria-hidden="true">AI</span><span>CustSearch <b>AI</b></span>
+    </a>
+    <p class="admin-label">{{ adminType() === 'platform' ? 'Platform Admin' : 'Customer Admin' }}</p>
+    <nav>
+      @for (item of navigation(); track item.label) {
+        @if (item.route) {
+          <a [routerLink]="item.route" routerLinkActive="active" ariaCurrentWhenActive="page"><span aria-hidden="true">◆</span>{{ item.label }}</a>
+        } @else {
+          <span class="nav-pending" aria-disabled="true"><span aria-hidden="true">◇</span>{{ item.label }}</span>
+        }
+      }
+    </nav>
+    <div class="sidebar-footer">
+      <span class="avatar" aria-hidden="true">{{ adminType() === 'platform' ? 'PA' : 'CA' }}</span>
+      <span><b>{{ session.currentUser()?.displayName ?? (adminType() === 'platform' ? 'Platform Admin' : 'Customer Admin') }}</b><small>Active session</small></span>
+    </div>
+  </aside>
+  <section class="workspace">
+    <header class="topbar">
+      <label class="search"><span aria-hidden="true">⌕</span><span class="sr-only">Search</span><input type="search" placeholder="Search customers, tenants, stores…"></label>
+      <div class="top-actions">
+        <span class="environment"><i></i> Production</span>
+        <label class="theme-picker"><span class="sr-only">Color theme</span><span aria-hidden="true">◐</span>
+          <select aria-label="Color theme" [value]="theme.preference()" (change)="setTheme($any($event.target).value)">
+            @for (option of themes; track option) { <option [value]="option">{{ option }}</option> }
+          </select>
+        </label>
+        <button class="icon-button" aria-label="Notifications">♢<span class="notification-dot"></span></button>
+      </div>
+    </header>
+    <main id="main-content" tabindex="-1">
+      <div class="page-heading">
+        <div><p>{{ eyebrow() }}</p><h1>{{ pageTitle() }}</h1></div>
+      </div>
+      <ng-content />
+    </main>
+  </section>
+</div>

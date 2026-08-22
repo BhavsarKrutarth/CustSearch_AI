@@ -1,0 +1,10 @@
+<app-admin-shell adminType="platform" eyebrow="Platform overview" pageTitle="Dashboard">
+  @if(error()){<section class="panel dashboard-state" role="alert">{{error()}} <button type="button" (click)="load()">Retry</button></section>}
+  @else if(loading()){<section class="panel dashboard-state" aria-live="polite">Loading platform totals...</section>}
+  @else if(data();as d){
+    <section class="platform-stats" aria-label="Platform overview">
+      <article class="summary-card"><span>Total tenants</span><strong>{{d.totalTenants|number}}</strong></article><article class="summary-card success"><span>Active tenants</span><strong>{{d.activeTenants|number}}</strong></article><article class="summary-card"><span>Trial tenants</span><strong>{{d.trialTenants|number}}</strong></article><article class="summary-card warning"><span>Suspended</span><strong>{{d.suspendedTenants|number}}</strong></article><article class="summary-card"><span>Tenant users</span><strong>{{d.totalTenantUsers|number}}</strong></article><article class="summary-card"><span>Cameras</span><strong>{{d.totalCameras|number}}</strong></article>
+    </section>
+    <section class="platform-grid"><article class="panel portfolio"><p>Recurring portfolio</p><h2>{{d.monthlyRecurringRevenue|currency:'INR':'symbol':'1.0-0'}}</h2><span>Monthly recurring revenue</span><a routerLink="/admin/tenants">Manage tenants →</a></article><article class="panel health"><p>Lifecycle distribution</p><h2>Tenant health</h2><ul><li><span>Active</span><b>{{d.activeTenants}}</b></li><li><span>Trial</span><b>{{d.trialTenants}}</b></li><li><span>Suspended</span><b>{{d.suspendedTenants}}</b></li><li><span>Inactive</span><b>{{d.inactiveTenants}}</b></li></ul></article></section>
+  }
+</app-admin-shell>

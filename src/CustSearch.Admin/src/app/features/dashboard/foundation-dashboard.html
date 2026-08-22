@@ -1,0 +1,14 @@
+<section aria-labelledby="foundation-title">
+  <p class="kicker">Phase 1</p>
+  <h1 id="foundation-title">Foundation is ready for tenant-aware features.</h1>
+  <p class="lede">
+    This shell will host the Platform Admin and Customer Admin experiences through lazy-loaded,
+    permission-aware routes.
+  </p>
+
+  <ul>
+    @for (capability of capabilities; track capability) {
+      <li>{{ capability }}</li>
+    }
+  </ul>
+</section>
