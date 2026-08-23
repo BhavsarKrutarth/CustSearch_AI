@@ -2,7 +2,7 @@ import { expect, Page, Route, test } from '@playwright/test';
 
 function jwtWithFutureExpiry():string{const h=Buffer.from(JSON.stringify({alg:'none',typ:'JWT'})).toString('base64url');const p=Buffer.from(JSON.stringify({exp:Math.floor(Date.now()/1000)+3600})).toString('base64url');return `${h}.${p}.signature`;}
 const json=(route:Route,body:unknown,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
-const phase9Views=['PlatformBilling.Subscriptions.View','PlatformBilling.Invoices.View','PlatformBilling.Payments.View'];
+const phase9Views=['TenantPlatformBilling.Subscriptions.View','TenantPlatformBilling.Invoices.View','TenantPlatformBilling.Payments.View'];
 function tenantIdentity(overrides:Record<string,unknown>={}){return{userId:501,tenantId:25,tenantCode:'DEMO-STORE',userName:'owner',displayName:'Demo Shop Owner',email:'owner@example.test',isPlatformAdmin:false,roles:['TenantAdmin'],permissions:['TenantDashboard.View',...phase9Views],storeIds:[101],...overrides};}
 function platformIdentity(overrides:Record<string,unknown>={}){return{userId:1,tenantId:null,tenantCode:null,userName:'billing-admin',displayName:'Platform Billing Admin',email:'billing@example.test',isPlatformAdmin:true,roles:['PlatformBillingAdmin'],permissions:['Tenants.ViewOperationalSummary','PlatformBilling.Plans.View','PlatformBilling.Plans.Manage','PlatformBilling.Subscriptions.View','PlatformBilling.Subscriptions.Manage','PlatformBilling.Invoices.View','PlatformBilling.Payments.View'],storeIds:[],...overrides};}
 interface State{calls:string[];bodies:unknown[];plans:any[];subscriptions:any[];invoices:any[];payments:any[];}
