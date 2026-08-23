@@ -92,20 +92,24 @@ BEGIN TRY
         CREATE INDEX IX_PlatformPayments_Tenant_Invoice_Status ON dbo.PlatformPayments(TenantId,PlatformInvoiceId,Status);
     END;
 
-    /* 9F — permissions. Manage permissions exist only in platform scope; tenants get view-only billing grants. */
+    /* 9F — globally unique permission names. Platform admins manage; tenants receive distinct read-only grants. */
     DECLARE @PlatformPermissions TABLE(Name NVARCHAR(150),Description NVARCHAR(300));
     INSERT INTO @PlatformPermissions VALUES
       (N'PlatformBilling.Plans.View',N'View CustSearch subscription plans.'),(N'PlatformBilling.Plans.Manage',N'Manage CustSearch subscription plans.'),
       (N'PlatformBilling.Subscriptions.View',N'View tenant platform subscriptions.'),(N'PlatformBilling.Subscriptions.Manage',N'Manage tenant platform subscriptions, invoices and payment callbacks.'),
       (N'PlatformBilling.Invoices.View',N'View CustSearch platform invoices.'),(N'PlatformBilling.Payments.View',N'View CustSearch platform payments.');
     INSERT INTO dbo.Permissions(Scope,Name,Description,IsActive,CreatedUtc)
-    SELECT 1,p.Name,p.Description,1,SYSUTCDATETIME() FROM @PlatformPermissions p WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Scope=1 AND x.Name=p.Name);
+    SELECT 1,p.Name,p.Description,1,SYSUTCDATETIME() FROM @PlatformPermissions p
+    WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Name=p.Name);
 
     DECLARE @TenantPermissions TABLE(Name NVARCHAR(150),Description NVARCHAR(300));
     INSERT INTO @TenantPermissions VALUES
-      (N'PlatformBilling.Subscriptions.View',N'View this tenant platform subscription.'),(N'PlatformBilling.Invoices.View',N'View this tenant platform invoices.'),(N'PlatformBilling.Payments.View',N'View this tenant platform payments.');
+      (N'TenantPlatformBilling.Subscriptions.View',N'View this tenant CustSearch platform subscription.'),
+      (N'TenantPlatformBilling.Invoices.View',N'View this tenant CustSearch platform invoices.'),
+      (N'TenantPlatformBilling.Payments.View',N'View this tenant CustSearch platform payments.');
     INSERT INTO dbo.Permissions(Scope,Name,Description,IsActive,CreatedUtc)
-    SELECT 2,p.Name,p.Description,1,SYSUTCDATETIME() FROM @TenantPermissions p WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Scope=2 AND x.Name=p.Name);
+    SELECT 2,p.Name,p.Description,1,SYSUTCDATETIME() FROM @TenantPermissions p
+    WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Name=p.Name);
 
     INSERT INTO dbo.RolePermissions(RoleId,PermissionId)
     SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=1 AND p.IsActive=1 AND p.Name LIKE N'PlatformBilling.%'
@@ -115,7 +119,8 @@ BEGIN TRY
       AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
 
     INSERT INTO dbo.RolePermissions(RoleId,PermissionId)
-    SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1 AND p.Name IN(N'PlatformBilling.Subscriptions.View',N'PlatformBilling.Invoices.View',N'PlatformBilling.Payments.View')
+    SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1
+      AND p.Name IN(N'TenantPlatformBilling.Subscriptions.View',N'TenantPlatformBilling.Invoices.View',N'TenantPlatformBilling.Payments.View')
     WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName IN(N'TENANTADMIN',N'TENANTOWNER',N'SHOPOWNER',N'AUDITOR')
       AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
 
@@ -132,3 +137,4 @@ END CATCH;
 IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51890,'V1.8.0 version row must exist exactly once.',1;
 IF OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformInvoiceItems',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformPayments',N'U') IS NULL THROW 51891,'Phase 9 platform billing tables are missing.',1;
 IF COL_LENGTH('dbo.Tenants','MaxStaff') IS NULL OR COL_LENGTH('dbo.SubscriptionPlans','MaxStaff') IS NULL OR COL_LENGTH('dbo.TenantSubscriptions','CurrentPeriodEndUtc') IS NULL THROW 51892,'Phase 9 subscription/quota columns are missing.',1;
+IF NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=1 AND Name=N'PlatformBilling.Subscriptions.View') OR NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=2 AND Name=N'TenantPlatformBilling.Subscriptions.View') THROW 51893,'Phase 9 platform/tenant billing permission separation is missing.',1;
