@@ -9,5 +9,7 @@ export const PERMISSIONS = {
   staffView: 'Staff.View', staffManage: 'Staff.Manage', staffTrackingView: 'StaffTracking.View',
   storeCategoriesView: 'StoreCategories.View', storeCategoriesManage: 'StoreCategories.Manage',
   voiceCommandsUse: 'VoiceCommands.Use', voiceCommandsView: 'VoiceCommands.View', voiceCommandsConfigure: 'VoiceCommands.Configure', voiceCommandsAudit: 'VoiceCommands.Audit',
-  customersView: 'Customers.View', householdsView: 'Households.View', invoicesView: 'Invoices.View', reportsView: 'Reports.View', camerasView: 'Cameras.View', alertsView: 'Alerts.View', integrationsView: 'Integrations.View',
+  customersView: 'Customers.View', customersCreate: 'Customers.Create', customersEdit: 'Customers.Edit',
+  visitorsView: 'Visitors.View', visitorsConvert: 'Visitors.Convert',
+  householdsView: 'Households.View', invoicesView: 'Invoices.View', reportsView: 'Reports.View', camerasView: 'Cameras.View', alertsView: 'Alerts.View', integrationsView: 'Integrations.View',
 } as const;

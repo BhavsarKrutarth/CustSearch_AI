@@ -424,7 +424,7 @@ test('store CRUD, location verification and activation/deactivation lifecycle wo
   await page.getByPlaceholder('City').fill('Surat');
   await page.getByPlaceholder('State').fill('Gujarat');
   await page.getByPlaceholder('Postal code').fill('395007');
-  await page.getByPlaceholder('IN').fill('IN');
+  await page.locator('input[formcontrolname="countryCode"]').fill('IN');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect.poll(() => state.stores.length).toBe(2);
   await expect(page.getByText('Surat Second', { exact: true })).toBeVisible();

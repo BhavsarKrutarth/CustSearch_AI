@@ -1,0 +1,32 @@
+import { CommonModule } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { AuthSessionService } from '../../core/auth/auth-session.service';
+import { PERMISSIONS } from '../../core/auth/permission-catalog';
+import { AdminShell } from '../../shared/admin-shell/admin-shell';
+import { CustomerApiService, CustomerSmartProfile } from './customer-api.service';
+
+/** Phase 6D/6E smart customer profile foundation with permission-aware profile and store-assignment edits. */
+@Component({
+  selector:'app-customer-detail-page', standalone:true, imports:[CommonModule,ReactiveFormsModule,RouterLink,AdminShell],
+  changeDetection:ChangeDetectionStrategy.OnPush,
+  styles:[`:host{display:block}.wrap{padding:24px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{border:1px solid #ddd;border-radius:12px;padding:16px;background:var(--mat-sys-surface,#fff)}.wide{grid-column:1/-1}.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{border:1px solid #ddd;border-radius:999px;padding:5px 9px}form{display:grid;gap:9px}input,textarea,button{min-height:40px;padding:8px;border:1px solid #ccc;border-radius:8px}textarea{min-height:90px}.error{color:#b3261e}.ok{color:#147d32}.muted{opacity:.65}@media(max-width:800px){.grid{grid-template-columns:1fr}}`],
+  template:`<app-admin-shell><main class="wrap"><div class="top"><div><a routerLink="/customer-admin/customers">← Customers</a><h1>Smart Customer Profile</h1></div></div>@if(error()){<p class="error">{{error()}}</p>}@if(message()){<p class="ok">{{message()}}</p>}@if(profile();as p){<div class="grid"><section class="card"><h2>{{p.customer.firstName}} {{p.customer.lastName||''}}</h2><p><strong>{{p.customer.customerCode}}</strong></p><p>{{p.customer.mobile||'No mobile'}} · {{p.customer.email||'No email'}}</p><p>Status: {{p.customer.isActive?'Active':'Inactive'}}</p><p>Stores: {{p.customer.storeIds.join(', ')||'Tenant-wide / unassigned'}}</p><p>Anonymous conversions: {{p.convertedAnonymousVisitorCount}}</p><p>Last anonymous sighting: {{p.lastAnonymousVisitorSeenUtc||'-'}}</p></section><section class="card"><h2>Available now</h2><div class="chips">@for(x of p.availableSections;track x){<span class="chip">{{x}}</span>}</div><h3>Planned enrichment</h3><ul>@for(x of p.plannedEnrichmentSections;track x){<li>{{x}}</li>}</ul><p class="muted">No purchase, household, visit or preference inference is fabricated before its planned phase.</p></section>
+  @if(canEdit()){<section class="card"><h2>Edit profile</h2><form [formGroup]="editForm" (ngSubmit)="saveProfile()"><input formControlName="firstName" placeholder="First name"><input formControlName="lastName" placeholder="Last name"><input formControlName="mobile" placeholder="Mobile"><input formControlName="email" placeholder="Email"><textarea formControlName="notes" placeholder="Notes"></textarea><label><input type="checkbox" formControlName="isActive"> Active</label><button [disabled]="editForm.invalid||saving()">Save profile</button></form></section><section class="card"><h2>Store visibility</h2><form [formGroup]="storesForm" (ngSubmit)="saveStores()"><input formControlName="storeIds" placeholder="Store IDs comma separated"><input formControlName="primaryStoreId" placeholder="Primary store ID"><button [disabled]="saving()">Save stores</button></form><p class="muted">Store-scoped users may modify only their authorized store slice; the API preserves inaccessible assignments.</p></section>}</div>}</main></app-admin-shell>`
+})
+export class CustomerDetailPage implements OnInit {
+  private readonly api=inject(CustomerApiService);private readonly route=inject(ActivatedRoute);private readonly session=inject(AuthSessionService);private readonly fb=inject(FormBuilder);
+  private customerId=0;protected readonly profile=signal<CustomerSmartProfile|null>(null);protected readonly saving=signal(false);protected readonly error=signal('');protected readonly message=signal('');protected readonly canEdit=computed(()=>this.session.hasPermission(PERMISSIONS.customersEdit));
+  protected readonly editForm=this.fb.nonNullable.group({firstName:['',Validators.required],lastName:'',mobile:'',email:['',Validators.email],notes:'',isActive:true});
+  protected readonly storesForm=this.fb.nonNullable.group({storeIds:'',primaryStoreId:''});
+  ngOnInit(){this.customerId=Number(this.route.snapshot.paramMap.get('id'));if(!Number.isInteger(this.customerId)||this.customerId<=0){this.error.set('Invalid customer ID.');return;}this.load();}
+  protected saveProfile(){if(this.editForm.invalid)return;const v=this.editForm.getRawValue();this.saving.set(true);this.clearStatus();this.api.update(this.customerId,{firstName:v.firstName,lastName:v.lastName.trim()||null,mobile:v.mobile.trim()||null,email:v.email.trim()||null,notes:v.notes.trim()||null,isActive:v.isActive}).subscribe({next:()=>{this.message.set('Customer profile saved.');this.saving.set(false);this.load(false);},error:e=>this.fail(e)});}
+  protected saveStores(){const v=this.storesForm.getRawValue();this.saving.set(true);this.clearStatus();this.api.setStores(this.customerId,this.ids(v.storeIds),this.numberOrNull(v.primaryStoreId)).subscribe({next:()=>{this.message.set('Customer store visibility saved.');this.saving.set(false);this.load(false);},error:e=>this.fail(e)});}
+  private load(clear=true){if(clear)this.clearStatus();this.api.smartProfile(this.customerId).subscribe({next:p=>{this.profile.set(p);this.editForm.patchValue({firstName:p.customer.firstName,lastName:p.customer.lastName??'',mobile:p.customer.mobile??'',email:p.customer.email??'',notes:p.customer.notes??'',isActive:p.customer.isActive});this.storesForm.patchValue({storeIds:p.customer.storeIds.join(','),primaryStoreId:p.customer.primaryStoreId?.toString()??''});},error:e=>this.fail(e)});}
+  private ids(v:string){return v.split(',').map(x=>Number(x.trim())).filter(x=>Number.isInteger(x)&&x>0);}
+  private numberOrNull(v:string){const n=Number(v);return Number.isInteger(n)&&n>0?n:null;}
+  private clearStatus(){this.error.set('');this.message.set('');}
+  private fail(e:unknown){this.saving.set(false);this.error.set(e instanceof HttpErrorResponse?(e.error?.message??e.message):'Request failed.');}
+}
