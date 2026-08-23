@@ -3,6 +3,8 @@ name: Phase 5 Validate
 on:
   push:
     branches: [phase5-complete]
+  pull_request:
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -94,6 +96,7 @@ jobs:
                   raise SystemExit(f'Non-idempotent/missing guard for {table}')
 
       - name: Persist generated lock and canonical SQL
+        if: github.event_name == 'push'
         shell: bash
         run: |
           if ! git diff --quiet -- database/CustSearchAi.sql src/CustSearch.Admin/package-lock.json; then
