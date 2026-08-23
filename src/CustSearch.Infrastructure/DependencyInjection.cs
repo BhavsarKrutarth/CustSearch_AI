@@ -1,13 +1,15 @@
 using CustSearch.Application.Authentication;
 using CustSearch.Application.Abstractions.Data;
-using CustSearch.Application.Tenancy;
 using CustSearch.Application.PlatformTenancy;
+using CustSearch.Application.ShopperCustomers;
+using CustSearch.Application.Tenancy;
 using CustSearch.Application.TenantOperations;
 using CustSearch.Domain.Entities;
 using CustSearch.Infrastructure.Data;
 using CustSearch.Infrastructure.Persistence;
 using CustSearch.Infrastructure.PlatformTenancy;
 using CustSearch.Infrastructure.Security;
+using CustSearch.Infrastructure.ShopperCustomers;
 using CustSearch.Infrastructure.Tenancy;
 using CustSearch.Infrastructure.TenantOperations;
 using Microsoft.AspNetCore.Identity;
@@ -45,6 +47,11 @@ public static class DependencyInjection
         // application boundary so every controller call receives the same quota/isolation protection.
         services.AddScoped<TenantOperationsService>();
         services.AddScoped<ITenantOperationsService, TenantOperationsSecurityDecorator>();
+
+        // Phase 6 reuses the Phase 5 authenticated TenantId/StoreIds context. Customer/visitor search runs through
+        // tenant-aware stored procedures while mutation/business rules stay in the application service.
+        services.AddScoped<IShopperCustomerRepository, ShopperCustomerRepository>();
+        services.AddScoped<IShopperCustomerService, ShopperCustomerService>();
         return services;
     }
 }
