@@ -33,17 +33,27 @@ jobs:
           cache-dependency-path: src/CustSearch.Admin/package-lock.json
 
       - name: Merge Phase 5 SQL into canonical database script
-        shell: python
+        shell: bash
         run: |
+          python3 - <<'PY'
           from pathlib import Path
           canonical = Path('database/CustSearchAi.sql')
           upgrade = Path('database/09_Upgrade/V1.4.0_Phase5_TenantStoresStaff.sql')
           marker = '/* ===== PHASE 5 V1.4.0 CANONICAL UPGRADE BLOCK ===== */'
-          text = canonical.read_text(encoding='utf-8-sig')
+          raw = canonical.read_bytes()
+          if raw.startswith(b'\xff\xfe'):
+              encoding = 'utf-16'
+          elif raw.startswith(b'\xef\xbb\xbf'):
+              encoding = 'utf-8-sig'
+          else:
+              encoding = 'utf-8'
+          text = raw.decode(encoding)
           block = upgrade.read_text(encoding='utf-8-sig')
           if marker not in text:
-              text = text.rstrip() + '\n\n' + marker + '\n' + block.rstrip() + '\n'
-              canonical.write_text(text, encoding='utf-8-sig')
+              text = text.rstrip() + '\r\n\r\n' + marker + '\r\n' + block.rstrip().replace('\n', '\r\n') + '\r\n'
+              canonical.write_bytes(text.encode(encoding))
+          print(f'Canonical SQL encoding preserved as {encoding}')
+          PY
 
       - name: Restore .NET
         run: dotnet restore CustSearch_AI.sln
@@ -75,10 +85,13 @@ jobs:
         run: npm run test:ci
 
       - name: Validate Phase 5 SQL structure
-        shell: python
+        shell: bash
         run: |
+          python3 - <<'PY'
           from pathlib import Path
-          sql = Path('database/CustSearchAi.sql').read_text(encoding='utf-8-sig')
+          raw = Path('database/CustSearchAi.sql').read_bytes()
+          encoding = 'utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          sql = raw.decode(encoding)
           required = [
             'PHASE 5 V1.4.0 CANONICAL UPGRADE BLOCK',
             'dbo.Stores', 'dbo.UserStoreAssignments', 'dbo.StaffProfiles',
@@ -94,6 +107,7 @@ jobs:
           for table in ['Stores','UserStoreAssignments','StaffProfiles','StaffShifts','StaffPresenceSessions','ProductCategories','StoreVoiceCommandSettings','StoreVoiceCommandAliases']:
               if f"OBJECT_ID(N'dbo.{table}', N'U') IS NULL" not in sql:
                   raise SystemExit(f'Non-idempotent/missing guard for {table}')
+          PY
 
       - name: Persist generated lock and canonical SQL
         if: github.event_name == 'push'
