@@ -1,17 +1,13 @@
 /** Keeps Angular permission names identical to the backend's stable authorization catalog. */
 export const PERMISSIONS = {
-  tenantsView: 'Tenants.View', tenantsCreate: 'Tenants.Create', tenantsEdit: 'Tenants.Edit', tenantsActivate: 'Tenants.Activate', tenantsSuspend: 'Tenants.Suspend', tenantsViewUsage: 'Tenants.ViewUsage', tenantsOperationalSummary: 'Tenants.ViewOperationalSummary',
-  platformBillingView: 'PlatformBilling.View', subscriptionPlansView: 'SubscriptionPlans.View', subscriptionPlansManage: 'SubscriptionPlans.Manage', platformReportsView: 'PlatformReports.View', platformAuditView: 'PlatformAudit.View',
-  tenantDashboardView: 'TenantDashboard.View',
-  tenantUsersView: 'TenantUsers.View', tenantUsersCreate: 'TenantUsers.Create', tenantUsersEdit: 'TenantUsers.Edit', tenantUsersDeactivate: 'TenantUsers.Deactivate', tenantUsersAssignRoles: 'TenantUsers.AssignRoles',
-  tenantStoresView: 'TenantStores.View', tenantStoresCreate: 'TenantStores.Create', tenantStoresEdit: 'TenantStores.Edit',
-  tenantBillingView: 'TenantBilling.View', tenantReportsView: 'TenantReports.View', tenantAuditView: 'TenantAudit.View',
-  staffView: 'Staff.View', staffManage: 'Staff.Manage', staffTrackingView: 'StaffTracking.View',
-  storeCategoriesView: 'StoreCategories.View', storeCategoriesManage: 'StoreCategories.Manage',
-  voiceCommandsUse: 'VoiceCommands.Use', voiceCommandsView: 'VoiceCommands.View', voiceCommandsConfigure: 'VoiceCommands.Configure', voiceCommandsAudit: 'VoiceCommands.Audit',
-  customersView: 'Customers.View', customersCreate: 'Customers.Create', customersEdit: 'Customers.Edit',
-  visitorsView: 'Visitors.View', visitorsConvert: 'Visitors.Convert',
-  householdsView: 'Households.View', householdsCreate: 'Households.Create', householdsEdit: 'Households.Edit', householdsManageMembers: 'Households.ManageMembers',
-  visitsView: 'Visits.View', visitsEdit: 'Visits.Edit', visitPartiesView: 'VisitParties.View',
-  invoicesView: 'Invoices.View', reportsView: 'Reports.View', camerasView: 'Cameras.View', alertsView: 'Alerts.View', integrationsView: 'Integrations.View',
+  tenantsView:'Tenants.View', tenantsCreate:'Tenants.Create', tenantsEdit:'Tenants.Edit', tenantsActivate:'Tenants.Activate', tenantsSuspend:'Tenants.Suspend', tenantsViewUsage:'Tenants.ViewUsage', tenantsOperationalSummary:'Tenants.ViewOperationalSummary',
+  platformBillingView:'PlatformBilling.View', subscriptionPlansView:'SubscriptionPlans.View', subscriptionPlansManage:'SubscriptionPlans.Manage', platformReportsView:'PlatformReports.View', platformAuditView:'PlatformAudit.View',
+  tenantDashboardView:'TenantDashboard.View', tenantUsersView:'TenantUsers.View', tenantUsersCreate:'TenantUsers.Create', tenantUsersEdit:'TenantUsers.Edit', tenantUsersDeactivate:'TenantUsers.Deactivate', tenantUsersAssignRoles:'TenantUsers.AssignRoles', tenantStoresView:'TenantStores.View', tenantStoresCreate:'TenantStores.Create', tenantStoresEdit:'TenantStores.Edit', tenantBillingView:'TenantBilling.View', tenantReportsView:'TenantReports.View', tenantAuditView:'TenantAudit.View',
+  staffView:'Staff.View', staffManage:'Staff.Manage', staffTrackingView:'StaffTracking.View', storeCategoriesView:'StoreCategories.View', storeCategoriesManage:'StoreCategories.Manage', voiceCommandsUse:'VoiceCommands.Use', voiceCommandsView:'VoiceCommands.View', voiceCommandsConfigure:'VoiceCommands.Configure', voiceCommandsAudit:'VoiceCommands.Audit',
+  customersView:'Customers.View', customersCreate:'Customers.Create', customersEdit:'Customers.Edit', visitorsView:'Visitors.View', visitorsConvert:'Visitors.Convert', householdsView:'Households.View', householdsCreate:'Households.Create', householdsEdit:'Households.Edit', householdsManageMembers:'Households.ManageMembers', visitsView:'Visits.View', visitsEdit:'Visits.Edit', visitPartiesView:'VisitParties.View',
+  invoicesView:'Invoices.View', reportsView:'Reports.View', camerasView:'Cameras.View', alertsView:'Alerts.View', integrationsView:'Integrations.View',
+
+  productsView:'Products.View', productsCreate:'Products.Create', productsEdit:'Products.Edit', productsManageStores:'Products.ManageStores',
+  retailInvoicesView:'RetailInvoices.View', retailInvoicesCreate:'RetailInvoices.Create', retailInvoicesEdit:'RetailInvoices.Edit', retailInvoicesFinalize:'RetailInvoices.Finalize', retailInvoicesCancel:'RetailInvoices.Cancel',
+  retailPaymentsView:'RetailPayments.View', retailPaymentsCreate:'RetailPayments.Create', retailSpendAttributionView:'RetailSpendAttribution.View', retailSpendAttributionManage:'RetailSpendAttribution.Manage', retailReportsView:'RetailReports.View',
 } as const;
