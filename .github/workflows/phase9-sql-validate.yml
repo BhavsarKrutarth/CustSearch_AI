@@ -84,41 +84,10 @@ jobs:
             -S localhost -U sa -P "$SA_PASSWORD" -C -b \
             -d CustSearch_AI -i /tmp/run-phase9.sql
 
-      - name: Execute Phase 9 stored procedures
+      - name: Run standalone Phase 9 verifier
         shell: bash
         run: |
+          docker cp database/verify-phase9.sql phase9-sql-only:/tmp/verify-phase9.sql
           docker exec phase9-sql-only /opt/mssql-tools18/bin/sqlcmd \
             -S localhost -U sa -P "$SA_PASSWORD" -C -b \
-            -d CustSearch_AI -Q "
-              EXEC dbo.PlatformBilling_Plan_List @IncludeInactive=1;
-              EXEC dbo.PlatformBilling_Subscription_List @TenantId=NULL;
-              EXEC dbo.PlatformBilling_Invoice_List @TenantId=NULL,@PageNumber=1,@PageSize=10;
-              EXEC dbo.PlatformBilling_Invoice_Get @PlatformInvoiceId=0,@TenantId=NULL;
-              EXEC dbo.PlatformBilling_Payment_List @TenantId=NULL,@PlatformInvoiceId=NULL;
-              EXEC dbo.TenantPlatformBilling_Summary_Get @TenantId=1;
-            "
-
-      - name: Validate Phase 9 schema and separation
-        shell: bash
-        run: |
-          docker exec phase9-sql-only /opt/mssql-tools18/bin/sqlcmd \
-            -S localhost -U sa -P "$SA_PASSWORD" -C -b \
-            -d CustSearch_AI -Q "
-              IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1
-                THROW 51990,'V1.8.0 must exist exactly once.',1;
-              IF OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformInvoiceItems',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformPayments',N'U') IS NULL
-                THROW 51991,'Phase 9 tables missing.',1;
-              IF OBJECT_ID(N'dbo.PlatformBilling_Plan_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Subscription_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Invoice_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Invoice_Get',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Payment_List',N'P') IS NULL OR OBJECT_ID(N'dbo.TenantPlatformBilling_Summary_Get',N'P') IS NULL
-                THROW 51992,'Phase 9 procedures missing.',1;
-              IF COL_LENGTH('dbo.SubscriptionPlans','MaxStaff') IS NULL OR COL_LENGTH('dbo.Tenants','MaxStaff') IS NULL OR COL_LENGTH('dbo.TenantSubscriptions','CurrentPeriodEndUtc') IS NULL
-                THROW 51993,'Phase 9 columns missing.',1;
-              IF NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=1 AND Name=N'PlatformBilling.Subscriptions.View')
-                 OR NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=2 AND Name=N'TenantPlatformBilling.Subscriptions.View')
-                THROW 51994,'Phase 9 permission separation missing.',1;
-              IF EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=2 AND Name IN(N'PlatformBilling.Subscriptions.View',N'PlatformBilling.Invoices.View',N'PlatformBilling.Payments.View'))
-                THROW 51995,'Old duplicate tenant permission names remain.',1;
-              IF EXISTS(SELECT 1 FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.PlatformInvoices') AND referenced_object_id=OBJECT_ID(N'dbo.RetailInvoices'))
-                THROW 51996,'Platform billing references RetailInvoices.',1;
-              DBCC CHECKCONSTRAINTS WITH ALL_CONSTRAINTS;
-              PRINT 'PHASE9_SQL_ONLY_VALIDATION_GREEN';
-            "
+            -d CustSearch_AI -i /tmp/verify-phase9.sql
