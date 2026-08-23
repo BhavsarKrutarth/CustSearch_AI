@@ -38,9 +38,9 @@ export const routes:Routes=[
   {path:'customer-admin/retail/reports',title:'Retail reports | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.retailReportsView])],loadComponent:()=>import('./features/retail/retail-reports-page').then(m=>m.RetailReportsPage)},
 
   // Phase 9 Platform Billing tenant views — CustSearch subscription billing only.
-  {path:'customer-admin/billing',title:'CustSearch billing | CustSearch AI',data:{mode:'summary'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.platformBillingSubscriptionsView])],loadComponent:tenantBillingPage},
-  {path:'customer-admin/billing/subscription',title:'Subscription | CustSearch AI',data:{mode:'subscription'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.platformBillingSubscriptionsView])],loadComponent:tenantBillingPage},
-  {path:'customer-admin/billing/invoices',title:'Platform invoice history | CustSearch AI',data:{mode:'invoices'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.platformBillingInvoicesView])],loadComponent:tenantBillingPage},
+  {path:'customer-admin/billing',title:'CustSearch billing | CustSearch AI',data:{mode:'summary'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantPlatformBillingSubscriptionsView])],loadComponent:tenantBillingPage},
+  {path:'customer-admin/billing/subscription',title:'Subscription | CustSearch AI',data:{mode:'subscription'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantPlatformBillingSubscriptionsView])],loadComponent:tenantBillingPage},
+  {path:'customer-admin/billing/invoices',title:'Platform invoice history | CustSearch AI',data:{mode:'invoices'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantPlatformBillingInvoicesView])],loadComponent:tenantBillingPage},
 
   {path:'platform-admin',redirectTo:'admin/dashboard',pathMatch:'full'},
   {path:'admin/dashboard',title:'Platform Admin | CustSearch AI',canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.tenantsOperationalSummary])],loadComponent:()=>import('./features/platform-admin/platform-dashboard').then(m=>m.PlatformDashboard)},
