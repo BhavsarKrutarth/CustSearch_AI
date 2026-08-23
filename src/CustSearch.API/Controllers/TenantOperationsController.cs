@@ -25,27 +25,23 @@ public sealed class TenantOperationsController(ITenantOperationsService service,
 
     [HttpGet("users/{userId:long}")]
     [HasPermission(PermissionCatalog.Tenant.UsersView)]
-    public Task<TenantUserDetail> User(long userId, CancellationToken ct) => service.GetUserAsync(userId, ct);
+    public Task<TenantUserDetail> GetUser(long userId, CancellationToken ct) => service.GetUserAsync(userId, ct);
 
     [HttpPost("users")]
     [HasPermission(PermissionCatalog.Tenant.UsersCreate)]
-    public Task<TenantUserDetail> CreateUser(CreateTenantUserRequest request, CancellationToken ct) =>
-        service.CreateUserAsync(request.ToCommand(), Audit(), ct);
+    public Task<TenantUserDetail> CreateUser(CreateTenantUserRequest request, CancellationToken ct) => service.CreateUserAsync(request.ToCommand(), Audit(), ct);
 
     [HttpPut("users/{userId:long}")]
     [HasPermission(PermissionCatalog.Tenant.UsersEdit)]
-    public Task<TenantUserDetail> UpdateUser(long userId, UpdateTenantUserRequest request, CancellationToken ct) =>
-        service.UpdateUserAsync(userId, request.ToCommand(), Audit(), ct);
+    public Task<TenantUserDetail> UpdateUser(long userId, UpdateTenantUserRequest request, CancellationToken ct) => service.UpdateUserAsync(userId, request.ToCommand(), Audit(), ct);
 
     [HttpPut("users/{userId:long}/roles")]
     [HasPermission(PermissionCatalog.Tenant.UsersAssignRoles)]
-    public Task<TenantUserDetail> SetRoles(long userId, SetTenantUserRolesRequest request, CancellationToken ct) =>
-        service.SetUserRolesAsync(userId, new(request.Roles), Audit(), ct);
+    public Task<TenantUserDetail> SetRoles(long userId, SetTenantUserRolesRequest request, CancellationToken ct) => service.SetUserRolesAsync(userId, new(request.Roles), Audit(), ct);
 
     [HttpPut("users/{userId:long}/stores")]
     [HasPermission(PermissionCatalog.Tenant.UsersEdit)]
-    public Task<TenantUserDetail> SetStores(long userId, SetTenantUserStoresRequest request, CancellationToken ct) =>
-        service.SetUserStoresAsync(userId, new(request.StoreIds, request.PrimaryStoreId), Audit(), ct);
+    public Task<TenantUserDetail> SetStores(long userId, SetTenantUserStoresRequest request, CancellationToken ct) => service.SetUserStoresAsync(userId, new(request.StoreIds, request.PrimaryStoreId), Audit(), ct);
 
     [HttpGet("stores")]
     [HasPermission(PermissionCatalog.Tenant.StoresView)]
@@ -131,17 +127,103 @@ public sealed class TenantOperationsController(ITenantOperationsService service,
     [HasPermission(PermissionCatalog.Operations.VoiceCommandsConfigure)]
     public Task<StoreVoiceCommandSettingView> SaveVoiceSetting(long storeId, SaveVoiceSettingRequest request, CancellationToken ct) => service.SaveVoiceSettingAsync(storeId, request.ToCommand(), Audit(), ct);
 
-    private TenantAuditContext Audit() => new(currentUser.UserId, HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), HttpContext.TraceIdentifier);
+    private TenantAuditContext Audit() => new(
+        currentUser.UserId,
+        HttpContext.Connection.RemoteIpAddress?.ToString(),
+        Request.Headers.UserAgent.ToString(),
+        HttpContext.TraceIdentifier);
 }
 
-public sealed record CreateTenantUserRequest([param:Required,StringLength(100)]string UserName,[param:Required,EmailAddress,StringLength(254)]string Email,[param:Required,StringLength(150)]string DisplayName,[param:Required,MinLength(10)]string Password,IReadOnlyList<string> Roles,IReadOnlyList<long> StoreIds){public CreateTenantUserCommand ToCommand()=>new(UserName,Email,DisplayName,Password,Roles??[],StoreIds??[]);}
-public sealed record UpdateTenantUserRequest([param:Required,EmailAddress,StringLength(254)]string Email,[param:Required,StringLength(150)]string DisplayName,bool IsActive){public UpdateTenantUserCommand ToCommand()=>new(Email,DisplayName,IsActive);}
+public sealed record CreateTenantUserRequest(
+    [param: Required, StringLength(100)] string UserName,
+    [param: Required, EmailAddress, StringLength(254)] string Email,
+    [param: Required, StringLength(150)] string DisplayName,
+    [param: Required, MinLength(10)] string Password,
+    IReadOnlyList<string> Roles,
+    IReadOnlyList<long> StoreIds)
+{
+    public CreateTenantUserCommand ToCommand() => new(UserName, Email, DisplayName, Password, Roles ?? [], StoreIds ?? []);
+}
+
+public sealed record UpdateTenantUserRequest(
+    [param: Required, EmailAddress, StringLength(254)] string Email,
+    [param: Required, StringLength(150)] string DisplayName,
+    bool IsActive)
+{
+    public UpdateTenantUserCommand ToCommand() => new(Email, DisplayName, IsActive);
+}
+
 public sealed record SetTenantUserRolesRequest(IReadOnlyList<string> Roles);
-public sealed record SetTenantUserStoresRequest(IReadOnlyList<long> StoreIds,long? PrimaryStoreId);
-public sealed record SaveStoreRequest([param:StringLength(30)]string? StoreCode,[param:Required,StringLength(150)]string StoreName,[param:Required,StringLength(250)]string AddressLine1,[param:StringLength(250)]string? AddressLine2,[param:StringLength(150)]string? Landmark,[param:Required,StringLength(100)]string City,[param:StringLength(100)]string? District,[param:Required,StringLength(100)]string StateOrProvince,[param:Required,StringLength(20)]string PostalCode,[param:Required,StringLength(2,MinimumLength=2)]string CountryCode,decimal? Latitude,decimal? Longitude,decimal? GeoFenceRadiusMeters,[param:StringLength(200)]string? ExternalPlaceId,StoreLocationSource LocationSource,[param:Required,StringLength(100)]string TimeZone,[param:EmailAddress,StringLength(254)]string? ContactEmail,[param:StringLength(30)]string? ContactMobile){public SaveStoreCommand ToCommand()=>new(StoreCode,StoreName,AddressLine1,AddressLine2,Landmark,City,District,StateOrProvince,PostalCode,CountryCode,Latitude,Longitude,GeoFenceRadiusMeters,ExternalPlaceId,LocationSource,TimeZone,ContactEmail,ContactMobile);}
-public sealed record CreateStaffRequest([param:Required,StringLength(50)]string EmployeeCode,[param:Required,StringLength(100)]string FirstName,[param:Required,StringLength(100)]string LastName,[param:StringLength(30)]string? Mobile,[param:Required,StringLength(100)]string UserName,[param:Required,EmailAddress,StringLength(254)]string Email,[param:Required,MinLength(10)]string Password,IReadOnlyList<string> Roles,IReadOnlyList<long> StoreIds){public CreateStaffCommand ToCommand()=>new(EmployeeCode,FirstName,LastName,Mobile,UserName,Email,Password,Roles??[],StoreIds??[]);}
-public sealed record UpdateStaffRequest([param:Required,StringLength(100)]string FirstName,[param:Required,StringLength(100)]string LastName,[param:StringLength(30)]string? Mobile,bool IsActive,IReadOnlyList<long> StoreIds){public UpdateStaffCommand ToCommand()=>new(FirstName,LastName,Mobile,IsActive,StoreIds??[]);}
-public sealed record CreateStaffShiftRequest(long StoreId,DateTime StartsUtc,DateTime? ScheduledEndsUtc);
-public sealed record StartStaffPresenceRequest(long StoreId,StaffPresenceSource Source,[param:Range(typeof(decimal),"0","1")]decimal Confidence);
-public sealed record SaveProductCategoryRequest(long? StoreId,[param:Required,StringLength(50)]string CategoryCode,[param:Required,StringLength(150)]string Name,long? ParentCategoryId,bool IsActive){public SaveProductCategoryCommand ToCommand()=>new(StoreId,CategoryCode,Name,ParentCategoryId,IsActive);}
-public sealed record SaveVoiceSettingRequest([param:Required,StringLength(100)]string TriggerKeyword,VoiceResponseMode ResponseMode,bool IsEnabled,bool RequireConfirmationForAmbiguousCategory,IReadOnlyList<string> Aliases){public SaveStoreVoiceCommandSettingCommand ToCommand()=>new(TriggerKeyword,ResponseMode,IsEnabled,RequireConfirmationForAmbiguousCategory,Aliases??[]);}
+public sealed record SetTenantUserStoresRequest(IReadOnlyList<long> StoreIds, long? PrimaryStoreId);
+
+public sealed record SaveStoreRequest(
+    [param: StringLength(30)] string? StoreCode,
+    [param: Required, StringLength(150)] string StoreName,
+    [param: Required, StringLength(250)] string AddressLine1,
+    [param: StringLength(250)] string? AddressLine2,
+    [param: StringLength(150)] string? Landmark,
+    [param: Required, StringLength(100)] string City,
+    [param: StringLength(100)] string? District,
+    [param: Required, StringLength(100)] string StateOrProvince,
+    [param: Required, StringLength(20)] string PostalCode,
+    [param: Required, StringLength(2, MinimumLength = 2)] string CountryCode,
+    decimal? Latitude,
+    decimal? Longitude,
+    decimal? GeoFenceRadiusMeters,
+    [param: StringLength(200)] string? ExternalPlaceId,
+    StoreLocationSource LocationSource,
+    [param: Required, StringLength(100)] string TimeZone,
+    [param: EmailAddress, StringLength(254)] string? ContactEmail,
+    [param: StringLength(30)] string? ContactMobile)
+{
+    public SaveStoreCommand ToCommand() => new(StoreCode, StoreName, AddressLine1, AddressLine2, Landmark, City, District,
+        StateOrProvince, PostalCode, CountryCode, Latitude, Longitude, GeoFenceRadiusMeters, ExternalPlaceId,
+        LocationSource, TimeZone, ContactEmail, ContactMobile);
+}
+
+public sealed record CreateStaffRequest(
+    [param: Required, StringLength(50)] string EmployeeCode,
+    [param: Required, StringLength(100)] string FirstName,
+    [param: Required, StringLength(100)] string LastName,
+    [param: StringLength(30)] string? Mobile,
+    [param: Required, StringLength(100)] string UserName,
+    [param: Required, EmailAddress, StringLength(254)] string Email,
+    [param: Required, MinLength(10)] string Password,
+    IReadOnlyList<string> Roles,
+    IReadOnlyList<long> StoreIds)
+{
+    public CreateStaffCommand ToCommand() => new(EmployeeCode, FirstName, LastName, Mobile, UserName, Email, Password, Roles ?? [], StoreIds ?? []);
+}
+
+public sealed record UpdateStaffRequest(
+    [param: Required, StringLength(100)] string FirstName,
+    [param: Required, StringLength(100)] string LastName,
+    [param: StringLength(30)] string? Mobile,
+    bool IsActive,
+    IReadOnlyList<long> StoreIds)
+{
+    public UpdateStaffCommand ToCommand() => new(FirstName, LastName, Mobile, IsActive, StoreIds ?? []);
+}
+
+public sealed record CreateStaffShiftRequest(long StoreId, DateTime StartsUtc, DateTime? ScheduledEndsUtc);
+public sealed record StartStaffPresenceRequest(long StoreId, StaffPresenceSource Source, [param: Range(typeof(decimal), "0", "1")] decimal Confidence);
+
+public sealed record SaveProductCategoryRequest(
+    long? StoreId,
+    [param: Required, StringLength(50)] string CategoryCode,
+    [param: Required, StringLength(150)] string Name,
+    long? ParentCategoryId,
+    bool IsActive)
+{
+    public SaveProductCategoryCommand ToCommand() => new(StoreId, CategoryCode, Name, ParentCategoryId, IsActive);
+}
+
+public sealed record SaveVoiceSettingRequest(
+    [param: Required, StringLength(100)] string TriggerKeyword,
+    VoiceResponseMode ResponseMode,
+    bool IsEnabled,
+    bool RequireConfirmationForAmbiguousCategory,
+    IReadOnlyList<string> Aliases)
+{
+    public SaveStoreVoiceCommandSettingCommand ToCommand() => new(TriggerKeyword, ResponseMode, IsEnabled, RequireConfirmationForAmbiguousCategory, Aliases ?? []);
+}
