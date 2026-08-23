@@ -1,11 +1,13 @@
 using CustSearch.Application.Authentication;
 using CustSearch.Application.Abstractions.Data;
+using CustSearch.Application.HouseholdsVisits;
 using CustSearch.Application.PlatformTenancy;
 using CustSearch.Application.ShopperCustomers;
 using CustSearch.Application.Tenancy;
 using CustSearch.Application.TenantOperations;
 using CustSearch.Domain.Entities;
 using CustSearch.Infrastructure.Data;
+using CustSearch.Infrastructure.HouseholdsVisits;
 using CustSearch.Infrastructure.Persistence;
 using CustSearch.Infrastructure.PlatformTenancy;
 using CustSearch.Infrastructure.Security;
@@ -52,6 +54,11 @@ public static class DependencyInjection
         // tenant-aware stored procedures while mutation/business rules stay in the application service.
         services.AddScoped<IShopperCustomerRepository, ShopperCustomerRepository>();
         services.AddScoped<IShopperCustomerService, ShopperCustomerService>();
+
+        // Phase 7 reuses the same server-authoritative TenantId/StoreIds and audit boundary. Dapper handles the
+        // pre-paging household/visit/party searches; EF handles validated relationship and visit writes.
+        services.AddScoped<IHouseholdsVisitsRepository, HouseholdsVisitsRepository>();
+        services.AddScoped<IHouseholdsVisitsService, HouseholdsVisitsService>();
         return services;
     }
 }
