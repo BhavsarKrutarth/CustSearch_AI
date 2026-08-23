@@ -13,7 +13,9 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    env:
+      SA_PASSWORD: 'CustSearch_Phase5_2026!Sql'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,18 +27,25 @@ jobs:
         with:
           dotnet-version: 8.0.424
 
-      - name: Setup Node for Angular 22
+      - name: Setup Node for pinned Angular 21
         uses: actions/setup-node@v4
         with:
           node-version: 24.15.0
           cache: npm
           cache-dependency-path: src/CustSearch.Admin/package-lock.json
 
-      - name: Merge Phase 5 SQL into canonical database script
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Normalize SQL Server 2022 canonical bootstrap and merge Phase 5
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           canonical = Path('database/CustSearchAi.sql')
           upgrade = Path('database/09_Upgrade/V1.4.0_Phase5_TenantStoresStaff.sql')
           marker = '/* ===== PHASE 5 V1.4.0 CANONICAL UPGRADE BLOCK ===== */'
@@ -48,11 +57,31 @@ jobs:
           else:
               encoding = 'utf-8'
           text = raw.decode(encoding)
-          block = upgrade.read_text(encoding='utf-8-sig')
+          newline = '\r\n' if '\r\n' in text else '\n'
+
+          # The checked-in SSMS snapshot used a machine-specific SQL Server 17 data path. Replace only
+          # the create-database header so the canonical fresh-install script is portable to SQL Server 2022.
+          portable = newline.join([
+              'USE [master]', 'GO',
+              '/* CustSearch AI portable bootstrap: SQL Server 2022+, no machine-specific MDF/LDF paths. */',
+              "IF DB_ID(N'CustSearch_AI') IS NULL", 'BEGIN', '    CREATE DATABASE [CustSearch_AI];', 'END', 'GO'
+          ])
+          pattern = r"USE \[master\]\s*\r?\nGO\s*\r?\n/\*\*\*\*\*\* Object:  Database \[CustSearch_AI\].*?WITH CATALOG_COLLATION = DATABASE_DEFAULT, LEDGER = OFF\s*\r?\nGO"
+          text, replaced = re.subn(pattern, portable, text, count=1, flags=re.S)
+          if replaced == 0 and "IF DB_ID(N'CustSearch_AI') IS NULL" not in text:
+              raise SystemExit('Could not normalize the canonical CREATE DATABASE header safely.')
+
+          # OPTIMIZED_LOCKING is not part of the SQL Server 2022 compatibility baseline.
+          text = re.sub(r"ALTER DATABASE \[CustSearch_AI\] SET OPTIMIZED_LOCKING = OFF\s*\r?\nGO\s*\r?\n", '', text, count=1)
+
+          # Snapshot the normalized Phase 1-4 state for upgrade testing before Phase 5 is appended.
+          Path('/tmp/CustSearchAi.pre-phase5.sql').write_text(text, encoding='utf-8')
+
+          block = upgrade.read_text(encoding='utf-8-sig').strip()
           if marker not in text:
-              text = text.rstrip() + '\r\n\r\n' + marker + '\r\n' + block.rstrip().replace('\n', '\r\n') + '\r\n'
-              canonical.write_bytes(text.encode(encoding))
-          print(f'Canonical SQL encoding preserved as {encoding}')
+              text = text.rstrip() + newline + newline + marker + newline + block.replace('\n', newline) + newline
+          canonical.write_bytes(text.encode(encoding))
+          print(f'Canonical SQL normalized/merged with encoding {encoding}')
           PY
 
       - name: Restore .NET
@@ -64,17 +93,13 @@ jobs:
       - name: Test .NET
         run: dotnet test CustSearch_AI.sln --configuration Release --no-build --logger "trx;LogFileName=phase5-tests.trx"
 
-      - name: Install Angular 22 dependencies and refresh lock
+      - name: Install Angular dependencies reproducibly
         working-directory: src/CustSearch.Admin
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Angular version
         working-directory: src/CustSearch.Admin
         run: npx ng version
-
-      - name: Build Angular production
-        working-directory: src/CustSearch.Admin
-        run: npm run build:production
 
       - name: Lint Angular
         working-directory: src/CustSearch.Admin
@@ -83,6 +108,17 @@ jobs:
       - name: Test Angular
         working-directory: src/CustSearch.Admin
         run: npm run test:ci
+
+      - name: Build Angular production
+        working-directory: src/CustSearch.Admin
+        run: npm run build:production
+
+      - name: Validate Python baseline
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check -r src/CustSearch.AI/requirements.txt pytest ruff
+          ruff check src/CustSearch.AI tests/CustSearch.AI.Tests
+          PYTHONPATH=src/CustSearch.AI python -m pytest -q tests/CustSearch.AI.Tests
 
       - name: Validate Phase 5 SQL structure
         shell: bash
@@ -93,31 +129,70 @@ jobs:
           encoding = 'utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
           sql = raw.decode(encoding)
           required = [
+            "IF DB_ID(N'CustSearch_AI') IS NULL",
             'PHASE 5 V1.4.0 CANONICAL UPGRADE BLOCK',
             'dbo.Stores', 'dbo.UserStoreAssignments', 'dbo.StaffProfiles',
             'dbo.StaffShifts', 'dbo.StaffPresenceSessions', 'dbo.ProductCategories',
             'dbo.StoreVoiceCommandSettings', 'dbo.StoreVoiceCommandAliases',
             'CREATE OR ALTER PROCEDURE dbo.Tenant_ProvisionDefaultRoles',
             'CREATE OR ALTER PROCEDURE dbo.TenantDashboard_GetSummary',
+            'CREATE OR ALTER PROCEDURE dbo.Store_Search',
+            'CREATE OR ALTER PROCEDURE dbo.Staff_Search',
             "VersionNumber=N'V1.4.0'",
           ]
           missing = [x for x in required if x not in sql]
           if missing:
               raise SystemExit(f'Missing Phase 5 SQL markers: {missing}')
+          if 'OPTIMIZED_LOCKING' in sql:
+              raise SystemExit('Canonical SQL still contains a SQL Server 17-only OPTIMIZED_LOCKING statement.')
           for table in ['Stores','UserStoreAssignments','StaffProfiles','StaffShifts','StaffPresenceSessions','ProductCategories','StoreVoiceCommandSettings','StoreVoiceCommandAliases']:
               if f"OBJECT_ID(N'dbo.{table}', N'U') IS NULL" not in sql:
                   raise SystemExit(f'Non-idempotent/missing guard for {table}')
           PY
 
-      - name: Persist generated lock and canonical SQL
+      - name: Validate Phase 5 upgrade twice on SQL Server 2022
+        shell: bash
+        run: |
+          docker run -d --name phase5-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" -p 14333:1433 mcr.microsoft.com/mssql/server:2022-latest
+          for i in {1..60}; do
+            if docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then docker logs phase5-sql; exit 1; fi
+            sleep 2
+          done
+          docker cp /tmp/CustSearchAi.pre-phase5.sql phase5-sql:/tmp/pre.sql
+          docker cp database/09_Upgrade/V1.4.0_Phase5_TenantStoresStaff.sql phase5-sql:/tmp/phase5.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/pre.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase5.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase5.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.4.0')<>1 THROW 51090,'V1.4.0 repeat safety failed',1; IF OBJECT_ID(N'dbo.Stores',N'U') IS NULL OR OBJECT_ID(N'dbo.Store_Search',N'P') IS NULL THROW 51091,'Phase 5 objects missing',1;"
+
+      - name: Validate final canonical fresh install on SQL Server 2022
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('database/CustSearchAi.sql').read_bytes()
+          enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          Path('/tmp/CustSearchAi.final.sql').write_text(raw.decode(enc),encoding='utf-8')
+          PY
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
+          docker cp /tmp/CustSearchAi.final.sql phase5-sql:/tmp/final.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.4.0')<>1 THROW 51092,'Canonical V1.4.0 missing',1; IF OBJECT_ID(N'dbo.StoreVoiceCommandSettings',N'U') IS NULL THROW 51093,'Canonical Phase 5 objects missing',1;"
+
+      - name: Stop SQL Server validation container
+        if: always()
+        run: docker rm -f phase5-sql >/dev/null 2>&1 || true
+
+      - name: Persist normalized canonical SQL
         if: github.event_name == 'push'
         shell: bash
         run: |
-          if ! git diff --quiet -- database/CustSearchAi.sql src/CustSearch.Admin/package-lock.json; then
+          if ! git diff --quiet -- database/CustSearchAi.sql; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add database/CustSearchAi.sql src/CustSearch.Admin/package-lock.json
-            git commit -m "phase5: sync canonical SQL and Angular 22 lock [skip ci]"
+            git add database/CustSearchAi.sql
+            git commit -m "phase5: persist SQL Server 2022 canonical database script"
             git push origin HEAD:phase5-complete
           fi
 

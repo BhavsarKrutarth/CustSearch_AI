@@ -15,8 +15,11 @@ export const routes: Routes = [
   { path:'customer-admin/stores', title:'Stores | CustSearch AI', data:{mode:'stores',title:'Stores'}, canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantStoresView])], loadComponent:phase5Page },
   { path:'customer-admin/users', title:'Users | CustSearch AI', data:{mode:'users',title:'Tenant users'}, canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantUsersView])], loadComponent:phase5Page },
   { path:'customer-admin/staff', title:'Staff | CustSearch AI', data:{mode:'staff',title:'Staff'}, canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.staffView])], loadComponent:phase5Page },
-  { path:'customer-admin/categories', title:'Categories | CustSearch AI', data:{mode:'categories',title:'Store categories'}, canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.storeCategoriesView])], loadComponent:phase5Page },
-  { path:'customer-admin/voice-settings', title:'Voice settings | CustSearch AI', data:{mode:'voice',title:'Dynamic voice settings'}, canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.voiceCommandsView])], loadComponent:phase5Page },
+  { path:'customer-admin/staff/:id', title:'Staff detail | CustSearch AI', canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.staffView])], loadComponent:()=>import('./features/customer-admin/phase-five-staff-detail-page').then(m=>m.PhaseFiveStaffDetailPage) },
+  { path:'customer-admin/store-categories', title:'Categories | CustSearch AI', data:{mode:'categories',title:'Store categories'}, canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.storeCategoriesView])], loadComponent:phase5Page },
+  { path:'customer-admin/categories', pathMatch:'full', redirectTo:'customer-admin/store-categories' },
+  { path:'customer-admin/voice-commands', title:'Voice commands | CustSearch AI', data:{mode:'voice',title:'Dynamic voice settings'}, canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.voiceCommandsView])], loadComponent:phase5Page },
+  { path:'customer-admin/voice-settings', pathMatch:'full', redirectTo:'customer-admin/voice-commands' },
   { path:'platform-admin', redirectTo:'admin/dashboard', pathMatch:'full' },
   { path:'admin/dashboard', title:'Platform Admin | CustSearch AI', canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.tenantsOperationalSummary])], loadComponent:()=>import('./features/platform-admin/platform-dashboard').then(m=>m.PlatformDashboard) },
   { path:'admin/tenants', canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.tenantsView])], children:[

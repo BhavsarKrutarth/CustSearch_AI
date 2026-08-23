@@ -9,11 +9,13 @@ export interface Staff { id:number; userId:number; employeeCode:string; firstNam
 export interface Category { id:number; storeId?:number|null; categoryCode:string; name:string; parentCategoryId?:number|null; isActive:boolean; }
 export interface VoiceSetting { storeId:number; triggerKeyword:string; responseMode:number; isEnabled:boolean; requireConfirmationForAmbiguousCategory:boolean; aliases:string[]; updatedUtc:string; }
 
+/** Typed Phase 5 tenant API client. TenantId is intentionally absent from every browser request model. */
 @Injectable({providedIn:'root'})
 export class PhaseFiveApiService {
   private readonly api=inject(TenantApiClient);
   dashboard():Observable<DashboardSummary>{return this.api.get('dashboard/summary');}
   users():Observable<TenantUser[]>{return this.api.get('users');}
+  user(id:number):Observable<TenantUser>{return this.api.get(`users/${id}`);}
   createUser(body:unknown):Observable<TenantUser>{return this.api.post('users',body);}
   updateUser(id:number,body:unknown):Observable<TenantUser>{return this.api.put(`users/${id}`,body);}
   setUserRoles(id:number,roles:string[]):Observable<TenantUser>{return this.api.put(`users/${id}/roles`,{roles});}
@@ -24,6 +26,7 @@ export class PhaseFiveApiService {
   verifyStore(id:number):Observable<Store>{return this.api.post(`stores/${id}/verify-location`);}
   setStoreActive(id:number,active:boolean):Observable<Store>{return this.api.post(`stores/${id}/${active?'activate':'deactivate'}`);}
   staff():Observable<Staff[]>{return this.api.get('staff');}
+  staffById(id:number):Observable<Staff>{return this.api.get(`staff/${id}`);}
   createStaff(body:unknown):Observable<Staff>{return this.api.post('staff',body);}
   updateStaff(id:number,body:unknown):Observable<Staff>{return this.api.put(`staff/${id}`,body);}
   categories(storeId?:number):Observable<Category[]>{return this.api.get(`store-categories${storeId?`?storeId=${storeId}`:''}`);}

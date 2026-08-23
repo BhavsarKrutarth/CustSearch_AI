@@ -40,7 +40,11 @@ public static class DependencyInjection
         services.AddScoped<ITenantUserRepository, TenantUserRepository>();
         services.AddScoped<IPlatformTenantManagementService, PlatformTenantManagementService>();
         services.AddScoped<ITenantOperationsRepository, TenantOperationsRepository>();
-        services.AddScoped<ITenantOperationsService, TenantOperationsService>();
+
+        // Keep the Phase 5 implementation independently resolvable and put the security decorator at the
+        // application boundary so every controller call receives the same quota/isolation protection.
+        services.AddScoped<TenantOperationsService>();
+        services.AddScoped<ITenantOperationsService, TenantOperationsSecurityDecorator>();
         return services;
     }
 }
