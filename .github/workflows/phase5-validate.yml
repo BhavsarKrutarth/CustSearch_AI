@@ -48,7 +48,7 @@ jobs:
 
           canonical = Path('database/CustSearchAi.sql')
           upgrade = Path('database/09_Upgrade/V1.4.0_Phase5_TenantStoresStaff.sql')
-          marker = '/* ===== PHASE 5 V1.4.0 CANONICAL UPGRADE BLOCK ===== */'
+          marker = '-- PHASE 5 - TENANT USERS / STORES / STAFF'
           raw = canonical.read_bytes()
           if raw.startswith(b'\xff\xfe'):
               encoding = 'utf-16'
@@ -73,8 +73,22 @@ jobs:
           Path('/tmp/CustSearchAi.pre-phase5.sql').write_text(text, encoding='utf-8')
 
           block = upgrade.read_text(encoding='utf-8-sig').strip()
+          header = newline.join([
+              '-- ============================================================',
+              '-- PHASE 5 - TENANT USERS / STORES / STAFF',
+              '-- SUB-PHASE: 5A - Tenant Users / Roles / ShopOwner / TenantOwner',
+              '-- SUB-PHASE: 5B - User-Store Assignments / Authoritative Store Scope / Quotas',
+              '-- SUB-PHASE: 5C - Store Master / Location / Geofence / Lifecycle',
+              '-- SUB-PHASE: 5D - Staff Profiles / Shifts / Presence',
+              '-- SUB-PHASE: 5E - Store Product Categories',
+              '-- SUB-PHASE: 5F - Dynamic Store Voice Trigger / Aliases',
+              '-- SUB-PHASE: 5G - Customer Admin Dashboard Base',
+              '-- SUB-PHASE: 5H - Completion / Validation / Canonical Database Gate',
+              '-- VERSION: V1.4.0',
+              '-- ============================================================'
+          ])
           if marker not in text:
-              text = text.rstrip() + newline + newline + marker + newline + block.replace('\n', newline) + newline
+              text = text.rstrip() + newline + newline + header + newline + block.replace('\n', newline) + newline
           canonical.write_bytes(text.encode(encoding))
           print(f'Canonical SQL normalized/merged with encoding {encoding}')
           PY
@@ -139,7 +153,10 @@ jobs:
           sql = raw.decode(encoding)
           required = [
             "IF DB_ID(N'CustSearch_AI') IS NULL",
-            'PHASE 5 V1.4.0 CANONICAL UPGRADE BLOCK',
+            'PHASE 5 - TENANT USERS / STORES / STAFF',
+            'SUB-PHASE: 5A', 'SUB-PHASE: 5B', 'SUB-PHASE: 5C', 'SUB-PHASE: 5D',
+            'SUB-PHASE: 5E', 'SUB-PHASE: 5F', 'SUB-PHASE: 5G', 'SUB-PHASE: 5H',
+            'VERSION: V1.4.0',
             'dbo.Stores', 'dbo.UserStoreAssignments', 'dbo.StaffProfiles',
             'dbo.StaffShifts', 'dbo.StaffPresenceSessions', 'dbo.ProductCategories',
             'dbo.StoreVoiceCommandSettings', 'dbo.StoreVoiceCommandAliases',
