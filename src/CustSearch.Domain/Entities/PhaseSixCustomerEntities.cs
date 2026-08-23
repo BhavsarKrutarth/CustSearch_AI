@@ -148,7 +148,7 @@ public sealed class AnonymousVisitor
     public void Touch(DateTime seenUtc)
     {
         if (seenUtc.Kind != DateTimeKind.Utc) throw new ArgumentException("Seen timestamp must be UTC.", nameof(seenUtc));
-        if (seenUtc < FirstSeenUtc) throw new ArgumentOutOfRangeException(nameof(seenUtc));
+        ArgumentOutOfRangeException.ThrowIfLessThan(seenUtc, FirstSeenUtc);
         LastSeenUtc = seenUtc;
         UpdatedUtc = seenUtc;
     }
