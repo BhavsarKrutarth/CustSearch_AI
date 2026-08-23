@@ -8,19 +8,16 @@ import { PageQuery, PageResponse } from '../auth/auth.models';
 export class TenantApiClient {
   private readonly http = inject(HttpClient);
 
-  get<T>(relativePath: string): Observable<T> {
-    return this.http.get<T>(this.tenantUrl(relativePath));
-  }
+  get<T>(relativePath: string): Observable<T> { return this.http.get<T>(this.tenantUrl(relativePath)); }
+  post<T>(relativePath: string, body: unknown = {}): Observable<T> { return this.http.post<T>(this.tenantUrl(relativePath), body); }
+  put<T>(relativePath: string, body: unknown): Observable<T> { return this.http.put<T>(this.tenantUrl(relativePath), body); }
 
   getPage<T>(relativePath: string, query: PageQuery): Observable<PageResponse<T>> {
-    let params = new HttpParams()
-      .set('pageNumber', query.pageNumber)
-      .set('pageSize', query.pageSize);
+    let params = new HttpParams().set('pageNumber', query.pageNumber).set('pageSize', query.pageSize);
     if (query.search) params = params.set('search', query.search);
     if (query.sortBy) params = params.set('sortBy', query.sortBy);
     if (query.sortDirection) params = params.set('sortDirection', query.sortDirection);
     for (const [name, value] of Object.entries(query.filters ?? {})) {
-      // Tenant endpoints derive ownership from the validated session, never from a UI filter.
       if (name.toLowerCase() === 'tenantid') throw new Error('TenantId cannot be supplied by the browser.');
       params = params.set(name, String(value));
     }
@@ -29,9 +26,7 @@ export class TenantApiClient {
 
   private tenantUrl(relativePath: string): string {
     const safePath = relativePath.replace(/^\/+/, '');
-    if (!safePath || safePath.includes('..') || /^https?:/i.test(safePath)) {
-      throw new Error('Tenant API path must be a safe relative path.');
-    }
+    if (!safePath || safePath.includes('..') || /^https?:/i.test(safePath)) throw new Error('Tenant API path must be a safe relative path.');
     return `/api/tenant/${safePath}`;
   }
 }
