@@ -81,7 +81,7 @@ async function signIn(page:Page):Promise<void>{
   await expect(page).toHaveURL(/\/customer-admin\/dashboard$/); await expect(page.locator('app-phase-five-dashboard')).toBeVisible();
 }
 async function openDashboardLink(page:Page,name:'Customers'|'Visitors'):Promise<void>{
-  await page.locator('app-phase-five-dashboard').getByRole('link',{name,exact:true}).click();
+  await page.locator('app-phase-five-dashboard main nav.nav').getByRole('link',{name,exact:true}).click();
 }
 
 test('customer search and create use tenant-safe API without browser TenantId',async({page})=>{
@@ -111,7 +111,7 @@ test('anonymous visitor conversion is explicit and creates a customer only after
 
 test('customer route permission guard denies a tenant user without Customers.View',async({page})=>{
   await mockPhaseSixApi(page,identity({roles:['StoreManager'],permissions:['TenantDashboard.View','Visitors.View'],storeIds:[101]}));await signIn(page);
-  await page.locator('app-phase-five-dashboard').getByRole('link',{name:'Customers',exact:true}).click();await expect(page).toHaveURL(/\/access-denied$/);await expect(page.getByText(/access denied/i).first()).toBeVisible();
+  await page.locator('app-phase-five-dashboard main nav.nav').getByRole('link',{name:'Customers',exact:true}).click();await expect(page).toHaveURL(/\/access-denied$/);await expect(page.getByText(/access denied/i).first()).toBeVisible();
 });
 
 test('store-scoped customer list trusts server-authorized result set and never requests another tenant',async({page})=>{
