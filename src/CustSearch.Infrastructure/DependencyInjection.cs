@@ -2,12 +2,14 @@ using CustSearch.Application.Authentication;
 using CustSearch.Application.Abstractions.Data;
 using CustSearch.Application.Tenancy;
 using CustSearch.Application.PlatformTenancy;
+using CustSearch.Application.TenantOperations;
 using CustSearch.Domain.Entities;
 using CustSearch.Infrastructure.Data;
 using CustSearch.Infrastructure.Persistence;
 using CustSearch.Infrastructure.PlatformTenancy;
 using CustSearch.Infrastructure.Security;
 using CustSearch.Infrastructure.Tenancy;
+using CustSearch.Infrastructure.TenantOperations;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,16 +17,13 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CustSearch.Infrastructure;
 
-/// <summary>
-/// Registers SQL Server, EF Core and Dapper foundation services.
-/// </summary>
+/// <summary>Registers SQL Server, EF Core, Dapper, authentication and tenant operations.</summary>
 public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
-
         services.AddDbContext<CustSearchDbContext>(options =>
             options.UseSqlServer(connectionString, sqlOptions =>
                 sqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)));
@@ -32,10 +31,20 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
         services.AddSingleton<JwtTokenService>();
-        services.AddScoped<IAuthenticationService, AuthenticationService>();
+
+        // Existing authentication implementation remains the session/token authority. Phase 5 decorates
+        // only the returned authorization profile so StoreIds are loaded from authoritative assignments.
+        services.AddScoped<AuthenticationService>();
+        services.AddScoped<IAuthenticationService, PhaseFiveAuthenticationServiceDecorator>();
+
         services.AddScoped<ITenantUserRepository, TenantUserRepository>();
         services.AddScoped<IPlatformTenantManagementService, PlatformTenantManagementService>();
+        services.AddScoped<ITenantOperationsRepository, TenantOperationsRepository>();
 
+        // Keep the Phase 5 implementation independently resolvable and put the security decorator at the
+        // application boundary so every controller call receives the same quota/isolation protection.
+        services.AddScoped<TenantOperationsService>();
+        services.AddScoped<ITenantOperationsService, TenantOperationsSecurityDecorator>();
         return services;
     }
 }
