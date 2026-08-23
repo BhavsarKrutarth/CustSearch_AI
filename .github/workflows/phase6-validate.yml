@@ -70,14 +70,22 @@ jobs:
               raise SystemExit('Could not normalize canonical CREATE DATABASE header safely.')
           text = re.sub(r"ALTER DATABASE \[CustSearch_AI\] SET OPTIMIZED_LOCKING = OFF\s*\r?\nGO\s*\r?\n", '', text, count=1)
 
-          def append_phase(current: str, marker: str, header_lines: list[str], script: Path) -> str:
-              if marker in current:
+          def ensure_phase(current: str, required_signatures: list[str], header_lines: list[str], script: Path) -> str:
+              if all(signature in current for signature in required_signatures):
                   return current
               block = script.read_text(encoding='utf-8-sig').strip()
               header = newline.join(header_lines)
               return current.rstrip() + newline + newline + header + newline + block.replace('\n', newline) + newline
 
-          text = append_phase(text, '-- PHASE 5 - TENANT USERS / STORES / STAFF', [
+          phase5_signatures = [
+              "OBJECT_ID(N'dbo.Stores', N'U') IS NULL",
+              "OBJECT_ID(N'dbo.UserStoreAssignments', N'U') IS NULL",
+              "OBJECT_ID(N'dbo.StaffProfiles', N'U') IS NULL",
+              "OBJECT_ID(N'dbo.ProductCategories', N'U') IS NULL",
+              "OBJECT_ID(N'dbo.StoreVoiceCommandSettings', N'U') IS NULL",
+              "VersionNumber=N'V1.4.0'",
+          ]
+          text = ensure_phase(text, phase5_signatures, [
               '-- ============================================================',
               '-- PHASE 5 - TENANT USERS / STORES / STAFF',
               '-- SUB-PHASE: 5A - Tenant Users / Roles / ShopOwner / TenantOwner',
@@ -91,10 +99,21 @@ jobs:
               '-- VERSION: V1.4.0',
               '-- ============================================================'], phase5)
 
+          if not all(signature in text for signature in phase5_signatures):
+              raise SystemExit('Phase 5 canonical body is incomplete after merge.')
+
           # Upgrade proof starts from the normalized, completed Phase 5 canonical state.
           Path('/tmp/CustSearchAi.pre-phase6.sql').write_text(text, encoding='utf-8')
 
-          text = append_phase(text, '-- PHASE 6 - SHOPPER CUSTOMERS / ANONYMOUS VISITORS', [
+          phase6_signatures = [
+              "OBJECT_ID(N'dbo.Customers', N'U') IS NULL",
+              "OBJECT_ID(N'dbo.CustomerStoreAssignments', N'U') IS NULL",
+              "OBJECT_ID(N'dbo.AnonymousVisitors', N'U') IS NULL",
+              'CREATE OR ALTER PROCEDURE dbo.Customer_Search',
+              'CREATE OR ALTER PROCEDURE dbo.AnonymousVisitor_Search',
+              "VersionNumber=N'V1.5.0'",
+          ]
+          text = ensure_phase(text, phase6_signatures, [
               '-- ============================================================',
               '-- PHASE 6 - SHOPPER CUSTOMERS / ANONYMOUS VISITORS',
               '-- SUB-PHASE: 6A - Customer Management',
@@ -107,6 +126,9 @@ jobs:
               '-- SUB-PHASE: 6H - E2E / Database / Documentation',
               '-- VERSION: V1.5.0',
               '-- ============================================================'], phase6)
+
+          if not all(signature in text for signature in phase6_signatures):
+              raise SystemExit('Phase 6 canonical body is incomplete after merge.')
 
           canonical.write_bytes(text.encode(encoding))
           print(f'Canonical SQL normalized/merged through Phase 6 using {encoding}')
@@ -173,6 +195,12 @@ jobs:
           required = [
               "IF DB_ID(N'CustSearch_AI') IS NULL",
               'PHASE 5 - TENANT USERS / STORES / STAFF', 'VERSION: V1.4.0',
+              "OBJECT_ID(N'dbo.Stores', N'U') IS NULL",
+              "OBJECT_ID(N'dbo.UserStoreAssignments', N'U') IS NULL",
+              "OBJECT_ID(N'dbo.StaffProfiles', N'U') IS NULL",
+              "OBJECT_ID(N'dbo.ProductCategories', N'U') IS NULL",
+              "OBJECT_ID(N'dbo.StoreVoiceCommandSettings', N'U') IS NULL",
+              "VersionNumber=N'V1.4.0'",
               'PHASE 6 - SHOPPER CUSTOMERS / ANONYMOUS VISITORS',
               'SUB-PHASE: 6A', 'SUB-PHASE: 6B', 'SUB-PHASE: 6C', 'SUB-PHASE: 6D',
               'SUB-PHASE: 6E', 'SUB-PHASE: 6F', 'SUB-PHASE: 6G', 'SUB-PHASE: 6H', 'VERSION: V1.5.0',
@@ -185,10 +213,10 @@ jobs:
           ]
           missing = [item for item in required if item not in sql]
           if missing:
-              raise SystemExit(f'Missing canonical Phase 6 markers/objects: {missing}')
+              raise SystemExit(f'Missing canonical Phase 5/6 markers/objects: {missing}')
           if 'MSSQL17.MSSQLSERVER' in sql or 'OPTIMIZED_LOCKING' in sql:
               raise SystemExit('Canonical SQL still contains machine/SQL Server 17-specific statements.')
-          for table in ['Customers','CustomerStoreAssignments','AnonymousVisitors']:
+          for table in ['Stores','UserStoreAssignments','StaffProfiles','ProductCategories','StoreVoiceCommandSettings','Customers','CustomerStoreAssignments','AnonymousVisitors']:
               if f"OBJECT_ID(N'dbo.{table}', N'U') IS NULL" not in sql:
                   raise SystemExit(f'Missing repeat-safe create guard for {table}')
           PY
@@ -205,6 +233,7 @@ jobs:
           docker cp /tmp/CustSearchAi.pre-phase6.sql phase6-sql:/tmp/pre.sql
           docker cp database/09_Upgrade/V1.5.0_Phase6_ShopperCustomers.sql phase6-sql:/tmp/phase6.sql
           docker exec phase6-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/pre.sql
+          docker exec phase6-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF OBJECT_ID(N'dbo.Stores',N'U') IS NULL THROW 51180,'Phase 5 Stores missing before Phase 6',1; IF OBJECT_ID(N'dbo.UserStoreAssignments',N'U') IS NULL THROW 51181,'Phase 5 UserStoreAssignments missing before Phase 6',1; IF OBJECT_ID(N'dbo.StaffProfiles',N'U') IS NULL THROW 51182,'Phase 5 StaffProfiles missing before Phase 6',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.4.0')<>1 THROW 51183,'Expected exactly one V1.4.0 row before Phase 6',1;"
           docker exec phase6-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase6.sql
           docker exec phase6-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase6.sql
           docker exec phase6-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.5.0')<>1 THROW 51190,'V1.5.0 repeat safety failed',1; IF OBJECT_ID(N'dbo.Customers',N'U') IS NULL OR OBJECT_ID(N'dbo.Customer_Search',N'P') IS NULL OR OBJECT_ID(N'dbo.AnonymousVisitor_Search',N'P') IS NULL THROW 51191,'Phase 6 objects missing',1; IF NOT EXISTS(SELECT 1 FROM sys.foreign_keys WHERE name=N'FK_AnonymousVisitors_Stores_TenantStore') THROW 51192,'Tenant-safe visitor FK missing',1;"
@@ -226,7 +255,7 @@ jobs:
           docker exec phase6-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
           docker cp /tmp/CustSearchAi.final.sql phase6-sql:/tmp/final.sql
           docker exec phase6-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
-          docker exec phase6-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.4.0')<>1 THROW 51195,'Canonical V1.4.0 missing',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.5.0')<>1 THROW 51196,'Canonical V1.5.0 missing',1; IF OBJECT_ID(N'dbo.AnonymousVisitor_Search',N'P') IS NULL THROW 51197,'Canonical Phase 6 search missing',1;"
+          docker exec phase6-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.4.0')<>1 THROW 51195,'Canonical V1.4.0 missing or duplicated',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.5.0')<>1 THROW 51196,'Canonical V1.5.0 missing or duplicated',1; IF OBJECT_ID(N'dbo.Stores',N'U') IS NULL THROW 51197,'Canonical Phase 5 Stores missing',1; IF OBJECT_ID(N'dbo.Customers',N'U') IS NULL THROW 51198,'Canonical Phase 6 Customers missing',1; IF OBJECT_ID(N'dbo.Customer_Search',N'P') IS NULL OR OBJECT_ID(N'dbo.AnonymousVisitor_Search',N'P') IS NULL THROW 51199,'Canonical Phase 6 search procedure missing',1;"
 
       - name: Stop SQL Server validation container
         if: always()
