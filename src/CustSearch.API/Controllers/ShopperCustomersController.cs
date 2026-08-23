@@ -66,6 +66,13 @@ public sealed class ShopperCustomersController(IShopperCustomerService service, 
     public Task<AnonymousVisitorDetail> CreateVisitor(CreateAnonymousVisitorRequest request, CancellationToken ct) =>
         service.CreateVisitorAsync(new(request.StoreId, request.VisitorCode, request.SeenUtc), Audit(), ct);
 
+    // Phase 6B manual/demo last-seen update. The service rechecks tenant/store scope and refuses converted/inactive visitors;
+    // future CCTV tracking calls the same application boundary from its trusted backend path rather than bypassing isolation.
+    [HttpPost("visitors/{visitorId:long}/touch")]
+    [HasPermission(PermissionCatalog.Operations.VisitorsConvert)]
+    public Task<AnonymousVisitorDetail> TouchVisitor(long visitorId, TouchAnonymousVisitorRequest request, CancellationToken ct) =>
+        service.TouchVisitorAsync(visitorId, new(request.SeenUtc), Audit(), ct);
+
     [HttpPost("visitors/{visitorId:long}/convert")]
     [HasPermission(PermissionCatalog.Operations.VisitorsConvert)]
     public Task<CustomerDetail> ConvertVisitor(long visitorId, ConvertAnonymousVisitorRequest request, CancellationToken ct) =>
@@ -102,6 +109,9 @@ public sealed record UpdateCustomerRequest(
 public sealed record SetCustomerStoresRequest(IReadOnlyList<long>? StoreIds, long? PrimaryStoreId);
 
 public sealed record CreateAnonymousVisitorRequest(long StoreId, [param: StringLength(50)] string? VisitorCode, DateTime? SeenUtc);
+
+/// <summary>Phase 6B explicit last-seen update request; tenant/store identity still comes from the server session.</summary>
+public sealed record TouchAnonymousVisitorRequest(DateTime? SeenUtc);
 
 public sealed record ConvertAnonymousVisitorRequest(
     long? CustomerId,
