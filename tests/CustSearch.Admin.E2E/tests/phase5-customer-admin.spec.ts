@@ -203,7 +203,14 @@ async function mockPhaseFiveApi(page: Page, options: MockOptions = {}): Promise<
     state.calls.push(`${method} ${path}`);
 
     if (path === 'dashboard/summary' && method === 'GET') {
-      return json(route, { activeUsers: 4, activeStores: state.stores.filter(x => x.isActive).length, activeStaff: state.staff.filter(x => x.isActive).length, activeCategories: state.categories.filter(x => x.isActive).length, openShifts: 2, activePresenceSessions: 1 });
+      return json(route, {
+        activeUsers: state.users.filter(x => x.isActive).length,
+        activeStores: state.stores.filter(x => x.isActive).length,
+        activeStaff: state.staff.filter(x => x.isActive).length,
+        activeCategories: state.categories.filter(x => x.isActive).length,
+        openShifts: 2,
+        activePresenceSessions: 1,
+      });
     }
 
     if (path === 'stores' && method === 'GET') return json(route, state.stores);
@@ -214,22 +221,22 @@ async function mockPhaseFiveApi(page: Page, options: MockOptions = {}): Promise<
         storeCode: String(body['storeCode'] || 'SURAT-02'),
         storeName: String(body['storeName']),
         addressLine1: String(body['addressLine1']),
-        addressLine2: null,
-        landmark: null,
+        addressLine2: body['addressLine2'] ? String(body['addressLine2']) : null,
+        landmark: body['landmark'] ? String(body['landmark']) : null,
         city: String(body['city']),
-        district: null,
+        district: body['district'] ? String(body['district']) : null,
         stateOrProvince: String(body['stateOrProvince']),
         postalCode: String(body['postalCode']),
         countryCode: String(body['countryCode']),
         latitude: body['latitude'] == null ? null : Number(body['latitude']),
         longitude: body['longitude'] == null ? null : Number(body['longitude']),
         geoFenceRadiusMeters: body['geoFenceRadiusMeters'] == null ? null : Number(body['geoFenceRadiusMeters']),
-        externalPlaceId: null,
-        locationSource: 1,
+        externalPlaceId: body['externalPlaceId'] ? String(body['externalPlaceId']) : null,
+        locationSource: Number(body['locationSource'] ?? 1),
         isLocationVerified: false,
         timeZone: String(body['timeZone']),
         contactEmail: body['contactEmail'] ? String(body['contactEmail']) : null,
-        contactMobile: null,
+        contactMobile: body['contactMobile'] ? String(body['contactMobile']) : null,
         isActive: true,
       };
       state.stores.push(created);
@@ -257,10 +264,19 @@ async function mockPhaseFiveApi(page: Page, options: MockOptions = {}): Promise<
     if (path === 'users' && method === 'GET') return json(route, state.users);
     if (path === 'users' && method === 'POST') {
       const body = request.postDataJSON() as { userName: string; email: string; displayName: string; roles: string[]; storeIds: number[] };
-      if (options.rejectTenantWideRole && body.roles.some(x => ['TenantAdmin', 'TenantOwner', 'ShopOwner'].includes(x))) {
+      if (options.rejectTenantWideRole && body.roles.some(role => ['TenantAdmin', 'TenantOwner', 'ShopOwner'].includes(role))) {
         return json(route, { message: 'Store-scoped administrators cannot assign TenantAdmin, TenantOwner or ShopOwner roles.' }, 400);
       }
-      const created: UserState = { id: 602, userName: body.userName, email: body.email, displayName: body.displayName, isActive: true, roles: body.roles, storeIds: body.storeIds, createdUtc: new Date().toISOString() };
+      const created: UserState = {
+        id: 602,
+        userName: body.userName,
+        email: body.email,
+        displayName: body.displayName,
+        isActive: true,
+        roles: body.roles,
+        storeIds: body.storeIds,
+        createdUtc: new Date().toISOString(),
+      };
       state.users.push(created);
       return json(route, created, 201);
     }
@@ -291,7 +307,16 @@ async function mockPhaseFiveApi(page: Page, options: MockOptions = {}): Promise<
     if (path === 'staff' && method === 'GET') return json(route, state.staff);
     if (path === 'staff' && method === 'POST') {
       const body = request.postDataJSON() as { employeeCode: string; firstName: string; lastName: string; mobile: string | null; storeIds: number[] };
-      const created: StaffState = { id: 702, userId: 602, employeeCode: body.employeeCode, firstName: body.firstName, lastName: body.lastName, mobile: body.mobile, isActive: true, storeIds: body.storeIds };
+      const created: StaffState = {
+        id: 702,
+        userId: 602,
+        employeeCode: body.employeeCode,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        mobile: body.mobile,
+        isActive: true,
+        storeIds: body.storeIds,
+      };
       state.staff.push(created);
       return json(route, created, 201);
     }
@@ -319,7 +344,12 @@ async function mockPhaseFiveApi(page: Page, options: MockOptions = {}): Promise<
     const voice = path.match(/^stores\/(\d+)\/voice-command-setting$/);
     if (voice && method === 'GET') return json(route, state.voice);
     if (voice && method === 'PUT') {
-      state.voice = { ...state.voice, ...(request.postDataJSON() as Omit<VoiceState, 'storeId' | 'updatedUtc'>), storeId: Number(voice[1]), updatedUtc: new Date().toISOString() };
+      state.voice = {
+        ...state.voice,
+        ...(request.postDataJSON() as Omit<VoiceState, 'storeId' | 'updatedUtc'>),
+        storeId: Number(voice[1]),
+        updatedUtc: new Date().toISOString(),
+      };
       return json(route, state.voice);
     }
 
@@ -336,10 +366,22 @@ async function signIn(page: Page): Promise<void> {
   await page.getByLabel('Password').fill('safe-e2e-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/customer-admin\/dashboard$/);
+  await expect(page.locator('app-phase-five-dashboard')).toBeVisible();
 }
 
-async function open(page: Page, path: string): Promise<void> {
-  await page.goto(path);
+const navigation: Record<string, string> = {
+  '/customer-admin/stores': 'Stores',
+  '/customer-admin/users': 'Users',
+  '/customer-admin/staff': 'Staff',
+  '/customer-admin/store-categories': 'Categories',
+  '/customer-admin/voice-commands': 'Voice settings',
+};
+
+async function openViaSpa(page: Page, path: string): Promise<void> {
+  const linkName = navigation[path];
+  if (!linkName) throw new Error(`No Phase 5 SPA navigation mapping for ${path}`);
+  const dashboard = page.locator('app-phase-five-dashboard');
+  await dashboard.getByRole('link', { name: linkName, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
 }
 
@@ -356,7 +398,7 @@ test('login and Customer Admin dashboard use API-backed data', async ({ page }) 
 test('store CRUD, location verification and activation/deactivation lifecycle work', async ({ page }) => {
   const state = await mockPhaseFiveApi(page);
   await signIn(page);
-  await open(page, '/customer-admin/stores');
+  await openViaSpa(page, '/customer-admin/stores');
 
   await expect(page.getByText('Surat Flagship', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Edit' }).first().click();
@@ -391,7 +433,7 @@ test('store CRUD, location verification and activation/deactivation lifecycle wo
 test('tenant user create/update flow calls roles and store assignment APIs', async ({ page }) => {
   const state = await mockPhaseFiveApi(page);
   await signIn(page);
-  await open(page, '/customer-admin/users');
+  await openViaSpa(page, '/customer-admin/users');
 
   await page.getByPlaceholder('Username').fill('manager2');
   await page.getByPlaceholder('Display name').fill('Manager Two');
@@ -410,14 +452,14 @@ test('tenant user create/update flow calls roles and store assignment APIs', asy
   await page.getByPlaceholder('Store IDs comma separated').fill('101');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('User saved.', { exact: true })).toBeVisible();
-  await expect(state.calls).toContain('PUT users/601/roles');
-  await expect(state.calls).toContain('PUT users/601/stores');
+  await expect.poll(() => state.calls.includes('PUT users/601/roles')).toBe(true);
+  await expect.poll(() => state.calls.includes('PUT users/601/stores')).toBe(true);
 });
 
 test('quota reactivation rejection is surfaced and does not continue role/store writes', async ({ page }) => {
   const state = await mockPhaseFiveApi(page, { quotaRejectUserId: 601 });
   await signIn(page);
-  await open(page, '/customer-admin/users');
+  await openViaSpa(page, '/customer-admin/users');
 
   const row = page.getByRole('row').filter({ hasText: 'Sales One' });
   await row.getByRole('button', { name: 'Edit' }).click();
@@ -432,7 +474,7 @@ test('quota reactivation rejection is surfaced and does not continue role/store 
 test('staff create and update flow is available to authorized tenant administrators', async ({ page }) => {
   const state = await mockPhaseFiveApi(page);
   await signIn(page);
-  await open(page, '/customer-admin/staff');
+  await openViaSpa(page, '/customer-admin/staff');
 
   await page.getByPlaceholder('Employee code').fill('EMP-002');
   await page.getByPlaceholder('First name').fill('Ravi');
@@ -464,7 +506,7 @@ test('store-scoped permission guard blocks pages without required permission', a
     }),
   });
   await signIn(page);
-  await page.goto('/customer-admin/users');
+  await openViaSpa(page, '/customer-admin/users');
   await expect(page).toHaveURL(/\/access-denied$/);
   await expect(page.getByText(/access denied/i).first()).toBeVisible();
 });
@@ -479,7 +521,7 @@ test('store-scoped role escalation is rejected and tenant-wide role is not creat
     rejectTenantWideRole: true,
   });
   await signIn(page);
-  await open(page, '/customer-admin/users');
+  await openViaSpa(page, '/customer-admin/users');
 
   await page.getByPlaceholder('Username').fill('illegal-admin');
   await page.getByPlaceholder('Display name').fill('Illegal Admin');
@@ -498,17 +540,17 @@ test('store isolation shows only API-authorized stores and never sends TenantId 
     identity: tenantUser({ roles: ['StoreAdmin'], storeIds: [101] }),
   });
   await signIn(page);
-  await open(page, '/customer-admin/stores');
+  await openViaSpa(page, '/customer-admin/stores');
 
   await expect(page.getByText('Surat Flagship', { exact: true })).toBeVisible();
   await expect(page.getByText('Ahmedabad Forbidden', { exact: true })).toHaveCount(0);
-  await expect.poll(() => state.calls.some(x => /tenantId/i.test(x))).toBe(false);
+  await expect.poll(() => state.calls.some(call => /tenantId/i.test(call))).toBe(false);
 });
 
 test('category create and update work on planned store-category route', async ({ page }) => {
   const state = await mockPhaseFiveApi(page);
   await signIn(page);
-  await open(page, '/customer-admin/store-categories');
+  await openViaSpa(page, '/customer-admin/store-categories');
 
   await page.getByPlaceholder('Category code').fill('KURTA');
   await page.getByPlaceholder('Category name').fill('Kurtas');
@@ -528,7 +570,7 @@ test('category create and update work on planned store-category route', async ({
 test('dynamic voice settings load and save a store-specific trigger', async ({ page }) => {
   const state = await mockPhaseFiveApi(page);
   await signIn(page);
-  await open(page, '/customer-admin/voice-commands');
+  await openViaSpa(page, '/customer-admin/voice-commands');
 
   await page.locator('select[formcontrolname="storeId"]').selectOption('101');
   await expect(page.getByDisplayValue('Aasha Add')).toBeVisible();
