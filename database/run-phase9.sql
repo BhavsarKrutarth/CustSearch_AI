@@ -15,26 +15,36 @@ BEGIN TRY
     IF COL_LENGTH('dbo.SubscriptionPlans','Description') IS NULL ALTER TABLE dbo.SubscriptionPlans ADD Description NVARCHAR(1000) NOT NULL CONSTRAINT DF_SubscriptionPlans_Description DEFAULT(N'');
     IF COL_LENGTH('dbo.SubscriptionPlans','Currency') IS NULL ALTER TABLE dbo.SubscriptionPlans ADD Currency CHAR(3) NOT NULL CONSTRAINT DF_SubscriptionPlans_Currency DEFAULT('USD');
     IF COL_LENGTH('dbo.SubscriptionPlans','TrialDays') IS NULL ALTER TABLE dbo.SubscriptionPlans ADD TrialDays INT NOT NULL CONSTRAINT DF_SubscriptionPlans_TrialDays DEFAULT(0);
-    IF COL_LENGTH('dbo.SubscriptionPlans','MaxStaff') IS NULL BEGIN ALTER TABLE dbo.SubscriptionPlans ADD MaxStaff INT NULL;UPDATE dbo.SubscriptionPlans SET MaxStaff=MaxUsers WHERE MaxStaff IS NULL;ALTER TABLE dbo.SubscriptionPlans ALTER COLUMN MaxStaff INT NOT NULL;END;
+    IF COL_LENGTH('dbo.SubscriptionPlans','MaxStaff') IS NULL
+    BEGIN
+        ALTER TABLE dbo.SubscriptionPlans ADD MaxStaff INT NULL;
+        EXEC sys.sp_executesql N'UPDATE dbo.SubscriptionPlans SET MaxStaff=MaxUsers WHERE MaxStaff IS NULL;';
+        EXEC sys.sp_executesql N'ALTER TABLE dbo.SubscriptionPlans ALTER COLUMN MaxStaff INT NOT NULL;';
+    END;
     IF COL_LENGTH('dbo.SubscriptionPlans','FeatureLimitsJson') IS NULL ALTER TABLE dbo.SubscriptionPlans ADD FeatureLimitsJson NVARCHAR(4000) NULL;
     IF COL_LENGTH('dbo.SubscriptionPlans','DisplayOrder') IS NULL ALTER TABLE dbo.SubscriptionPlans ADD DisplayOrder INT NOT NULL CONSTRAINT DF_SubscriptionPlans_DisplayOrder DEFAULT(0);
     IF OBJECT_ID(N'dbo.CK_SubscriptionPlans_Limits',N'C') IS NOT NULL ALTER TABLE dbo.SubscriptionPlans DROP CONSTRAINT CK_SubscriptionPlans_Limits;
-    ALTER TABLE dbo.SubscriptionPlans WITH CHECK ADD CONSTRAINT CK_SubscriptionPlans_Limits CHECK(MaxStores>0 AND MaxUsers>0 AND MaxStaff>0 AND MaxCameras>0 AND (MaxMonthlyRecognitions IS NULL OR MaxMonthlyRecognitions>0) AND (MaxMonthlyApiCalls IS NULL OR MaxMonthlyApiCalls>0));
-    IF OBJECT_ID(N'dbo.CK_SubscriptionPlans_TrialDisplay',N'C') IS NULL ALTER TABLE dbo.SubscriptionPlans WITH CHECK ADD CONSTRAINT CK_SubscriptionPlans_TrialDisplay CHECK(TrialDays>=0 AND DisplayOrder>=0);
-    IF OBJECT_ID(N'dbo.CK_SubscriptionPlans_FeatureLimitsJson',N'C') IS NULL ALTER TABLE dbo.SubscriptionPlans WITH CHECK ADD CONSTRAINT CK_SubscriptionPlans_FeatureLimitsJson CHECK(FeatureLimitsJson IS NULL OR ISJSON(FeatureLimitsJson)=1);
-    IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SubscriptionPlans') AND name=N'IX_SubscriptionPlans_Display') CREATE INDEX IX_SubscriptionPlans_Display ON dbo.SubscriptionPlans(IsActive,DisplayOrder,PlanName);
+    EXEC sys.sp_executesql N'ALTER TABLE dbo.SubscriptionPlans WITH CHECK ADD CONSTRAINT CK_SubscriptionPlans_Limits CHECK(MaxStores>0 AND MaxUsers>0 AND MaxStaff>0 AND MaxCameras>0 AND (MaxMonthlyRecognitions IS NULL OR MaxMonthlyRecognitions>0) AND (MaxMonthlyApiCalls IS NULL OR MaxMonthlyApiCalls>0));';
+    IF OBJECT_ID(N'dbo.CK_SubscriptionPlans_TrialDisplay',N'C') IS NULL EXEC sys.sp_executesql N'ALTER TABLE dbo.SubscriptionPlans WITH CHECK ADD CONSTRAINT CK_SubscriptionPlans_TrialDisplay CHECK(TrialDays>=0 AND DisplayOrder>=0);';
+    IF OBJECT_ID(N'dbo.CK_SubscriptionPlans_FeatureLimitsJson',N'C') IS NULL EXEC sys.sp_executesql N'ALTER TABLE dbo.SubscriptionPlans WITH CHECK ADD CONSTRAINT CK_SubscriptionPlans_FeatureLimitsJson CHECK(FeatureLimitsJson IS NULL OR ISJSON(FeatureLimitsJson)=1);';
+    IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SubscriptionPlans') AND name=N'IX_SubscriptionPlans_Display') EXEC sys.sp_executesql N'CREATE INDEX IX_SubscriptionPlans_Display ON dbo.SubscriptionPlans(IsActive,DisplayOrder,PlanName);';
 
-    IF COL_LENGTH('dbo.Tenants','MaxStaff') IS NULL BEGIN ALTER TABLE dbo.Tenants ADD MaxStaff INT NULL;UPDATE dbo.Tenants SET MaxStaff=MaxUsers WHERE MaxStaff IS NULL;ALTER TABLE dbo.Tenants ALTER COLUMN MaxStaff INT NOT NULL;END;
+    IF COL_LENGTH('dbo.Tenants','MaxStaff') IS NULL
+    BEGIN
+        ALTER TABLE dbo.Tenants ADD MaxStaff INT NULL;
+        EXEC sys.sp_executesql N'UPDATE dbo.Tenants SET MaxStaff=MaxUsers WHERE MaxStaff IS NULL;';
+        EXEC sys.sp_executesql N'ALTER TABLE dbo.Tenants ALTER COLUMN MaxStaff INT NOT NULL;';
+    END;
     IF OBJECT_ID(N'dbo.CK_Tenants_Quotas',N'C') IS NOT NULL ALTER TABLE dbo.Tenants DROP CONSTRAINT CK_Tenants_Quotas;
-    ALTER TABLE dbo.Tenants WITH CHECK ADD CONSTRAINT CK_Tenants_Quotas CHECK(MaxStores>0 AND MaxUsers>0 AND MaxStaff>0 AND MaxCameras>0);
+    EXEC sys.sp_executesql N'ALTER TABLE dbo.Tenants WITH CHECK ADD CONSTRAINT CK_Tenants_Quotas CHECK(MaxStores>0 AND MaxUsers>0 AND MaxStaff>0 AND MaxCameras>0);';
 
     IF COL_LENGTH('dbo.TenantSubscriptions','TrialEndUtc') IS NULL ALTER TABLE dbo.TenantSubscriptions ADD TrialEndUtc DATETIME2(7) NULL;
     IF COL_LENGTH('dbo.TenantSubscriptions','CurrentPeriodStartUtc') IS NULL ALTER TABLE dbo.TenantSubscriptions ADD CurrentPeriodStartUtc DATETIME2(7) NULL;
     IF COL_LENGTH('dbo.TenantSubscriptions','CurrentPeriodEndUtc') IS NULL ALTER TABLE dbo.TenantSubscriptions ADD CurrentPeriodEndUtc DATETIME2(7) NULL;
     IF COL_LENGTH('dbo.TenantSubscriptions','CancelAtPeriodEnd') IS NULL ALTER TABLE dbo.TenantSubscriptions ADD CancelAtPeriodEnd BIT NOT NULL CONSTRAINT DF_TenantSubscriptions_CancelAtPeriodEnd DEFAULT(0);
     IF COL_LENGTH('dbo.TenantSubscriptions','CancelledUtc') IS NULL ALTER TABLE dbo.TenantSubscriptions ADD CancelledUtc DATETIME2(7) NULL;
-    UPDATE dbo.TenantSubscriptions SET CurrentPeriodStartUtc=COALESCE(CurrentPeriodStartUtc,StartsUtc),CurrentPeriodEndUtc=COALESCE(CurrentPeriodEndUtc,EndsUtc),CancelAtPeriodEnd=CASE WHEN AutoRenew=0 THEN 1 ELSE CancelAtPeriodEnd END;
-    IF OBJECT_ID(N'dbo.CK_TenantSubscriptions_CurrentPeriod',N'C') IS NULL ALTER TABLE dbo.TenantSubscriptions WITH CHECK ADD CONSTRAINT CK_TenantSubscriptions_CurrentPeriod CHECK(CurrentPeriodEndUtc IS NULL OR (CurrentPeriodStartUtc IS NOT NULL AND CurrentPeriodEndUtc>CurrentPeriodStartUtc));
+    EXEC sys.sp_executesql N'UPDATE dbo.TenantSubscriptions SET CurrentPeriodStartUtc=COALESCE(CurrentPeriodStartUtc,StartsUtc),CurrentPeriodEndUtc=COALESCE(CurrentPeriodEndUtc,EndsUtc),CancelAtPeriodEnd=CASE WHEN AutoRenew=0 THEN 1 ELSE CancelAtPeriodEnd END;';
+    IF OBJECT_ID(N'dbo.CK_TenantSubscriptions_CurrentPeriod',N'C') IS NULL EXEC sys.sp_executesql N'ALTER TABLE dbo.TenantSubscriptions WITH CHECK ADD CONSTRAINT CK_TenantSubscriptions_CurrentPeriod CHECK(CurrentPeriodEndUtc IS NULL OR (CurrentPeriodStartUtc IS NOT NULL AND CurrentPeriodEndUtc>CurrentPeriodStartUtc));';
 
     IF OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL BEGIN
       CREATE TABLE dbo.PlatformInvoices(Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PlatformInvoices PRIMARY KEY,TenantId BIGINT NOT NULL,TenantSubscriptionId BIGINT NOT NULL,InvoiceNumber NVARCHAR(60) NOT NULL,Currency CHAR(3) NOT NULL,InvoiceUtc DATETIME2(7) NOT NULL,DueUtc DATETIME2(7) NOT NULL,Status TINYINT NOT NULL,Subtotal DECIMAL(19,4) NOT NULL,DiscountAmount DECIMAL(19,4) NOT NULL,TaxAmount DECIMAL(19,4) NOT NULL,Total DECIMAL(19,4) NOT NULL,PaidAmount DECIMAL(19,4) NOT NULL,CreatedUtc DATETIME2(7) NOT NULL,UpdatedUtc DATETIME2(7) NOT NULL,RowVersion BINARY(16) NOT NULL,
