@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -42,20 +42,27 @@ jobs:
       - name: Prepare Phase 7 baseline and Phase 8 final canonical
         shell: bash
         run: |
+          git show origin/AIMainBranch:database/CustSearchAi.sql > /tmp/CustSearchAi.phase7-base.raw
           python3 - <<'PY'
           from pathlib import Path
-          canonical=Path('database/CustSearchAi.sql')
           phase8=Path('database/09_Upgrade/V1.7.0_Phase8_ProductsRetailBilling.sql')
-          raw=canonical.read_bytes()
+          raw=Path('/tmp/CustSearchAi.phase7-base.raw').read_bytes()
           enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
           base=raw.decode(enc)
           required=["VersionNumber=N'V1.6.0'","OBJECT_ID(N'dbo.Households',N'U') IS NULL","OBJECT_ID(N'dbo.CustomerVisits',N'U') IS NULL"]
           missing=[x for x in required if x not in base]
           if missing: raise SystemExit(f'Canonical Phase 7 baseline incomplete: {missing}')
-          if "VersionNumber=N'V1.7.0'" in base: raise SystemExit('Phase 8 canonical must not be pre-persisted before validation in this workflow.')
+          if "VersionNumber=N'V1.7.0'" in base: raise SystemExit('AIMainBranch must remain the Phase 7 baseline until Phase 8 is merged.')
           p8=phase8.read_text(encoding='utf-8-sig')
+          branch_raw=Path('database/CustSearchAi.sql').read_bytes()
+          branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          branch=branch_raw.decode(branch_enc)
+          if "VersionNumber=N'V1.7.0'" in branch:
+              final=branch
+          else:
+              final=base.rstrip()+"\n\n-- ============================================================\n-- PHASE 8 - PRODUCTS & RETAIL BILLING\n-- VERSION: V1.7.0\n-- ============================================================\n"+p8.strip()+"\n"
           Path('/tmp/CustSearchAi.pre-phase8.sql').write_text(base,encoding='utf-8')
-          Path('/tmp/CustSearchAi.phase8-final.sql').write_text(base.rstrip()+"\n\n-- PHASE 8 - PRODUCTS & RETAIL BILLING / V1.7.0\n"+p8.strip()+"\n",encoding='utf-8')
+          Path('/tmp/CustSearchAi.phase8-final.sql').write_text(final,encoding='utf-8')
           PY
 
       - name: Restore .NET
@@ -154,3 +161,15 @@ jobs:
           docker cp /tmp/CustSearchAi.phase8-final.sql phase8-sql:/tmp/final.sql
           docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
           docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.4.0')<>1 THROW 51710,'Canonical V1.4.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.5.0')<>1 THROW 51711,'Canonical V1.5.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.6.0')<>1 THROW 51712,'Canonical V1.6.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0')<>1 THROW 51713,'Canonical V1.7.0 invalid',1; IF OBJECT_ID(N'dbo.RetailInvoice_GetDetail',N'P') IS NULL OR OBJECT_ID(N'dbo.RetailInvoiceItemAttributions',N'U') IS NULL THROW 51714,'Canonical Phase8 objects missing',1;"
+
+      - name: Persist validated Phase 8 canonical SQL
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          cp /tmp/CustSearchAi.phase8-final.sql database/CustSearchAi.sql
+          if git diff --quiet -- database/CustSearchAi.sql; then echo "Phase 8 canonical already persisted."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add database/CustSearchAi.sql
+          git commit -m "phase8: persist V1.7 canonical SQL"
+          git push origin HEAD:phase8-products-retail-billing
