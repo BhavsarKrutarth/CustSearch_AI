@@ -91,3 +91,11 @@ jobs:
           docker exec phase9-sql-only /opt/mssql-tools18/bin/sqlcmd \
             -S localhost -U sa -P "$SA_PASSWORD" -C -b \
             -d CustSearch_AI -i /tmp/verify-phase9.sql
+
+      - name: Run local DB acceptance verifier through Phase 9
+        shell: bash
+        run: |
+          docker cp database/verify-local-db-through-phase9.sql phase9-sql-only:/tmp/verify-local-db-through-phase9.sql
+          docker exec phase9-sql-only /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "$SA_PASSWORD" -C -b \
+            -d CustSearch_AI -i /tmp/verify-local-db-through-phase9.sql
