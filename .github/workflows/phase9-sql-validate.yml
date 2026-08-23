@@ -6,6 +6,11 @@ on:
     paths:
       - 'database/**'
       - '.github/workflows/phase9-sql-validate.yml'
+  pull_request:
+    branches: [AIMainBranch]
+    paths:
+      - 'database/**'
+      - '.github/workflows/phase9-sql-validate.yml'
   workflow_dispatch:
 
 permissions:
