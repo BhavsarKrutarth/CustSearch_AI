@@ -506,7 +506,8 @@ test('store-scoped permission guard blocks pages without required permission', a
     }),
   });
   await signIn(page);
-  await openViaSpa(page, '/customer-admin/users');
+  const dashboard = page.locator('app-phase-five-dashboard');
+  await dashboard.getByRole('link', { name: 'Users', exact: true }).click();
   await expect(page).toHaveURL(/\/access-denied$/);
   await expect(page.getByText(/access denied/i).first()).toBeVisible();
 });
@@ -573,12 +574,12 @@ test('dynamic voice settings load and save a store-specific trigger', async ({ p
   await openViaSpa(page, '/customer-admin/voice-commands');
 
   await page.locator('select[formcontrolname="storeId"]').selectOption('101');
-  await expect(page.getByDisplayValue('Aasha Add')).toBeVisible();
+  await expect(page.getByPlaceholder('Dynamic trigger')).toHaveValue('Aasha Add');
   await page.getByPlaceholder('Dynamic trigger').fill('Mira Add');
   await page.getByPlaceholder('Aliases comma separated').fill('Mira Add, Mira Please Add');
   await page.getByRole('button', { name: 'Save' }).click();
 
-  await expect(page.getByText('Voice setting saved.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Voice settings saved.', { exact: true })).toBeVisible();
   await expect.poll(() => state.voice.triggerKeyword).toBe('Mira Add');
   await expect.poll(() => state.voice.aliases).toEqual(['Mira Add', 'Mira Please Add']);
 });
