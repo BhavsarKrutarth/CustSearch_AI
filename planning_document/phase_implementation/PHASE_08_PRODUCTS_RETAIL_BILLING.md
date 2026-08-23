@@ -1,21 +1,22 @@
 # Phase 8 — Products & Retail Billing
 
-Status: In Progress
+Status: Completed
 
 ## Source of Truth
 
 - `planning_document/CustSearch_AI_Final_Planning_ShopOwner_Staff_CCTV_AashaDynamic.md`
 - `planning_document/PHASE_08_IMPLEMENTATION_PLAN.md`
+- `planning_document/PHASE_08_TEST_REPORT.md`
 
 ## Objective
 
 Deliver a tenant/store-safe retail catalog and factual billing foundation without changing the identity/privacy rules established in Phases 6 and 7. Retail purchase data is financial fact; Visit Party / Co-Visit evidence never creates Household/family truth and never creates spend attribution by itself.
 
-## Scope
+## Completed Scope
 
 ### 8A — Product Catalog
 
-Implemented, validation in progress.
+Completed and validated.
 
 - Reuses the Phase 5 `ProductCategories` taxonomy instead of introducing a duplicate category master.
 - Tenant-owned products with SKU/barcode, brand, unit, sale/cost values and tax percentage.
@@ -24,7 +25,7 @@ Implemented, validation in progress.
 
 ### 8B — Retail Invoices
 
-Implemented, validation in progress.
+Completed and validated.
 
 - Tenant/store-scoped invoice header.
 - Server-generated invoice number.
@@ -34,7 +35,7 @@ Implemented, validation in progress.
 
 ### 8C — Invoice Item Snapshots
 
-Implemented, validation in progress.
+Completed and validated.
 
 - Product/category name/code snapshots are persisted with each invoice line.
 - Quantity, unit price, discount, tax and line totals are server calculated.
@@ -42,7 +43,7 @@ Implemented, validation in progress.
 
 ### 8D — Payments
 
-Implemented, validation in progress.
+Completed and validated.
 
 - Append-only retail payment facts.
 - Successful payments drive `PaidAmount` / `BalanceAmount`.
@@ -51,7 +52,7 @@ Implemented, validation in progress.
 
 ### 8E — Participants
 
-Implemented, validation in progress.
+Completed and validated.
 
 - Explicit known-Customer participants only.
 - One explicit payer constraint.
@@ -60,7 +61,7 @@ Implemented, validation in progress.
 
 ### 8F — Spend Attribution
 
-Implemented, validation in progress.
+Completed and validated.
 
 - Explicit invoice-item/customer attribution.
 - Attribution source and actor are retained for auditability.
@@ -69,7 +70,7 @@ Implemented, validation in progress.
 
 ### 8G — Purchase History
 
-Implemented, validation in progress.
+Completed and validated.
 
 - Customer purchase history separates payer spend and explicit attributed spend.
 - Household purchase summary aggregates explicit attribution only through active verified `HouseholdMembers`.
@@ -77,9 +78,9 @@ Implemented, validation in progress.
 
 ### 8H — Tenant Retail Reports
 
-Implemented, validation in progress.
+Completed and validated.
 
-Dapper/stored-procedure read paths include:
+Dapper/stored-procedure read paths:
 
 - `dbo.Product_Search`
 - `dbo.RetailInvoice_Search`
@@ -95,13 +96,13 @@ TenantId and authorized StoreIds are supplied from the authenticated server cont
 
 ## Database
 
-Version target: `V1.7.0`
+Version: `V1.7.0`
 
 Files:
 
 - `database/09_Upgrade/V1.7.0_Phase8_ProductsRetailBilling.sql`
 - `database/run-phase8.sql`
-- `database/CustSearchAi.sql` — Phase 8 block must be persisted only after full V1.7.0 validation is green.
+- `database/CustSearchAi.sql`
 
 Phase 8 tables:
 
@@ -113,13 +114,13 @@ Phase 8 tables:
 - `RetailInvoiceParticipants`
 - `RetailInvoiceItemAttributions`
 
-`database/run-phase8.sql` is a standalone SSMS/Azure Data Studio T-SQL runner. It verifies the Phase 7 V1.6.0 prerequisite, creates/updates Phase 8 objects idempotently, validates required indexes/FKs/SPs/store predicates and requires exactly one V1.7.0 ledger entry.
+`database/run-phase8.sql` is a standalone SSMS/Azure Data Studio T-SQL runner. It verifies the Phase 7 V1.6.0 prerequisite, applies Phase 8 objects idempotently, validates required indexes/FKs/SPs/store predicates and requires exactly one V1.7.0 ledger entry.
 
 ## API / Angular
 
 Implemented Phase 8 tenant APIs include product CRUD/store visibility, retail invoice search/detail/create/update/finalize/cancel, payments, participants, spend attribution, customer purchase history, Household purchase summary and retail reports. Request DTOs do not expose TenantId.
 
-Angular routes include:
+Angular routes:
 
 - `/customer-admin/products`
 - `/customer-admin/retail/invoices`
@@ -140,32 +141,24 @@ Customer Smart Profile and Household Detail have factual purchase sections; paye
 - Face/proximity tracking does not create invoice participants or spend attribution.
 - Anonymous visitors require explicit Customer conversion before Customer-only billing associations.
 
-## Current Validation Evidence
+## Final Validation Evidence
 
-Current Phase 8 testing is still running. Evidence already observed on the Phase 8 branch:
+`Phase 8 Validate` run **#17** / **32651044113** completed successfully on validated head `c4a1599fff5d8f445e5a92299993beebbea545f4`.
 
-- .NET Release build: green after correcting a CA1512 range-guard analyzer issue.
-- .NET Unit tests: 51 passed / 0 failed on the tested Phase 8 head.
-- .NET Integration tests: 91 passed / 0 failed on the tested Phase 8 head.
-- Angular lint initially exposed one unused import in `retail-api.service.ts`; the production source was corrected and a full rerun is in progress.
-- SQL Server 2022 V1.7.0 double-run, standalone runner double-run, Playwright, Python and final canonical install remain required completion gates until the current final-head workflow proves them green.
-
-## Completion Gate
-
-Phase 8 must not be marked Completed until all are green on the final implementation head:
-
-1. .NET Release build with 0 errors.
-2. Full Unit + Integration suites.
-3. Angular pinned-version validation, lint, tests and production build.
-4. Full Phase 5/6/7/8 Playwright regression.
-5. Python Ruff + pytest regression.
-6. V1.7.0 upgrade executed twice on SQL Server 2022.
-7. `database/run-phase8.sql` executed twice on SQL Server 2022.
-8. Exactly one V1.7.0 `DatabaseVersions` row.
-9. Tenant/store/security/privacy and financial-integrity assertions.
-10. Final canonical fresh install through V1.7.0.
-11. `planning_document/PHASE_08_TEST_REPORT.md` containing exact final evidence.
+- .NET Release: 0 warnings / 0 errors.
+- Unit: 51/51.
+- Integration: 91/91.
+- Angular lint: green.
+- Angular unit: 50/50.
+- Angular production build: green.
+- Playwright Phase 5–8: 23/23.
+- Python Ruff: green.
+- Python pytest: 3/3.
+- SQL Server 2022 V1.7.0 upgrade: twice, green.
+- `database/run-phase8.sql`: twice, green.
+- Exactly one V1.7.0 DatabaseVersions row: green.
+- Canonical fresh install through V1.7.0: green.
 
 ## Done Summary
 
-Implementation is substantially present; validation and final canonical persistence are still in progress. Do not merge PR #8 or mark this phase Completed until the final Phase 8 validation matrix is green.
+Phase 8 is Completed and merged to `AIMainBranch`. It is the validated baseline for Phase 9. Retail Billing remains only the shop-customer purchase domain and must never be reused for Platform Billing subscriptions, platform invoices or platform payments.
