@@ -101,7 +101,7 @@ test('tenant admin signs in and receives API-backed Phase 5 dashboard', async ({
   await page.getByRole('button', { name: 'Sign in' }).click();
 
   await expect(page).toHaveURL(/\/customer-admin\/dashboard$/);
-  await expect(page.getByRole('heading', { name: 'Customer Admin' })).toBeVisible();
+  await expect(page.locator('#main-content').getByRole('heading', { name: 'Customer Admin' })).toBeVisible();
   await expect(page.getByText('Active stores')).toBeVisible();
   await expect(page.getByText('7', { exact: true })).toBeVisible();
 });
