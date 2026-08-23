@@ -1,0 +1,176 @@
+name: Phase 9 Validate
+
+on:
+  push:
+    branches: [phase9-platform-billing]
+  pull_request:
+    branches: [AIMainBranch]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      SA_PASSWORD: 'CustSearch_Phase9_2026!Sql'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.424
+
+      - name: Setup Node for pinned Angular 21
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: src/CustSearch.Admin/package-lock.json
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Prepare validated Phase 8 baseline and prospective Phase 9 canonical
+        shell: bash
+        run: |
+          git show origin/AIMainBranch:database/CustSearchAi.sql > /tmp/CustSearchAi.phase8-base.raw
+          python3 - <<'PY'
+          from pathlib import Path
+          base_raw=Path('/tmp/CustSearchAi.phase8-base.raw').read_bytes()
+          enc='utf-16' if base_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if base_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          base=base_raw.decode(enc)
+          if "VersionNumber=N'V1.7.0'" not in base:
+              raise SystemExit('AIMainBranch must contain validated Phase 8 V1.7.0 before Phase 9.')
+          if "VersionNumber=N'V1.8.0'" in base:
+              raise SystemExit('AIMainBranch must not contain Phase 9 V1.8.0 before Phase 9 merge.')
+          upgrade=Path('database/09_Upgrade/V1.8.0_Phase9_PlatformBilling.sql').read_text(encoding='utf-8-sig')
+          branch_raw=Path('database/CustSearchAi.sql').read_bytes()
+          branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          branch=branch_raw.decode(branch_enc)
+          final=branch if "VersionNumber=N'V1.8.0'" in branch else base.rstrip()+"\n\n-- ============================================================\n-- PHASE 9 - PLATFORM BILLING\n-- VERSION: V1.8.0\n-- ============================================================\n"+upgrade.strip()+"\n"
+          Path('/tmp/CustSearchAi.phase8-base.sql').write_text(base,encoding='utf-8')
+          Path('/tmp/CustSearchAi.phase9-final.sql').write_text(final,encoding='utf-8')
+          PY
+
+      - name: Restore .NET
+        run: dotnet restore CustSearch_AI.sln
+
+      - name: Build .NET Release
+        run: dotnet build CustSearch_AI.sln --configuration Release --no-restore
+
+      - name: Test .NET through Phase 9
+        run: dotnet test CustSearch_AI.sln --configuration Release --no-build --logger "trx;LogFileName=phase9-tests.trx"
+
+      - name: Install Angular dependencies reproducibly
+        working-directory: src/CustSearch.Admin
+        run: npm ci --no-audit --no-fund
+
+      - name: Angular version
+        working-directory: src/CustSearch.Admin
+        run: npx ng version
+
+      - name: Lint Angular
+        working-directory: src/CustSearch.Admin
+        run: npm run lint
+
+      - name: Test Angular through Phase 9
+        working-directory: src/CustSearch.Admin
+        run: npm run test:ci
+
+      - name: Build Angular production
+        working-directory: src/CustSearch.Admin
+        run: npm run build:production
+
+      - name: Prepare Playwright
+        working-directory: tests/CustSearch.Admin.E2E
+        shell: bash
+        run: |
+          if [ ! -f package-lock.json ]; then npm install --package-lock-only --ignore-scripts --no-audit --no-fund; fi
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Run full Playwright regression through Phase 9
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm test
+
+      - name: Validate Python baseline
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check -r src/CustSearch.AI/requirements-dev.txt
+          ruff check src/CustSearch.AI tests/CustSearch.AI.Tests
+          PYTHONPATH=src/CustSearch.AI python -m pytest -q tests/CustSearch.AI.Tests
+
+      - name: Validate Phase 9 domain separation and SQL structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          upgrade=Path('database/09_Upgrade/V1.8.0_Phase9_PlatformBilling.sql').read_text(encoding='utf-8-sig')
+          runner=Path('database/run-phase9.sql').read_text(encoding='utf-8-sig')
+          required=['dbo.PlatformInvoices','dbo.PlatformInvoiceItems','dbo.PlatformPayments',"VersionNumber=N'V1.8.0'",'PlatformBilling.Plans.View','PlatformBilling.Subscriptions.Manage','PlatformBilling.Invoices.View','PlatformBilling.Payments.View','MaxStaff','CurrentPeriodEndUtc','TransactionReference']
+          missing=[x for x in required if x not in upgrade or x not in runner]
+          if missing: raise SystemExit(f'Missing Phase 9 SQL elements: {missing}')
+          def executable_sql(text:str)->str:
+              text=re.sub(r'/\*.*?\*/','',text,flags=re.S)
+              return re.sub(r'--[^\r\n]*','',text)
+          lower=executable_sql(runner).lower()
+          if ':r ' in lower or 'powershell' in lower: raise SystemExit('run-phase9.sql must be standalone T-SQL.')
+          phase9_sources=[
+              'src/CustSearch.Domain/Entities/PhaseNinePlatformBillingEntities.cs',
+              'src/CustSearch.Infrastructure/PlatformBilling/PlatformBillingService.cs',
+              'src/CustSearch.API/Controllers/PlatformBillingController.cs',
+          ]
+          for file in phase9_sources:
+              text=Path(file).read_text(encoding='utf-8-sig')
+              if 'RetailInvoice' in text or 'RetailBilling' in text:
+                  raise SystemExit(f'Platform Billing source crossed into Retail Billing: {file}')
+          retail_sources=['src/CustSearch.Infrastructure/RetailBilling/RetailBillingService.cs','src/CustSearch.API/Controllers/RetailBillingController.cs']
+          for file in retail_sources:
+              text=Path(file).read_text(encoding='utf-8-sig')
+              if 'PlatformInvoice' in text or 'PlatformPayment' in text or 'PlatformBilling' in text:
+                  raise SystemExit(f'Retail Billing source crossed into Platform Billing: {file}')
+          angular=Path('src/CustSearch.Admin/src/app/features/platform-billing/platform-billing-api.service.ts').read_text(encoding='utf-8-sig')
+          tenant_section=angular[angular.index('tenantSummary()'):]
+          if 'tenantId:' in tenant_section or '{tenantId' in tenant_section:
+              raise SystemExit('Tenant Platform Billing Angular calls must not accept TenantId.')
+          PY
+
+      - name: Validate V1.8.0 upgrade and standalone runner twice on SQL Server 2022
+        shell: bash
+        run: |
+          docker run -d --name phase9-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" -p 14337:1433 mcr.microsoft.com/mssql/server:2022-latest
+          for i in {1..60}; do
+            if docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then docker logs phase9-sql; exit 1; fi
+            sleep 2
+          done
+          docker cp /tmp/CustSearchAi.phase8-base.sql phase9-sql:/tmp/base.sql
+          docker cp database/09_Upgrade/V1.8.0_Phase9_PlatformBilling.sql phase9-sql:/tmp/phase9.sql
+          docker cp database/run-phase9.sql phase9-sql:/tmp/run-phase9.sql
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase9.sql
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase9.sql
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51895,'V1.8.0 duplicate/missing',1; IF OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformPayments',N'U') IS NULL THROW 51896,'Platform billing tables missing',1; IF EXISTS(SELECT 1 FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.PlatformInvoices') AND referenced_object_id=OBJECT_ID(N'dbo.RetailInvoices')) THROW 51897,'Platform invoice references retail invoice',1;"
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase9.sql
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase9.sql
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51995,'Runner V1.8.0 duplicate/missing',1;"
+
+      - name: Validate prospective final canonical fresh install through V1.8.0
+        shell: bash
+        run: |
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
+          docker cp /tmp/CustSearchAi.phase9-final.sql phase9-sql:/tmp/final.sql
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0')<>1 THROW 51996,'Canonical V1.7.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51997,'Canonical V1.8.0 invalid',1; IF OBJECT_ID(N'dbo.RetailInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL THROW 51998,'Retail/platform domains must both exist separately',1;"
