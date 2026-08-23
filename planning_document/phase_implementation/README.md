@@ -1,6 +1,6 @@
 # CustSearch AI — Phase Implementation Index
 
-There are 18 approval-gated phases, numbered 0 through 17. Each phase has its own file and ends with a `Done Summary` section that is completed only after its required validation passes.
+There are 19 approval-gated phases, numbered 0 through 18. Each phase has its own file and ends with a `Done Summary` section that is completed only after its required validation passes.
 
 | Phase | File | Status |
 |---|---|---|
@@ -22,5 +22,8 @@ There are 18 approval-gated phases, numbered 0 through 17. Each phase has its ow
 | 15 | `PHASE_15_REPORTS_EXPORTS.md` | Not Started |
 | 16 | `PHASE_16_OPERATIONS.md` | Not Started |
 | 17 | `PHASE_17_QUALITY_DEPLOYMENT.md` | Not Started |
+| 18 | `PHASE_18_RETAIL_SECURITY_THEFT_DETECTION.md` | Not Started |
+
+Phase 18 details the retail-security / suspected unpaid-product-exit workflow and should be read together with `../CustSearch_AI_SECURITY_THEFT_SHOPLIFTING_ADDENDUM.md`.
 
 The authoritative cross-phase status remains in `../PROCESS_TRACKER.md`. Phase-specific detailed plans/logs may contain additional evidence.
