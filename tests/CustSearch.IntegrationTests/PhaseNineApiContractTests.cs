@@ -64,11 +64,11 @@ public sealed class PhaseNineApiContractTests
     }
 
     [Theory]
-    [InlineData(nameof(TenantPlatformBillingController.Summary), PermissionCatalog.PlatformBilling.SubscriptionsView)]
-    [InlineData(nameof(TenantPlatformBillingController.Subscription), PermissionCatalog.PlatformBilling.SubscriptionsView)]
-    [InlineData(nameof(TenantPlatformBillingController.Invoices), PermissionCatalog.PlatformBilling.InvoicesView)]
-    [InlineData(nameof(TenantPlatformBillingController.Payments), PermissionCatalog.PlatformBilling.PaymentsView)]
-    public void TenantBillingReadsRequirePhaseNineViewPermission(string methodName, string permission)
+    [InlineData(nameof(TenantPlatformBillingController.Summary), PermissionCatalog.TenantPlatformBilling.SubscriptionsView)]
+    [InlineData(nameof(TenantPlatformBillingController.Subscription), PermissionCatalog.TenantPlatformBilling.SubscriptionsView)]
+    [InlineData(nameof(TenantPlatformBillingController.Invoices), PermissionCatalog.TenantPlatformBilling.InvoicesView)]
+    [InlineData(nameof(TenantPlatformBillingController.Payments), PermissionCatalog.TenantPlatformBilling.PaymentsView)]
+    public void TenantBillingReadsRequireTenantScopedPhaseNineViewPermission(string methodName, string permission)
     {
         var method = typeof(TenantPlatformBillingController).GetMethod(methodName)!;
         var permissionAttribute = method.GetCustomAttribute<HasPermissionAttribute>();
