@@ -88,7 +88,7 @@ test('customer search and create use tenant-safe API without browser TenantId',a
   const state=await mockPhaseSixApi(page);await signIn(page);await openDashboardLink(page,'Customers');
   await expect(page).toHaveURL(/\/customer-admin\/customers$/);await expect(page.getByText('CUST-001',{exact:true})).toBeVisible();
   await page.getByPlaceholder('Search code, name, mobile or email').fill('Priya');await page.getByRole('button',{name:'Search'}).click();
-  await page.getByPlaceholder('First name').fill('Ravi');await page.getByPlaceholder('Last name').fill('Patel');await page.getByPlaceholder('Mobile').fill('9000000002');await page.getByPlaceholder('Store IDs comma separated').fill('101');await page.getByPlaceholder('Primary store ID').fill('101');await page.getByRole('button',{name:'Create customer'}).click();
+  await page.getByPlaceholder('First name').fill('Ravi');await page.getByPlaceholder('Last name').fill('Patel');await page.locator('input[formcontrolname="mobile"]').fill('9000000002');await page.getByPlaceholder('Store IDs comma separated').fill('101');await page.getByPlaceholder('Primary store ID').fill('101');await page.getByRole('button',{name:'Create customer'}).click();
   await expect(page.getByText('Customer created.',{exact:true})).toBeVisible();await expect.poll(()=>state.customers.length).toBe(2);
   expect(state.calls.some(x=>/tenantId/i.test(x))).toBe(false);expect(JSON.stringify(state.bodies)).not.toMatch(/tenantId/i);
 });
