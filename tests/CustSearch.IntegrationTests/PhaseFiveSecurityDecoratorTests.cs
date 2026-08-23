@@ -23,13 +23,13 @@ public sealed class PhaseFiveSecurityDecoratorTests
         await using var fixture = await Fixture.CreateAsync(maxUsers: 1);
         var actor = await fixture.AddUserAsync("owner", "owner@example.test", active: true);
         var inactive = await fixture.AddUserAsync("inactive", "inactive@example.test", active: false);
-        fixture.SetCurrentUser(actor.Id, ["TenantAdmin"], []);
+        fixture.SetCurrentUser(actor.Id, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TenantAdmin" }, new HashSet<long>());
 
         var service = fixture.CreateService();
         var exception = await Assert.ThrowsAsync<TenantBusinessRuleException>(() => service.UpdateUserAsync(
             inactive.Id,
             new UpdateTenantUserCommand(inactive.Email, inactive.DisplayName, true),
-            fixture.Audit(actor.Id)));
+            Fixture.Audit(actor.Id)));
 
         Assert.Contains("quota", exception.Message, StringComparison.OrdinalIgnoreCase);
         fixture.Db.ChangeTracker.Clear();
@@ -47,7 +47,7 @@ public sealed class PhaseFiveSecurityDecoratorTests
         var forbiddenStore = await fixture.AddStoreAsync("AMD-01", "Ahmedabad Store");
         await fixture.AssignStoreAsync(actor.Id, allowedStore.Id, actor.Id);
         await fixture.AssignStoreAsync(target.Id, forbiddenStore.Id, actor.Id);
-        fixture.SetCurrentUser(actor.Id, ["StoreAdmin"], [allowedStore.Id]);
+        fixture.SetCurrentUser(actor.Id, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "StoreAdmin" }, new HashSet<long> { allowedStore.Id });
 
         var service = fixture.CreateService();
         await Assert.ThrowsAsync<TenantResourceNotFoundException>(() => service.GetUserAsync(target.Id));
@@ -62,13 +62,13 @@ public sealed class PhaseFiveSecurityDecoratorTests
         var store = await fixture.AddStoreAsync("SURAT-01", "Surat Store");
         await fixture.AssignStoreAsync(actor.Id, store.Id, actor.Id);
         await fixture.AssignStoreAsync(target.Id, store.Id, actor.Id);
-        fixture.SetCurrentUser(actor.Id, ["StoreAdmin"], [store.Id]);
+        fixture.SetCurrentUser(actor.Id, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "StoreAdmin" }, new HashSet<long> { store.Id });
 
         var service = fixture.CreateService();
         var exception = await Assert.ThrowsAsync<TenantBusinessRuleException>(() => service.SetUserRolesAsync(
             target.Id,
             new SetTenantUserRolesCommand(["TenantAdmin"]),
-            fixture.Audit(actor.Id)));
+            Fixture.Audit(actor.Id)));
 
         Assert.Contains("cannot assign", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -83,13 +83,13 @@ public sealed class PhaseFiveSecurityDecoratorTests
         var forbiddenStore = await fixture.AddStoreAsync("AMD-01", "Ahmedabad Store");
         await fixture.AssignStoreAsync(actor.Id, allowedStore.Id, actor.Id);
         await fixture.AssignStoreAsync(target.Id, allowedStore.Id, actor.Id);
-        fixture.SetCurrentUser(actor.Id, ["StoreAdmin"], [allowedStore.Id]);
+        fixture.SetCurrentUser(actor.Id, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "StoreAdmin" }, new HashSet<long> { allowedStore.Id });
 
         var service = fixture.CreateService();
         var exception = await Assert.ThrowsAsync<TenantBusinessRuleException>(() => service.SetUserStoresAsync(
             target.Id,
             new SetTenantUserStoresCommand([forbiddenStore.Id], forbiddenStore.Id),
-            fixture.Audit(actor.Id)));
+            Fixture.Audit(actor.Id)));
 
         Assert.Contains("own stores", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -190,14 +190,14 @@ public sealed class PhaseFiveSecurityDecoratorTests
             currentUser.StoreIdsValue = storeIds;
         }
 
-        public ITenantOperationsService CreateService()
+        public TenantOperationsSecurityDecorator CreateService()
         {
             var repository = new TenantOperationsRepository(Db);
             var inner = new TenantOperationsService(Db, repository, currentUser, new PasswordHasher<UserAccount>(), timeProvider);
             return new TenantOperationsSecurityDecorator(inner, Db, currentUser);
         }
 
-        public TenantAuditContext Audit(long actorUserId) => new(actorUserId, "127.0.0.1", "Phase5IntegrationTest", "phase5-test-correlation");
+        public static TenantAuditContext Audit(long actorUserId) => new(actorUserId, "127.0.0.1", "Phase5IntegrationTest", "phase5-test-correlation");
 
         public async ValueTask DisposeAsync()
         {
