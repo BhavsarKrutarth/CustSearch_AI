@@ -1,0 +1,122 @@
+name: Phase 5 Validate
+
+on:
+  push:
+    branches: [phase5-complete]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.424
+
+      - name: Setup Node for Angular 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: src/CustSearch.Admin/package-lock.json
+
+      - name: Merge Phase 5 SQL into canonical database script
+        shell: python
+        run: |
+          from pathlib import Path
+          canonical = Path('database/CustSearchAi.sql')
+          upgrade = Path('database/09_Upgrade/V1.4.0_Phase5_TenantStoresStaff.sql')
+          marker = '/* ===== PHASE 5 V1.4.0 CANONICAL UPGRADE BLOCK ===== */'
+          text = canonical.read_text(encoding='utf-8-sig')
+          block = upgrade.read_text(encoding='utf-8-sig')
+          if marker not in text:
+              text = text.rstrip() + '\n\n' + marker + '\n' + block.rstrip() + '\n'
+              canonical.write_text(text, encoding='utf-8-sig')
+
+      - name: Restore .NET
+        run: dotnet restore CustSearch_AI.sln
+
+      - name: Build .NET
+        run: dotnet build CustSearch_AI.sln --configuration Release --no-restore
+
+      - name: Test .NET
+        run: dotnet test CustSearch_AI.sln --configuration Release --no-build --logger "trx;LogFileName=phase5-tests.trx"
+
+      - name: Install Angular 22 dependencies and refresh lock
+        working-directory: src/CustSearch.Admin
+        run: npm install --no-audit --no-fund
+
+      - name: Angular version
+        working-directory: src/CustSearch.Admin
+        run: npx ng version
+
+      - name: Build Angular production
+        working-directory: src/CustSearch.Admin
+        run: npm run build:production
+
+      - name: Lint Angular
+        working-directory: src/CustSearch.Admin
+        run: npm run lint
+
+      - name: Test Angular
+        working-directory: src/CustSearch.Admin
+        run: npm run test:ci
+
+      - name: Validate Phase 5 SQL structure
+        shell: python
+        run: |
+          from pathlib import Path
+          sql = Path('database/CustSearchAi.sql').read_text(encoding='utf-8-sig')
+          required = [
+            'PHASE 5 V1.4.0 CANONICAL UPGRADE BLOCK',
+            'dbo.Stores', 'dbo.UserStoreAssignments', 'dbo.StaffProfiles',
+            'dbo.StaffShifts', 'dbo.StaffPresenceSessions', 'dbo.ProductCategories',
+            'dbo.StoreVoiceCommandSettings', 'dbo.StoreVoiceCommandAliases',
+            'CREATE OR ALTER PROCEDURE dbo.Tenant_ProvisionDefaultRoles',
+            'CREATE OR ALTER PROCEDURE dbo.TenantDashboard_GetSummary',
+            "VersionNumber=N'V1.4.0'",
+          ]
+          missing = [x for x in required if x not in sql]
+          if missing:
+              raise SystemExit(f'Missing Phase 5 SQL markers: {missing}')
+          for table in ['Stores','UserStoreAssignments','StaffProfiles','StaffShifts','StaffPresenceSessions','ProductCategories','StoreVoiceCommandSettings','StoreVoiceCommandAliases']:
+              if f"OBJECT_ID(N'dbo.{table}', N'U') IS NULL" not in sql:
+                  raise SystemExit(f'Non-idempotent/missing guard for {table}')
+
+      - name: Persist generated lock and canonical SQL
+        shell: bash
+        run: |
+          if ! git diff --quiet -- database/CustSearchAi.sql src/CustSearch.Admin/package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add database/CustSearchAi.sql src/CustSearch.Admin/package-lock.json
+            git commit -m "phase5: sync canonical SQL and Angular 22 lock [skip ci]"
+            git push origin HEAD:phase5-complete
+          fi
+
+      - name: Create final source ZIP
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          zip -rq artifacts/CustSearch_AI_Phase5_Final.zip . \
+            -x '.git/*' 'artifacts/*' 'src/CustSearch.Admin/node_modules/*' \
+               'src/CustSearch.Admin/.angular/*' 'src/CustSearch.Admin/dist/*' \
+               '**/bin/*' '**/obj/*' '**/TestResults/*' '**/logs/*'
+
+      - name: Upload final source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: CustSearch_AI_Phase5_Final
+          path: artifacts/CustSearch_AI_Phase5_Final.zip
+          if-no-files-found: error
+          retention-days: 14
