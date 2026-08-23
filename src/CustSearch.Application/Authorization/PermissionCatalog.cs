@@ -8,7 +8,7 @@ public static class PermissionCatalog
         public const string TenantsView="Tenants.View"; public const string TenantsCreate="Tenants.Create"; public const string TenantsEdit="Tenants.Edit"; public const string TenantsActivate="Tenants.Activate"; public const string TenantsSuspend="Tenants.Suspend"; public const string TenantsViewUsage="Tenants.ViewUsage"; public const string TenantsViewOperationalSummary="Tenants.ViewOperationalSummary"; public const string BillingView="PlatformBilling.View"; public const string BillingManage="PlatformBilling.Manage"; public const string SubscriptionPlansView="SubscriptionPlans.View"; public const string SubscriptionPlansManage="SubscriptionPlans.Manage"; public const string ReportsView="PlatformReports.View"; public const string ReportsExport="PlatformReports.Export"; public const string AuditView="PlatformAudit.View"; public const string SupportAccessTenant="PlatformSupport.AccessTenant";
     }
 
-    /// <summary>Phase 9 permissions. Identical names may be seeded in platform and tenant scopes; tenant grants are view-only.</summary>
+    /// <summary>Phase 9 platform-scope permissions for CustSearch billing administrators.</summary>
     public static class PlatformBilling
     {
         public const string PlansView="PlatformBilling.Plans.View";
@@ -17,6 +17,14 @@ public static class PermissionCatalog
         public const string SubscriptionsManage="PlatformBilling.Subscriptions.Manage";
         public const string InvoicesView="PlatformBilling.Invoices.View";
         public const string PaymentsView="PlatformBilling.Payments.View";
+    }
+
+    /// <summary>Phase 9 tenant-scope read-only permissions. Names are globally distinct from platform grants.</summary>
+    public static class TenantPlatformBilling
+    {
+        public const string SubscriptionsView="TenantPlatformBilling.Subscriptions.View";
+        public const string InvoicesView="TenantPlatformBilling.Invoices.View";
+        public const string PaymentsView="TenantPlatformBilling.Payments.View";
     }
 
     public static class Tenant
