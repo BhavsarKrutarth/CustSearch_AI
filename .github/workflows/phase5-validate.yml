@@ -1,0 +1,241 @@
+name: Phase 5 Validate
+
+on:
+  push:
+    branches: [phase5-complete]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      SA_PASSWORD: 'CustSearch_Phase5_2026!Sql'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.424
+
+      - name: Setup Node for pinned Angular 21
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: src/CustSearch.Admin/package-lock.json
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Normalize SQL Server 2022 canonical bootstrap and merge Phase 5
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          canonical = Path('database/CustSearchAi.sql')
+          upgrade = Path('database/09_Upgrade/V1.4.0_Phase5_TenantStoresStaff.sql')
+          marker = '-- PHASE 5 - TENANT USERS / STORES / STAFF'
+          raw = canonical.read_bytes()
+          if raw.startswith(b'\xff\xfe'):
+              encoding = 'utf-16'
+          elif raw.startswith(b'\xef\xbb\xbf'):
+              encoding = 'utf-8-sig'
+          else:
+              encoding = 'utf-8'
+          text = raw.decode(encoding)
+          newline = '\r\n' if '\r\n' in text else '\n'
+
+          portable = newline.join([
+              'USE [master]', 'GO',
+              '/* CustSearch AI portable bootstrap: SQL Server 2022+, no machine-specific MDF/LDF paths. */',
+              "IF DB_ID(N'CustSearch_AI') IS NULL", 'BEGIN', '    CREATE DATABASE [CustSearch_AI];', 'END', 'GO'
+          ])
+          pattern = r"USE \[master\]\s*\r?\nGO\s*\r?\n/\*\*\*\*\*\* Object:  Database \[CustSearch_AI\].*?WITH CATALOG_COLLATION = DATABASE_DEFAULT, LEDGER = OFF\s*\r?\nGO"
+          text, replaced = re.subn(pattern, portable, text, count=1, flags=re.S)
+          if replaced == 0 and "IF DB_ID(N'CustSearch_AI') IS NULL" not in text:
+              raise SystemExit('Could not normalize the canonical CREATE DATABASE header safely.')
+
+          text = re.sub(r"ALTER DATABASE \[CustSearch_AI\] SET OPTIMIZED_LOCKING = OFF\s*\r?\nGO\s*\r?\n", '', text, count=1)
+          Path('/tmp/CustSearchAi.pre-phase5.sql').write_text(text, encoding='utf-8')
+
+          block = upgrade.read_text(encoding='utf-8-sig').strip()
+          header = newline.join([
+              '-- ============================================================',
+              '-- PHASE 5 - TENANT USERS / STORES / STAFF',
+              '-- SUB-PHASE: 5A - Tenant Users / Roles / ShopOwner / TenantOwner',
+              '-- SUB-PHASE: 5B - User-Store Assignments / Authoritative Store Scope / Quotas',
+              '-- SUB-PHASE: 5C - Store Master / Location / Geofence / Lifecycle',
+              '-- SUB-PHASE: 5D - Staff Profiles / Shifts / Presence',
+              '-- SUB-PHASE: 5E - Store Product Categories',
+              '-- SUB-PHASE: 5F - Dynamic Store Voice Trigger / Aliases',
+              '-- SUB-PHASE: 5G - Customer Admin Dashboard Base',
+              '-- SUB-PHASE: 5H - Completion / Validation / Canonical Database Gate',
+              '-- VERSION: V1.4.0',
+              '-- ============================================================'
+          ])
+          if marker not in text:
+              text = text.rstrip() + newline + newline + header + newline + block.replace('\n', newline) + newline
+          canonical.write_bytes(text.encode(encoding))
+          print(f'Canonical SQL normalized/merged with encoding {encoding}')
+          PY
+
+      - name: Restore .NET
+        run: dotnet restore CustSearch_AI.sln
+
+      - name: Build .NET
+        run: dotnet build CustSearch_AI.sln --configuration Release --no-restore
+
+      - name: Test .NET
+        run: dotnet test CustSearch_AI.sln --configuration Release --no-build --logger "trx;LogFileName=phase5-tests.trx"
+
+      - name: Install Angular dependencies reproducibly
+        working-directory: src/CustSearch.Admin
+        run: npm ci --no-audit --no-fund
+
+      - name: Angular version
+        working-directory: src/CustSearch.Admin
+        run: npx ng version
+
+      - name: Lint Angular
+        working-directory: src/CustSearch.Admin
+        run: npm run lint
+
+      - name: Test Angular
+        working-directory: src/CustSearch.Admin
+        run: npm run test:ci
+
+      - name: Build Angular production
+        working-directory: src/CustSearch.Admin
+        run: npm run build:production
+
+      - name: Prepare pinned Playwright E2E dependencies
+        working-directory: tests/CustSearch.Admin.E2E
+        shell: bash
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          fi
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Run Phase 5 Playwright E2E
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm test
+
+      - name: Validate Python baseline
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check -r src/CustSearch.AI/requirements.txt pytest ruff
+          ruff check src/CustSearch.AI tests/CustSearch.AI.Tests
+          PYTHONPATH=src/CustSearch.AI python -m pytest -q tests/CustSearch.AI.Tests
+
+      - name: Validate Phase 5 SQL structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          raw = Path('database/CustSearchAi.sql').read_bytes()
+          encoding = 'utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          sql = raw.decode(encoding)
+          required = [
+            "IF DB_ID(N'CustSearch_AI') IS NULL",
+            'PHASE 5 - TENANT USERS / STORES / STAFF',
+            'SUB-PHASE: 5A', 'SUB-PHASE: 5B', 'SUB-PHASE: 5C', 'SUB-PHASE: 5D',
+            'SUB-PHASE: 5E', 'SUB-PHASE: 5F', 'SUB-PHASE: 5G', 'SUB-PHASE: 5H',
+            'VERSION: V1.4.0',
+            'dbo.Stores', 'dbo.UserStoreAssignments', 'dbo.StaffProfiles',
+            'dbo.StaffShifts', 'dbo.StaffPresenceSessions', 'dbo.ProductCategories',
+            'dbo.StoreVoiceCommandSettings', 'dbo.StoreVoiceCommandAliases',
+            'CREATE OR ALTER PROCEDURE dbo.Tenant_ProvisionDefaultRoles',
+            'CREATE OR ALTER PROCEDURE dbo.TenantDashboard_GetSummary',
+            'CREATE OR ALTER PROCEDURE dbo.Store_Search',
+            'CREATE OR ALTER PROCEDURE dbo.Staff_Search',
+            "VersionNumber=N'V1.4.0'",
+          ]
+          missing = [x for x in required if x not in sql]
+          if missing:
+              raise SystemExit(f'Missing Phase 5 SQL markers: {missing}')
+          if 'OPTIMIZED_LOCKING' in sql:
+              raise SystemExit('Canonical SQL still contains a SQL Server 17-only OPTIMIZED_LOCKING statement.')
+          for table in ['Stores','UserStoreAssignments','StaffProfiles','StaffShifts','StaffPresenceSessions','ProductCategories','StoreVoiceCommandSettings','StoreVoiceCommandAliases']:
+              if f"OBJECT_ID(N'dbo.{table}', N'U') IS NULL" not in sql:
+                  raise SystemExit(f'Non-idempotent/missing guard for {table}')
+          PY
+
+      - name: Validate Phase 5 upgrade twice on SQL Server 2022
+        shell: bash
+        run: |
+          docker run -d --name phase5-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" -p 14333:1433 mcr.microsoft.com/mssql/server:2022-latest
+          for i in {1..60}; do
+            if docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then docker logs phase5-sql; exit 1; fi
+            sleep 2
+          done
+          docker cp /tmp/CustSearchAi.pre-phase5.sql phase5-sql:/tmp/pre.sql
+          docker cp database/09_Upgrade/V1.4.0_Phase5_TenantStoresStaff.sql phase5-sql:/tmp/phase5.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/pre.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase5.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase5.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.4.0')<>1 THROW 51090,'V1.4.0 repeat safety failed',1; IF OBJECT_ID(N'dbo.Stores',N'U') IS NULL OR OBJECT_ID(N'dbo.Store_Search',N'P') IS NULL THROW 51091,'Phase 5 objects missing',1;"
+
+      - name: Validate final canonical fresh install on SQL Server 2022
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('database/CustSearchAi.sql').read_bytes()
+          enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          Path('/tmp/CustSearchAi.final.sql').write_text(raw.decode(enc),encoding='utf-8')
+          PY
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
+          docker cp /tmp/CustSearchAi.final.sql phase5-sql:/tmp/final.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
+          docker exec phase5-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.4.0')<>1 THROW 51092,'Canonical V1.4.0 missing',1; IF OBJECT_ID(N'dbo.StoreVoiceCommandSettings',N'U') IS NULL THROW 51093,'Canonical Phase 5 objects missing',1;"
+
+      - name: Stop SQL Server validation container
+        if: always()
+        run: docker rm -f phase5-sql >/dev/null 2>&1 || true
+
+      - name: Persist generated canonical SQL and E2E lock
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          if ! git diff --quiet -- database/CustSearchAi.sql tests/CustSearch.Admin.E2E/package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add database/CustSearchAi.sql tests/CustSearch.Admin.E2E/package-lock.json
+            git commit -m "phase5: persist canonical SQL and E2E lock"
+            git push origin HEAD:phase5-complete
+          fi
+
+      - name: Create final source ZIP
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          zip -rq artifacts/CustSearch_AI_Phase5_Final.zip . \
+            -x '.git/*' 'artifacts/*' 'src/CustSearch.Admin/node_modules/*' \
+               'src/CustSearch.Admin/.angular/*' 'src/CustSearch.Admin/dist/*' \
+               'tests/CustSearch.Admin.E2E/node_modules/*' 'tests/CustSearch.Admin.E2E/test-results/*' \
+               '**/bin/*' '**/obj/*' '**/TestResults/*' '**/logs/*'
+
+      - name: Upload final source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: CustSearch_AI_Phase5_Final
+          path: artifacts/CustSearch_AI_Phase5_Final.zip
+          if-no-files-found: error
+          retention-days: 14
