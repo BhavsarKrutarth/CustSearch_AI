@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { PageQuery, PageResponse } from '../../core/auth/auth.models';
+import { PageQuery } from '../../core/auth/auth.models';
 import { TenantApiClient } from '../../core/api/tenant-api.client';
 
 export interface ProductListItem { id:number; productCode:string; barcode:string|null; name:string; categoryId:number; categoryName:string; brand:string|null; unitName:string; salePrice:number; taxPercent:number|null; isActive:boolean; }
