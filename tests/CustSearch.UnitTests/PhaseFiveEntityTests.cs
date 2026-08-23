@@ -8,7 +8,7 @@ public sealed class PhaseFiveEntityTests
     private static readonly DateTime UtcNow = new(2026, 8, 23, 6, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public void Store_requires_coordinate_pair()
+    public void StoreRequiresCoordinatePair()
     {
         Assert.Throws<ArgumentException>(() => Store.Create(
             1, "SURAT-01", "VR Mall", "Dumas Road", null, null, "Surat", null, "Gujarat", "395007", "IN",
@@ -16,7 +16,7 @@ public sealed class PhaseFiveEntityTests
     }
 
     [Fact]
-    public void Store_verification_is_reset_when_location_changes()
+    public void StoreVerificationIsResetWhenLocationChanges()
     {
         var store = Store.Create(1, "SURAT-01", "VR Mall", "Dumas Road", null, null, "Surat", null, "Gujarat", "395007", "IN",
             21.150000m, 72.780000m, 50m, null, StoreLocationSource.MapPin, "India Standard Time", null, null, UtcNow);
@@ -32,7 +32,7 @@ public sealed class PhaseFiveEntityTests
     }
 
     [Fact]
-    public void Staff_shift_enforces_state_machine()
+    public void StaffShiftEnforcesStateMachine()
     {
         var shift = StaffShift.Create(1, 2, 3, UtcNow, UtcNow.AddHours(8), 9, UtcNow);
         Assert.Equal(StaffShiftStatus.Scheduled, shift.Status);
@@ -44,14 +44,14 @@ public sealed class PhaseFiveEntityTests
     }
 
     [Fact]
-    public void Presence_confidence_must_be_normalized()
+    public void PresenceConfidenceMustBeNormalized()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             StaffPresenceSession.Start(1, 2, 3, StaffPresenceSource.Cctv, UtcNow, 1.1m));
     }
 
     [Fact]
-    public void Voice_trigger_is_store_dynamic_and_not_hard_coded()
+    public void VoiceTriggerIsStoreDynamicAndNotHardCoded()
     {
         var setting = StoreVoiceCommandSetting.Create(1, 3, "Mira Add", VoiceResponseMode.InAppAndVoice, UtcNow);
         Assert.Equal("Mira Add", setting.TriggerKeyword);
@@ -60,7 +60,7 @@ public sealed class PhaseFiveEntityTests
     }
 
     [Fact]
-    public void Tenant_user_profile_update_rotates_security_stamp()
+    public void TenantUserProfileUpdateRotatesSecurityStamp()
     {
         var user = UserAccount.CreateTenant(1, "staff1", "staff@example.com", "Staff One", "hash", UtcNow);
         var before = user.SecurityStamp;
