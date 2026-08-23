@@ -11,8 +11,10 @@ export interface AdminNavigationItem {
 export const ADMIN_NAVIGATION: Record<'customer' | 'platform', readonly AdminNavigationItem[]> = {
   customer: [
     { label: 'Dashboard', route: '/customer-admin', permission: PERMISSIONS.tenantDashboardView },
-    { label: 'Customers', route: null, permission: PERMISSIONS.customersView },
-    { label: 'Households', route: null, permission: PERMISSIONS.householdsView },
+    { label: 'Customers', route: '/customer-admin/customers', permission: PERMISSIONS.customersView },
+    { label: 'Households', route: '/customer-admin/households', permission: PERMISSIONS.householdsView },
+    { label: 'Visits', route: '/customer-admin/visits', permission: PERMISSIONS.visitsView },
+    { label: 'Visit Party / Co-Visit', route: '/customer-admin/visit-parties', permission: PERMISSIONS.visitPartiesView },
     { label: 'Invoices & Payments', route: null, permission: PERMISSIONS.invoicesView },
     { label: 'Reports', route: null, permission: PERMISSIONS.reportsView },
     { label: 'Monitoring', route: null, permission: PERMISSIONS.camerasView },

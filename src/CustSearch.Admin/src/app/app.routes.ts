@@ -26,6 +26,12 @@ export const routes: Routes = [
   { path:'customer-admin/customers/:id', title:'Customer profile | CustSearch AI', canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.customersView])], loadComponent:()=>import('./features/customers/customer-detail-page').then(m=>m.CustomerDetailPage) },
   { path:'customer-admin/visitors', title:'Anonymous visitors | CustSearch AI', canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.visitorsView])], loadComponent:()=>import('./features/visitors/visitor-list-page').then(m=>m.VisitorListPage) },
 
+  // Phase 7E/7F verified household and factual visit routes. Visit Party is deliberately labeled as co-visit, not family.
+  { path:'customer-admin/households', title:'Households | CustSearch AI', canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.householdsView])], loadComponent:()=>import('./features/households/household-list-page').then(m=>m.HouseholdListPage) },
+  { path:'customer-admin/households/:id', title:'Household detail | CustSearch AI', canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.householdsView])], loadComponent:()=>import('./features/households/household-detail-page').then(m=>m.HouseholdDetailPage) },
+  { path:'customer-admin/visits', title:'Customer visits | CustSearch AI', canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.visitsView])], loadComponent:()=>import('./features/visits/visit-list-page').then(m=>m.VisitListPage) },
+  { path:'customer-admin/visit-parties', title:'Visit Party / Co-Visit | CustSearch AI', canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.visitPartiesView])], loadComponent:()=>import('./features/visits/visit-party-list-page').then(m=>m.VisitPartyListPage) },
+
   { path:'platform-admin', redirectTo:'admin/dashboard', pathMatch:'full' },
   { path:'admin/dashboard', title:'Platform Admin | CustSearch AI', canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.tenantsOperationalSummary])], loadComponent:()=>import('./features/platform-admin/platform-dashboard').then(m=>m.PlatformDashboard) },
   { path:'admin/tenants', canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.tenantsView])], children:[

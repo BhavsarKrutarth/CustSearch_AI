@@ -1,0 +1,12 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
+import { firstValueFrom } from 'rxjs';
+import { HouseholdApiService } from './household-api.service';
+
+describe('HouseholdApiService',()=>{
+ beforeEach(()=>TestBed.configureTestingModule({providers:[provideHttpClient(),provideHttpClientTesting()]}));afterEach(()=>TestBed.inject(HttpTestingController).verify());
+ it('searches households without browser TenantId',async()=>{const api=TestBed.inject(HouseholdApiService);const http=TestBed.inject(HttpTestingController);const result=firstValueFrom(api.search({pageNumber:1,pageSize:25,search:'Shah',filters:{activeOnly:true}}));const req=http.expectOne(x=>x.url==='/api/tenant/households');expect(req.request.params.get('search')).toBe('Shah');expect(req.request.params.has('tenantId')).toBe(false);req.flush({data:[],pageNumber:1,pageSize:25,totalCount:0,totalPages:0});await expect(result).resolves.toMatchObject({totalCount:0});});
+ it('links a customer member with an explicit verified source and no visitor or tenant identity',async()=>{const api=TestBed.inject(HouseholdApiService);const http=TestBed.inject(HttpTestingController);const result=firstValueFrom(api.addMember(10,{customerId:501,relationshipType:'Parent',relationshipSource:1}));const req=http.expectOne('/api/tenant/households/10/members');expect(req.request.method).toBe('POST');expect(req.request.body).toEqual({customerId:501,relationshipType:'Parent',relationshipSource:1});expect(JSON.stringify(req.request.body)).not.toMatch(/tenantId|anonymousVisitorId|visitorId/i);req.flush({id:10,householdCode:'HH-1',name:'Shah',notes:null,isActive:true,members:[],createdUtc:'2026-08-23T00:00:00Z',updatedUtc:'2026-08-23T00:00:00Z'});await expect(result).resolves.toMatchObject({id:10});});
+ it('removes a household member through the shared tenant DELETE client',async()=>{const api=TestBed.inject(HouseholdApiService);const http=TestBed.inject(HttpTestingController);const result=firstValueFrom(api.removeMember(10,501));const req=http.expectOne('/api/tenant/households/10/members/501');expect(req.request.method).toBe('DELETE');req.flush(null);await expect(result).resolves.toBeNull();});
+});

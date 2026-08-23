@@ -11,6 +11,7 @@ export class TenantApiClient {
   get<T>(relativePath: string): Observable<T> { return this.http.get<T>(this.tenantUrl(relativePath)); }
   post<T>(relativePath: string, body: unknown = {}): Observable<T> { return this.http.post<T>(this.tenantUrl(relativePath), body); }
   put<T>(relativePath: string, body: unknown): Observable<T> { return this.http.put<T>(this.tenantUrl(relativePath), body); }
+  delete<T>(relativePath: string): Observable<T> { return this.http.delete<T>(this.tenantUrl(relativePath)); }
 
   getPage<T>(relativePath: string, query: PageQuery): Observable<PageResponse<T>> {
     let params = new HttpParams().set('pageNumber', query.pageNumber).set('pageSize', query.pageSize);

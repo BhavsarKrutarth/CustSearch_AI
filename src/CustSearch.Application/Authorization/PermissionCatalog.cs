@@ -57,6 +57,7 @@ public static class PermissionCatalog
         public const string HouseholdsManageMembers = "Households.ManageMembers";
         public const string VisitsView = "Visits.View";
         public const string VisitsEdit = "Visits.Edit";
+        public const string VisitPartiesView = "VisitParties.View";
         public const string InvoicesView = "Invoices.View";
         public const string InvoicesCreate = "Invoices.Create";
         public const string InvoicesEdit = "Invoices.Edit";

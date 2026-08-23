@@ -1,0 +1,178 @@
+name: Phase 7 Validate
+
+on:
+  push:
+    branches: [phase7-households-visits]
+  pull_request:
+    branches: [AIMainBranch]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SA_PASSWORD: 'CustSearch_Phase7_2026!Sql'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.424
+
+      - name: Setup Node for pinned Angular 21
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: src/CustSearch.Admin/package-lock.json
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build portable canonical through Phase 7
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          canonical=Path('database/CustSearchAi.sql')
+          phase7=Path('database/09_Upgrade/V1.6.0_Phase7_HouseholdsVisits.sql')
+          raw=canonical.read_bytes()
+          enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          text=raw.decode(enc)
+          nl='\r\n' if '\r\n' in text else '\n'
+          phase6_required=["OBJECT_ID(N'dbo.Customers', N'U') IS NULL","OBJECT_ID(N'dbo.AnonymousVisitors', N'U') IS NULL","VersionNumber=N'V1.5.0'"]
+          missing=[x for x in phase6_required if x not in text]
+          if missing: raise SystemExit(f'Canonical Phase 6 baseline incomplete: {missing}')
+          Path('/tmp/CustSearchAi.pre-phase7.sql').write_text(text,encoding='utf-8')
+          signatures=["OBJECT_ID(N'dbo.Households',N'U') IS NULL","OBJECT_ID(N'dbo.HouseholdMembers',N'U') IS NULL","OBJECT_ID(N'dbo.VisitParties',N'U') IS NULL","OBJECT_ID(N'dbo.VisitPartyMembers',N'U') IS NULL","OBJECT_ID(N'dbo.CustomerVisits',N'U') IS NULL",'CREATE OR ALTER PROCEDURE dbo.Household_Search','CREATE OR ALTER PROCEDURE dbo.CustomerVisit_Search','CREATE OR ALTER PROCEDURE dbo.VisitParty_Search',"VersionNumber=N'V1.6.0'"]
+          if not all(x in text for x in signatures):
+              header=nl.join(['-- ============================================================','-- PHASE 7 - HOUSEHOLDS / VISITS','-- SUB-PHASE: 7A - Household Management','-- SUB-PHASE: 7B - Household Members & Verified Relationships','-- SUB-PHASE: 7C - Visit Parties / Co-Visit Evidence','-- SUB-PHASE: 7D - Customer Visits','-- SUB-PHASE: 7E - Angular Household UI','-- SUB-PHASE: 7F - Angular Visits / Visit Party UI','-- SUB-PHASE: 7G - Tenant Isolation / Store Authorization / Privacy','-- SUB-PHASE: 7H - Database / E2E / Documentation','-- VERSION: V1.6.0','-- ============================================================'])
+              block=phase7.read_text(encoding='utf-8-sig').strip().replace('\n',nl)
+              text=text.rstrip()+nl+nl+header+nl+block+nl
+          missing=[x for x in signatures if x not in text]
+          if missing: raise SystemExit(f'Phase 7 canonical merge incomplete: {missing}')
+          canonical.write_bytes(text.encode(enc))
+          print(f'Canonical merged through V1.6.0 using {enc}')
+          PY
+
+      - name: Restore .NET
+        run: dotnet restore CustSearch_AI.sln
+
+      - name: Build .NET
+        run: dotnet build CustSearch_AI.sln --configuration Release --no-restore
+
+      - name: Test .NET
+        run: dotnet test CustSearch_AI.sln --configuration Release --no-build --logger "trx;LogFileName=phase7-tests.trx"
+
+      - name: Install Angular dependencies reproducibly
+        working-directory: src/CustSearch.Admin
+        run: npm ci --no-audit --no-fund
+
+      - name: Angular version
+        working-directory: src/CustSearch.Admin
+        run: npx ng version
+
+      - name: Lint Angular
+        working-directory: src/CustSearch.Admin
+        run: npm run lint
+
+      - name: Test Angular
+        working-directory: src/CustSearch.Admin
+        run: npm run test:ci
+
+      - name: Build Angular production
+        working-directory: src/CustSearch.Admin
+        run: npm run build:production
+
+      - name: Prepare pinned Playwright E2E dependencies
+        working-directory: tests/CustSearch.Admin.E2E
+        shell: bash
+        run: |
+          if [ ! -f package-lock.json ]; then npm install --package-lock-only --ignore-scripts --no-audit --no-fund; fi
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Run full Playwright regression suite through Phase 7
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm test
+
+      - name: Validate Python baseline
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check -r src/CustSearch.AI/requirements-dev.txt
+          ruff check src/CustSearch.AI tests/CustSearch.AI.Tests
+          PYTHONPATH=src/CustSearch.AI python -m pytest -q tests/CustSearch.AI.Tests
+
+      - name: Validate Phase 7 SQL structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          sql=Path('database/09_Upgrade/V1.6.0_Phase7_HouseholdsVisits.sql').read_text(encoding='utf-8-sig')
+          runner=Path('database/run-phase7.sql').read_text(encoding='utf-8-sig')
+          required=['dbo.Households','dbo.HouseholdMembers','dbo.VisitParties','dbo.VisitPartyMembers','dbo.CustomerVisits','dbo.Household_Search','dbo.Household_GetDetail','dbo.CustomerVisit_Search','dbo.VisitParty_Search','dbo.VisitParty_GetDetail','CK_VisitPartyMembers_IdentityXor','FK_HouseholdMembers_Households_TenantHousehold','VisitParties.View',"VersionNumber=N'V1.6.0'"]
+          missing=[x for x in required if x not in sql]
+          if missing: raise SystemExit(f'Missing Phase 7 upgrade objects: {missing}')
+          if ':r ' in runner.lower() or 'powershell' in runner.lower(): raise SystemExit('run-phase7.sql must be standalone T-SQL.')
+          def executable_sql(text: str) -> str:
+              text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+              return re.sub(r'--[^\r\n]*', '', text)
+          if 'FaceInferredFamily' in executable_sql(sql) or 'FaceInferredFamily' in executable_sql(runner):
+              raise SystemExit('Forbidden inferred-family source found in executable SQL.')
+          PY
+
+      - name: Validate Phase 7 upgrade and direct runner twice on SQL Server 2022
+        shell: bash
+        run: |
+          docker run -d --name phase7-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" -p 14335:1433 mcr.microsoft.com/mssql/server:2022-latest
+          for i in {1..60}; do
+            if docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then docker logs phase7-sql; exit 1; fi
+            sleep 2
+          done
+          docker cp /tmp/CustSearchAi.pre-phase7.sql phase7-sql:/tmp/pre.sql
+          docker cp database/09_Upgrade/V1.6.0_Phase7_HouseholdsVisits.sql phase7-sql:/tmp/phase7.sql
+          docker cp database/run-phase7.sql phase7-sql:/tmp/run-phase7.sql
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/pre.sql
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase7.sql
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase7.sql
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.6.0')<>1 THROW 51401,'V1.6.0 duplicate/missing',1; IF OBJECT_ID(N'dbo.Households',N'U') IS NULL OR OBJECT_ID(N'dbo.CustomerVisit_Search',N'P') IS NULL THROW 51402,'Phase7 objects missing',1; IF OBJECT_DEFINITION(OBJECT_ID(N'dbo.Household_Search')) NOT LIKE '%@AllowedStoreIdsCsv%' THROW 51403,'Household store predicate missing',1; DECLARE @PartySearch NVARCHAR(MAX)=OBJECT_DEFINITION(OBJECT_ID(N'dbo.VisitParty_Search')); DECLARE @PartyDetail NVARCHAR(MAX)=OBJECT_DEFINITION(OBJECT_ID(N'dbo.VisitParty_GetDetail')); IF @PartySearch LIKE '%dbo.Households%' OR @PartySearch LIKE '%dbo.HouseholdMembers%' OR @PartyDetail LIKE '%dbo.Households%' OR @PartyDetail LIKE '%dbo.HouseholdMembers%' THROW 51404,'Visit party procedures must not reference household tables',1;"
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/pre.sql
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase7.sql
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase7.sql
+
+      - name: Validate final canonical fresh install on SQL Server 2022
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('database/CustSearchAi.sql').read_bytes(); enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          Path('/tmp/CustSearchAi.final.sql').write_text(raw.decode(enc),encoding='utf-8')
+          PY
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
+          docker cp /tmp/CustSearchAi.final.sql phase7-sql:/tmp/final.sql
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
+          docker exec phase7-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.4.0')<>1 THROW 51410,'Canonical V1.4.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.5.0')<>1 THROW 51411,'Canonical V1.5.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.6.0')<>1 THROW 51412,'Canonical V1.6.0 invalid',1; IF OBJECT_ID(N'dbo.VisitPartyMembers',N'U') IS NULL OR OBJECT_ID(N'dbo.Household_Search',N'P') IS NULL THROW 51413,'Canonical Phase7 objects missing',1;"
+
+      - name: Persist generated Phase 7 canonical SQL and E2E lock
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          if git diff --quiet -- database/CustSearchAi.sql tests/CustSearch.Admin.E2E/package-lock.json; then echo "No generated files changed."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add database/CustSearchAi.sql tests/CustSearch.Admin.E2E/package-lock.json
+          git commit -m "phase7: persist V1.6 canonical SQL and E2E lock"
+          git push
