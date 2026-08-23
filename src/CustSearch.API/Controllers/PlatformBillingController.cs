@@ -37,10 +37,10 @@ public sealed class PlatformBillingController(IPlatformBillingService service):C
 [Authorize(Policy=AuthorizationPolicyNames.TenantScope)]
 public sealed class TenantPlatformBillingController(IPlatformBillingService service):ControllerBase
 {
-    [HttpGet][HasPermission(PermissionCatalog.PlatformBilling.SubscriptionsView)] public Task<TenantPlatformBillingSummary> Summary(CancellationToken ct)=>service.GetTenantSummaryAsync(ct);
-    [HttpGet("subscription")][HasPermission(PermissionCatalog.PlatformBilling.SubscriptionsView)] public Task<PlatformSubscriptionView?> Subscription(CancellationToken ct)=>service.GetTenantSubscriptionAsync(ct);
-    [HttpGet("invoices")][HasPermission(PermissionCatalog.PlatformBilling.InvoicesView)] public Task<IReadOnlyList<PlatformInvoiceView>> Invoices(CancellationToken ct)=>service.ListTenantInvoicesAsync(ct);
-    [HttpGet("payments")][HasPermission(PermissionCatalog.PlatformBilling.PaymentsView)] public Task<IReadOnlyList<PlatformPaymentView>> Payments(CancellationToken ct)=>service.ListTenantPaymentsAsync(ct);
+    [HttpGet][HasPermission(PermissionCatalog.TenantPlatformBilling.SubscriptionsView)] public Task<TenantPlatformBillingSummary> Summary(CancellationToken ct)=>service.GetTenantSummaryAsync(ct);
+    [HttpGet("subscription")][HasPermission(PermissionCatalog.TenantPlatformBilling.SubscriptionsView)] public Task<PlatformSubscriptionView?> Subscription(CancellationToken ct)=>service.GetTenantSubscriptionAsync(ct);
+    [HttpGet("invoices")][HasPermission(PermissionCatalog.TenantPlatformBilling.InvoicesView)] public Task<IReadOnlyList<PlatformInvoiceView>> Invoices(CancellationToken ct)=>service.ListTenantInvoicesAsync(ct);
+    [HttpGet("payments")][HasPermission(PermissionCatalog.TenantPlatformBilling.PaymentsView)] public Task<IReadOnlyList<PlatformPaymentView>> Payments(CancellationToken ct)=>service.ListTenantPaymentsAsync(ct);
 }
 
 public sealed record SavePlatformPlanRequest(
