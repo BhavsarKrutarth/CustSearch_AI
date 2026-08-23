@@ -13,7 +13,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     env:
       SA_PASSWORD: 'CustSearch_Phase5_2026!Sql'
     steps:
@@ -59,8 +59,6 @@ jobs:
           text = raw.decode(encoding)
           newline = '\r\n' if '\r\n' in text else '\n'
 
-          # The checked-in SSMS snapshot used a machine-specific SQL Server 17 data path. Replace only
-          # the create-database header so the canonical fresh-install script is portable to SQL Server 2022.
           portable = newline.join([
               'USE [master]', 'GO',
               '/* CustSearch AI portable bootstrap: SQL Server 2022+, no machine-specific MDF/LDF paths. */',
@@ -71,10 +69,7 @@ jobs:
           if replaced == 0 and "IF DB_ID(N'CustSearch_AI') IS NULL" not in text:
               raise SystemExit('Could not normalize the canonical CREATE DATABASE header safely.')
 
-          # OPTIMIZED_LOCKING is not part of the SQL Server 2022 compatibility baseline.
           text = re.sub(r"ALTER DATABASE \[CustSearch_AI\] SET OPTIMIZED_LOCKING = OFF\s*\r?\nGO\s*\r?\n", '', text, count=1)
-
-          # Snapshot the normalized Phase 1-4 state for upgrade testing before Phase 5 is appended.
           Path('/tmp/CustSearchAi.pre-phase5.sql').write_text(text, encoding='utf-8')
 
           block = upgrade.read_text(encoding='utf-8-sig').strip()
@@ -112,6 +107,20 @@ jobs:
       - name: Build Angular production
         working-directory: src/CustSearch.Admin
         run: npm run build:production
+
+      - name: Prepare pinned Playwright E2E dependencies
+        working-directory: tests/CustSearch.Admin.E2E
+        shell: bash
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          fi
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Run Phase 5 Playwright E2E
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm test
 
       - name: Validate Python baseline
         shell: bash
@@ -184,15 +193,15 @@ jobs:
         if: always()
         run: docker rm -f phase5-sql >/dev/null 2>&1 || true
 
-      - name: Persist normalized canonical SQL
+      - name: Persist generated canonical SQL and E2E lock
         if: github.event_name == 'push'
         shell: bash
         run: |
-          if ! git diff --quiet -- database/CustSearchAi.sql; then
+          if ! git diff --quiet -- database/CustSearchAi.sql tests/CustSearch.Admin.E2E/package-lock.json; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add database/CustSearchAi.sql
-            git commit -m "phase5: persist SQL Server 2022 canonical database script"
+            git add database/CustSearchAi.sql tests/CustSearch.Admin.E2E/package-lock.json
+            git commit -m "phase5: persist canonical SQL and E2E lock"
             git push origin HEAD:phase5-complete
           fi
 
@@ -203,6 +212,7 @@ jobs:
           zip -rq artifacts/CustSearch_AI_Phase5_Final.zip . \
             -x '.git/*' 'artifacts/*' 'src/CustSearch.Admin/node_modules/*' \
                'src/CustSearch.Admin/.angular/*' 'src/CustSearch.Admin/dist/*' \
+               'tests/CustSearch.Admin.E2E/node_modules/*' 'tests/CustSearch.Admin.E2E/test-results/*' \
                '**/bin/*' '**/obj/*' '**/TestResults/*' '**/logs/*'
 
       - name: Upload final source ZIP
