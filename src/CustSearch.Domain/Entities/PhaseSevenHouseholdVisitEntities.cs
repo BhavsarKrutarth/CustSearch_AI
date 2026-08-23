@@ -146,7 +146,7 @@ public sealed class VisitParty
     public void Close(DateTime endedUtc)
     {
         endedUtc = RequireUtc(endedUtc, nameof(endedUtc));
-        if (endedUtc < StartedUtc) throw new ArgumentOutOfRangeException(nameof(endedUtc));
+        ArgumentOutOfRangeException.ThrowIfLessThan(endedUtc, StartedUtc, nameof(endedUtc));
         EndedUtc = endedUtc; Status = VisitPartyStatus.Closed; UpdatedUtc = endedUtc;
     }
 
@@ -222,7 +222,8 @@ public sealed class CustomerVisit
     public static CustomerVisit Create(long tenantId,long storeId,long customerId,string visitCode,DateTime enteredUtc,CustomerVisitSource source,long? visitPartyId=null) => new(tenantId,storeId,customerId,visitCode,enteredUtc,source,visitPartyId);
     public void Complete(DateTime exitedUtc)
     {
-        exitedUtc=RequireUtc(exitedUtc,nameof(exitedUtc)); if(exitedUtc<EnteredUtc) throw new ArgumentOutOfRangeException(nameof(exitedUtc));
+        exitedUtc=RequireUtc(exitedUtc,nameof(exitedUtc));
+        ArgumentOutOfRangeException.ThrowIfLessThan(exitedUtc, EnteredUtc, nameof(exitedUtc));
         ExitedUtc=exitedUtc; Status=CustomerVisitStatus.Completed; UpdatedUtc=exitedUtc;
     }
 
