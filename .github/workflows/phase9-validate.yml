@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -117,7 +117,13 @@ jobs:
           import re
           upgrade=Path('database/09_Upgrade/V1.8.0_Phase9_PlatformBilling.sql').read_text(encoding='utf-8-sig')
           runner=Path('database/run-phase9.sql').read_text(encoding='utf-8-sig')
-          required=['dbo.PlatformInvoices','dbo.PlatformInvoiceItems','dbo.PlatformPayments',"VersionNumber=N'V1.8.0'",'PlatformBilling.Plans.View','PlatformBilling.Subscriptions.Manage','PlatformBilling.Invoices.View','PlatformBilling.Payments.View','MaxStaff','CurrentPeriodEndUtc','TransactionReference']
+          required=[
+            'dbo.PlatformInvoices','dbo.PlatformInvoiceItems','dbo.PlatformPayments',"VersionNumber=N'V1.8.0'",
+            'PlatformBilling.Plans.View','PlatformBilling.Subscriptions.Manage','PlatformBilling.Invoices.View','PlatformBilling.Payments.View',
+            'TenantPlatformBilling.Subscriptions.View','MaxStaff','CurrentPeriodEndUtc','TransactionReference',
+            'dbo.PlatformBilling_Plan_List','dbo.PlatformBilling_Subscription_List','dbo.PlatformBilling_Invoice_List',
+            'dbo.PlatformBilling_Invoice_Get','dbo.PlatformBilling_Payment_List','dbo.TenantPlatformBilling_Summary_Get'
+          ]
           missing=[x for x in required if x not in upgrade or x not in runner]
           if missing: raise SystemExit(f'Missing Phase 9 SQL elements: {missing}')
           def executable_sql(text:str)->str:
@@ -160,12 +166,12 @@ jobs:
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase9.sql
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase9.sql
-          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51895,'V1.8.0 duplicate/missing',1; IF OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformPayments',N'U') IS NULL THROW 51896,'Platform billing tables missing',1; IF EXISTS(SELECT 1 FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.PlatformInvoices') AND referenced_object_id=OBJECT_ID(N'dbo.RetailInvoices')) THROW 51897,'Platform invoice references retail invoice',1;"
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51895,'V1.8.0 duplicate/missing',1; IF OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformPayments',N'U') IS NULL THROW 51896,'Platform billing tables missing',1; IF OBJECT_ID(N'dbo.PlatformBilling_Plan_List',N'P') IS NULL OR OBJECT_ID(N'dbo.TenantPlatformBilling_Summary_Get',N'P') IS NULL THROW 51898,'Phase 9 procedures missing from versioned upgrade',1; IF EXISTS(SELECT 1 FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.PlatformInvoices') AND referenced_object_id=OBJECT_ID(N'dbo.RetailInvoices')) THROW 51897,'Platform invoice references retail invoice',1;"
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase9.sql
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase9.sql
-          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51995,'Runner V1.8.0 duplicate/missing',1;"
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51995,'Runner V1.8.0 duplicate/missing',1; IF OBJECT_ID(N'dbo.PlatformBilling_Invoice_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Payment_List',N'P') IS NULL THROW 51994,'Runner Phase 9 procedures missing',1;"
 
       - name: Validate prospective final canonical fresh install through V1.8.0
         shell: bash
@@ -173,4 +179,19 @@ jobs:
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
           docker cp /tmp/CustSearchAi.phase9-final.sql phase9-sql:/tmp/final.sql
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
-          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0')<>1 THROW 51996,'Canonical V1.7.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51997,'Canonical V1.8.0 invalid',1; IF OBJECT_ID(N'dbo.RetailInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL THROW 51998,'Retail/platform domains must both exist separately',1;"
+          docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0')<>1 THROW 51996,'Canonical V1.7.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51997,'Canonical V1.8.0 invalid',1; IF OBJECT_ID(N'dbo.RetailInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL THROW 51998,'Retail/platform domains must both exist separately',1; IF OBJECT_ID(N'dbo.PlatformBilling_Plan_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Subscription_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Invoice_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Invoice_Get',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Payment_List',N'P') IS NULL OR OBJECT_ID(N'dbo.TenantPlatformBilling_Summary_Get',N'P') IS NULL THROW 51999,'Canonical Phase 9 procedures missing',1;"
+
+      - name: Persist validated V1.8.0 canonical SQL
+        if: github.event_name == 'push' && github.ref == 'refs/heads/phase9-platform-billing'
+        shell: bash
+        run: |
+          cp /tmp/CustSearchAi.phase9-final.sql database/CustSearchAi.sql
+          if git diff --quiet -- database/CustSearchAi.sql; then
+            echo "Phase 9 V1.8.0 canonical already persisted."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add database/CustSearchAi.sql
+          git commit -m "phase9: persist V1.8 canonical SQL"
+          git push origin HEAD:phase9-platform-billing
