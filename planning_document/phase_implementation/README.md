@@ -1,6 +1,6 @@
 # CustSearch AI — Phase Implementation Index
 
-There are 19 approval-gated phases, numbered 0 through 18. Each phase has its own file and ends with a `Done Summary` section that is completed only after its required validation passes.
+There are 19 sequential phases, numbered 0 through 18. Each phase has its own file and ends with a `Done Summary` section that is completed only after its required validation passes. Under the user's 2026-08-23 authorization, a validated phase automatically advances to the next planned phase without a separate approval wait.
 
 | Phase | File | Status |
 |---|---|---|
@@ -9,8 +9,8 @@ There are 19 approval-gated phases, numbered 0 through 18. Each phase has its ow
 | 2 | `PHASE_02_MULTI_TENANT_AUTH.md` | Completed |
 | 3 | `PHASE_03_AUTHORIZATION_SHELLS.md` | Completed |
 | 4 | `PHASE_04_PLATFORM_TENANTS.md` | Completed |
-| 5 | `PHASE_05_TENANT_USERS_STORES_STAFF.md` | Awaiting Approval |
-| 6 | `PHASE_06_SHOPPER_CUSTOMERS.md` | Not Started |
+| 5 | `PHASE_05_TENANT_USERS_STORES_STAFF.md` | Completed |
+| 6 | `PHASE_06_SHOPPER_CUSTOMERS.md` | In Progress |
 | 7 | `PHASE_07_HOUSEHOLDS_VISITS.md` | Not Started |
 | 8 | `PHASE_08_PRODUCTS_RETAIL_BILLING.md` | Not Started |
 | 9 | `PHASE_09_PLATFORM_BILLING.md` | Not Started |
