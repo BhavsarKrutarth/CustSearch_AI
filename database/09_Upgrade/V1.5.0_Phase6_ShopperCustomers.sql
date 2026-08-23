@@ -7,6 +7,21 @@ USE [CustSearch_AI];
 GO
 SET XACT_ABORT ON;
 GO
+/* Phase 6H — required deterministic SET options for filtered indexes on SQL Server 2022. */
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+SET ANSI_PADDING ON;
+GO
+SET ANSI_WARNINGS ON;
+GO
+SET CONCAT_NULL_YIELDS_NULL ON;
+GO
+SET ARITHABORT ON;
+GO
+SET NUMERIC_ROUNDABORT OFF;
+GO
 
 -- ============================================================
 -- PHASE 6 - SHOPPER CUSTOMERS / ANONYMOUS VISITORS
