@@ -44,6 +44,13 @@ public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> op
     /// <summary>Phase 5F — optional trigger aliases.</summary>
     public DbSet<StoreVoiceCommandAlias> StoreVoiceCommandAliases => Set<StoreVoiceCommandAlias>();
 
+    /// <summary>Phase 6A — tenant-owned shopper customers.</summary>
+    public DbSet<Customer> Customers => Set<Customer>();
+    /// <summary>Phase 6G — authoritative customer-to-store visibility assignments.</summary>
+    public DbSet<CustomerStoreAssignment> CustomerStoreAssignments => Set<CustomerStoreAssignment>();
+    /// <summary>Phase 6B — store-bound anonymous visitors that remain unidentified until explicit conversion.</summary>
+    public DbSet<AnonymousVisitor> AnonymousVisitors => Set<AnonymousVisitor>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);

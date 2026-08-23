@@ -20,6 +20,12 @@ export const routes: Routes = [
   { path:'customer-admin/categories', pathMatch:'full', redirectTo:'customer-admin/store-categories' },
   { path:'customer-admin/voice-commands', title:'Voice commands | CustSearch AI', data:{mode:'voice',title:'Dynamic voice settings'}, canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.voiceCommandsView])], loadComponent:phase5Page },
   { path:'customer-admin/voice-settings', pathMatch:'full', redirectTo:'customer-admin/voice-commands' },
+
+  // Phase 6E/6F feature-first lazy routes. API authorization remains authoritative even when navigation is hidden.
+  { path:'customer-admin/customers', title:'Customers | CustSearch AI', canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.customersView])], loadComponent:()=>import('./features/customers/customer-list-page').then(m=>m.CustomerListPage) },
+  { path:'customer-admin/customers/:id', title:'Customer profile | CustSearch AI', canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.customersView])], loadComponent:()=>import('./features/customers/customer-detail-page').then(m=>m.CustomerDetailPage) },
+  { path:'customer-admin/visitors', title:'Anonymous visitors | CustSearch AI', canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.visitorsView])], loadComponent:()=>import('./features/visitors/visitor-list-page').then(m=>m.VisitorListPage) },
+
   { path:'platform-admin', redirectTo:'admin/dashboard', pathMatch:'full' },
   { path:'admin/dashboard', title:'Platform Admin | CustSearch AI', canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.tenantsOperationalSummary])], loadComponent:()=>import('./features/platform-admin/platform-dashboard').then(m=>m.PlatformDashboard) },
   { path:'admin/tenants', canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.tenantsView])], children:[
