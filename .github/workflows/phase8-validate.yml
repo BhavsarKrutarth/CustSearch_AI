@@ -111,12 +111,16 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           upgrade=Path('database/09_Upgrade/V1.7.0_Phase8_ProductsRetailBilling.sql').read_text(encoding='utf-8-sig')
           runner=Path('database/run-phase8.sql').read_text(encoding='utf-8-sig')
           required=['dbo.Products','dbo.ProductStoreAvailabilities','dbo.RetailInvoices','dbo.RetailInvoiceItems','dbo.RetailInvoicePayments','dbo.RetailInvoiceParticipants','dbo.RetailInvoiceItemAttributions','dbo.Product_Search','dbo.RetailInvoice_Search','dbo.RetailInvoice_GetDetail','dbo.CustomerPurchaseHistory_Get','dbo.HouseholdPurchaseSummary_Get','dbo.RetailSalesSummary_Get','dbo.RetailSalesByProduct_Get','dbo.RetailSalesByCategory_Get','dbo.RetailPaymentSummary_Get',"VersionNumber=N'V1.7.0'",'@AllowedStoreIdsCsv','UX_RetailParticipants_OnePayer']
           missing=[x for x in required if x not in upgrade]
           if missing: raise SystemExit(f'Missing Phase 8 SQL elements: {missing}')
-          lower=runner.lower()
+          def executable_sql(text: str) -> str:
+              text=re.sub(r'/\*.*?\*/','',text,flags=re.S)
+              return re.sub(r'--[^\r\n]*','',text)
+          lower=executable_sql(runner).lower()
           if ':r ' in lower or 'powershell' in lower: raise SystemExit('run-phase8.sql must be standalone T-SQL.')
           if "VersionNumber=N'V1.6.0'" not in runner or "VersionNumber=N'V1.7.0'" not in runner: raise SystemExit('Runner prerequisite/version validation missing.')
           PY
