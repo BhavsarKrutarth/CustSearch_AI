@@ -51,6 +51,17 @@ public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> op
     /// <summary>Phase 6B — store-bound anonymous visitors that remain unidentified until explicit conversion.</summary>
     public DbSet<AnonymousVisitor> AnonymousVisitors => Set<AnonymousVisitor>();
 
+    /// <summary>Phase 7A — tenant-owned verified households.</summary>
+    public DbSet<Household> Households => Set<Household>();
+    /// <summary>Phase 7B — explicit verified customer-to-household relationships.</summary>
+    public DbSet<HouseholdMember> HouseholdMembers => Set<HouseholdMember>();
+    /// <summary>Phase 7C — store-bound co-visit parties that do not imply family.</summary>
+    public DbSet<VisitParty> VisitParties => Set<VisitParty>();
+    /// <summary>Phase 7C — separately identified customer/visitor participants in a co-visit party.</summary>
+    public DbSet<VisitPartyMember> VisitPartyMembers => Set<VisitPartyMember>();
+    /// <summary>Phase 7D — factual customer visit history.</summary>
+    public DbSet<CustomerVisit> CustomerVisits => Set<CustomerVisit>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
