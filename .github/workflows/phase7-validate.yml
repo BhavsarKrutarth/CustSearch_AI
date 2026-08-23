@@ -118,13 +118,18 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           sql=Path('database/09_Upgrade/V1.6.0_Phase7_HouseholdsVisits.sql').read_text(encoding='utf-8-sig')
           runner=Path('database/run-phase7.sql').read_text(encoding='utf-8-sig')
           required=['dbo.Households','dbo.HouseholdMembers','dbo.VisitParties','dbo.VisitPartyMembers','dbo.CustomerVisits','dbo.Household_Search','dbo.Household_GetDetail','dbo.CustomerVisit_Search','dbo.VisitParty_Search','dbo.VisitParty_GetDetail','CK_VisitPartyMembers_IdentityXor','FK_HouseholdMembers_Households_TenantHousehold','VisitParties.View',"VersionNumber=N'V1.6.0'"]
           missing=[x for x in required if x not in sql]
           if missing: raise SystemExit(f'Missing Phase 7 upgrade objects: {missing}')
           if ':r ' in runner.lower() or 'powershell' in runner.lower(): raise SystemExit('run-phase7.sql must be standalone T-SQL.')
-          if 'FaceInferredFamily' in sql or 'FaceInferredFamily' in runner: raise SystemExit('Forbidden inferred-family source found.')
+          def executable_sql(text: str) -> str:
+              text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+              return re.sub(r'--[^\r\n]*', '', text)
+          if 'FaceInferredFamily' in executable_sql(sql) or 'FaceInferredFamily' in executable_sql(runner):
+              raise SystemExit('Forbidden inferred-family source found in executable SQL.')
           PY
 
       - name: Validate Phase 7 upgrade and direct runner twice on SQL Server 2022
