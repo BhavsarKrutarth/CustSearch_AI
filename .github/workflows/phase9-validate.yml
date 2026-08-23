@@ -39,24 +39,36 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Prepare validated Phase 8 baseline and prospective Phase 9 canonical
+      - name: Prepare Phase 8 baseline and prospective/current Phase 9 canonical
         shell: bash
         run: |
           git show origin/AIMainBranch:database/CustSearchAi.sql > /tmp/CustSearchAi.phase8-base.raw
           python3 - <<'PY'
           from pathlib import Path
-          base_raw=Path('/tmp/CustSearchAi.phase8-base.raw').read_bytes()
-          enc='utf-16' if base_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if base_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
-          base=base_raw.decode(enc)
-          if "VersionNumber=N'V1.7.0'" not in base:
-              raise SystemExit('AIMainBranch must contain validated Phase 8 V1.7.0 before Phase 9.')
-          if "VersionNumber=N'V1.8.0'" in base:
-              raise SystemExit('AIMainBranch must not contain Phase 9 V1.8.0 before Phase 9 merge.')
+          import re
+
+          def decode(path: str) -> str:
+              raw=Path(path).read_bytes()
+              enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+              return raw.decode(enc)
+
+          def has_version(text: str, version: str) -> bool:
+              return re.search(r"VersionNumber\s*=\s*N'"+re.escape(version)+r"'", text, re.I) is not None
+
+          base=decode('/tmp/CustSearchAi.phase8-base.raw')
+          if not has_version(base,'V1.7.0'):
+              raise SystemExit('AIMainBranch must contain validated Phase 8 V1.7.0 before validating Phase 9.')
+
           upgrade=Path('database/09_Upgrade/V1.8.0_Phase9_PlatformBilling.sql').read_text(encoding='utf-8-sig')
-          branch_raw=Path('database/CustSearchAi.sql').read_bytes()
-          branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
-          branch=branch_raw.decode(branch_enc)
-          final=branch if "VersionNumber=N'V1.8.0'" in branch else base.rstrip()+"\n\n-- ============================================================\n-- PHASE 9 - PLATFORM BILLING\n-- VERSION: V1.8.0\n-- ============================================================\n"+upgrade.strip()+"\n"
+          branch=decode('database/CustSearchAi.sql')
+
+          if has_version(branch,'V1.8.0'):
+              final=branch
+          elif has_version(base,'V1.8.0'):
+              final=base
+          else:
+              final=base.rstrip()+"\n\n-- ============================================================\n-- PHASE 9 - PLATFORM BILLING\n-- VERSION: V1.8.0\n-- ============================================================\n"+upgrade.strip()+"\n"
+
           Path('/tmp/CustSearchAi.phase8-base.sql').write_text(base,encoding='utf-8')
           Path('/tmp/CustSearchAi.phase9-final.sql').write_text(final,encoding='utf-8')
           PY
@@ -118,7 +130,7 @@ jobs:
           upgrade=Path('database/09_Upgrade/V1.8.0_Phase9_PlatformBilling.sql').read_text(encoding='utf-8-sig')
           runner=Path('database/run-phase9.sql').read_text(encoding='utf-8-sig')
           required=[
-            'dbo.PlatformInvoices','dbo.PlatformInvoiceItems','dbo.PlatformPayments',"VersionNumber=N'V1.8.0'",
+            'dbo.PlatformInvoices','dbo.PlatformInvoiceItems','dbo.PlatformPayments',
             'PlatformBilling.Plans.View','PlatformBilling.Subscriptions.Manage','PlatformBilling.Invoices.View','PlatformBilling.Payments.View',
             'TenantPlatformBilling.Subscriptions.View','MaxStaff','CurrentPeriodEndUtc','TransactionReference',
             'dbo.PlatformBilling_Plan_List','dbo.PlatformBilling_Subscription_List','dbo.PlatformBilling_Invoice_List',
@@ -126,6 +138,9 @@ jobs:
           ]
           missing=[x for x in required if x not in upgrade or x not in runner]
           if missing: raise SystemExit(f'Missing Phase 9 SQL elements: {missing}')
+          version_re=re.compile(r"VersionNumber\s*=\s*N'V1\.8\.0'",re.I)
+          if not version_re.search(upgrade) or not version_re.search(runner):
+              raise SystemExit('V1.8.0 version ledger logic is missing from Phase 9 SQL.')
           def executable_sql(text:str)->str:
               text=re.sub(r'/\*.*?\*/','',text,flags=re.S)
               return re.sub(r'--[^\r\n]*','',text)
@@ -173,7 +188,7 @@ jobs:
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase9.sql
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51995,'Runner V1.8.0 duplicate/missing',1; IF OBJECT_ID(N'dbo.PlatformBilling_Invoice_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Payment_List',N'P') IS NULL THROW 51994,'Runner Phase 9 procedures missing',1;"
 
-      - name: Validate prospective final canonical fresh install through V1.8.0
+      - name: Validate prospective/current canonical fresh install through V1.8.0
         shell: bash
         run: |
           docker exec phase9-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
