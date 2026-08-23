@@ -13,41 +13,36 @@ namespace CustSearch.Infrastructure.Persistence;
 public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> options) : DbContext(options)
 {
     public DbSet<DatabaseVersion> DatabaseVersions => Set<DatabaseVersion>();
-
     public DbSet<Tenant> Tenants => Set<Tenant>();
-
     public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
-
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
-
     public DbSet<AuthenticationEvent> AuthenticationEvents => Set<AuthenticationEvent>();
-
-    /// <summary>Provides role storage for authorization queries and administration.</summary>
     public DbSet<Role> Roles => Set<Role>();
-
-    /// <summary>Provides the shared permission catalog used by policies.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
-
-    /// <summary>Provides user-to-role assignments for session authorization.</summary>
     public DbSet<UserRole> UserRoles => Set<UserRole>();
-
-    /// <summary>Provides permission grants attached to roles.</summary>
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
-
-    /// <summary>Provides reusable subscription plan definitions and default quotas.</summary>
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
-
-    /// <summary>Provides tenant subscription history and current commercial state.</summary>
     public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
-
-    /// <summary>Provides time-bounded tenant usage totals for quota and reporting screens.</summary>
     public DbSet<TenantUsageSnapshot> TenantUsageSnapshots => Set<TenantUsageSnapshot>();
-
-    /// <summary>Provides audited platform overrides to tenant quota defaults.</summary>
     public DbSet<TenantQuotaOverride> TenantQuotaOverrides => Set<TenantQuotaOverride>();
-
-    /// <summary>Provides append-only evidence for platform and tenant administration actions.</summary>
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
+    /// <summary>Phase 5C — tenant store master.</summary>
+    public DbSet<Store> Stores => Set<Store>();
+    /// <summary>Phase 5B — authoritative user/store access grants.</summary>
+    public DbSet<UserStoreAssignment> UserStoreAssignments => Set<UserStoreAssignment>();
+    /// <summary>Phase 5D — staff profiles linked to tenant users.</summary>
+    public DbSet<StaffProfile> StaffProfiles => Set<StaffProfile>();
+    /// <summary>Phase 5D — operational staff shifts.</summary>
+    public DbSet<StaffShift> StaffShifts => Set<StaffShift>();
+    /// <summary>Phase 5D — optional staff presence signals.</summary>
+    public DbSet<StaffPresenceSession> StaffPresenceSessions => Set<StaffPresenceSession>();
+    /// <summary>Phase 5E — tenant/store product-category taxonomy.</summary>
+    public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
+    /// <summary>Phase 5F — dynamic per-store voice-command configuration.</summary>
+    public DbSet<StoreVoiceCommandSetting> StoreVoiceCommandSettings => Set<StoreVoiceCommandSetting>();
+    /// <summary>Phase 5F — optional trigger aliases.</summary>
+    public DbSet<StoreVoiceCommandAlias> StoreVoiceCommandAliases => Set<StoreVoiceCommandAlias>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
