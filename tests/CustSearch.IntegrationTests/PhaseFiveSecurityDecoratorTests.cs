@@ -150,6 +150,8 @@ public sealed class PhaseFiveSecurityDecoratorTests
 
         public async Task<Store> AddStoreAsync(string code, string name)
         {
+            // Security tests do not need geospatial data. Keeping coordinates null avoids SQLite's provider-specific
+            // decimal CHECK comparison behavior while the SQL Server coordinate rules remain covered elsewhere.
             var store = Store.Create(
                 Tenant.Id,
                 code,
@@ -162,9 +164,9 @@ public sealed class PhaseFiveSecurityDecoratorTests
                 "Gujarat",
                 "395007",
                 "IN",
-                21.1702m,
-                72.8311m,
-                50m,
+                null,
+                null,
+                null,
                 null,
                 CustSearch.Domain.Enums.StoreLocationSource.Manual,
                 "India Standard Time",
