@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace CustSearch.API.Controllers;
 
-/// <summary>Phase 10 tenant/store preference and voice API. Browser DTOs never contain TenantId and co-visit evidence is never treated as Household truth.</summary>
+/// <summary>Phase 10 tenant/store preference and voice API. Browser DTOs never contain TenantId and voice category resolution remains server-authoritative.</summary>
 [ApiController]
 [Route("api/tenant")]
 [Authorize(Policy=AuthorizationPolicyNames.TenantScope)]
@@ -52,13 +52,21 @@ public sealed class PreferencesVoiceController(IPreferencesVoiceService service,
     [HasPermission(PermissionCatalog.Operations.VoiceCommandsConfigure)]
     public Task<VoiceSettingView> SaveVoiceSetting(long storeId,SaveVoiceRuntimeSettingRequest request,CancellationToken ct)=>service.SaveVoiceSettingAsync(storeId,new(request.TriggerKeyword,request.ResponseMode,request.IsEnabled,request.RequireConfirmationForAmbiguousCategory,request.Aliases,request.LanguageCode,request.RequireConfirmation,request.ListeningTimeoutSeconds,request.MinimumRecognitionConfidence),Audit(),ct);
 
+    [HttpGet("store-categories/{categoryId:long}/aliases")]
+    [HasPermission(PermissionCatalog.Operations.StoreCategoriesView)]
+    public Task<IReadOnlyList<ProductCategoryAliasView>> CategoryAliases(long categoryId,[FromQuery]long? storeId,CancellationToken ct)=>service.ListCategoryAliasesAsync(categoryId,storeId,ct);
+
+    [HttpPost("store-categories/{categoryId:long}/aliases")]
+    [HasPermission(PermissionCatalog.Operations.StoreCategoriesManage)]
+    public Task<ProductCategoryAliasView> AddCategoryAlias(long categoryId,SaveProductCategoryAliasRequest request,CancellationToken ct)=>service.AddCategoryAliasAsync(categoryId,new(request.StoreId,request.AliasText,request.LanguageCode),Audit(),ct);
+
     [HttpPost("voice/commands/start")]
     [HasPermission(PermissionCatalog.Operations.VoiceCommandsUse)]
     public Task<VoiceSessionView> StartVoice(StartVoiceSessionRequest request,CancellationToken ct)=>service.StartVoiceSessionAsync(new(request.StoreId,request.CustomerId,request.TriggerText),Audit(),ct);
 
     [HttpPost("voice/commands/{sessionId:long}/interpret")]
     [HasPermission(PermissionCatalog.Operations.VoiceCommandsUse)]
-    public Task<VoiceSessionView> InterpretVoice(long sessionId,InterpretVoiceSessionRequest request,CancellationToken ct)=>service.InterpretVoiceSessionAsync(sessionId,new(request.RecognizedText,request.RecognitionConfidence,request.PreferenceType,request.ReferenceId,request.Value,request.Reason),Audit(),ct);
+    public Task<VoiceInterpretResult> InterpretVoice(long sessionId,InterpretVoiceSessionRequest request,CancellationToken ct)=>service.InterpretVoiceSessionAsync(sessionId,new(request.RecognizedText,request.RecognitionConfidence,request.SelectedCategoryId,request.Reason),Audit(),ct);
 
     [HttpPost("voice/commands/{sessionId:long}/confirm")]
     [HasPermission(PermissionCatalog.Operations.VoiceCommandsUse)]
@@ -79,5 +87,7 @@ public sealed record AddCustomerPreferenceRequest(long StoreId,PreferenceType Pr
 public sealed record AddHouseholdPreferenceRequest(PreferenceType PreferenceType,long? ReferenceId,[param:Required,StringLength(200)]string Value,HouseholdPreferenceTagSource Source,[param:StringLength(500)]string? Reason);
 public sealed record SavePreferenceWeightRequest([param:Required,StringLength(50)]string VersionCode,[param:Range(typeof(decimal),"0","10")]decimal ManualStaffWeight,[param:Range(typeof(decimal),"0","10")]decimal PurchaseWeight,[param:Range(typeof(decimal),"0","10")]decimal CategoryInteractionWeight,[param:Range(typeof(decimal),"0","10")]decimal VoiceConfirmedWeight);
 public sealed record SaveVoiceRuntimeSettingRequest([param:Required,StringLength(100)]string TriggerKeyword,[param:Required,StringLength(30)]string ResponseMode,bool IsEnabled,bool RequireConfirmationForAmbiguousCategory,[param:Required]IReadOnlyList<string> Aliases,[param:Required,StringLength(20)]string LanguageCode,bool RequireConfirmation,[param:Range(3,120)]int ListeningTimeoutSeconds,[param:Range(typeof(decimal),"0","100")]decimal MinimumRecognitionConfidence);
+public sealed record SaveProductCategoryAliasRequest(long? StoreId,[param:Required,StringLength(150)]string AliasText,[param:Required,StringLength(20)]string LanguageCode);
 public sealed record StartVoiceSessionRequest(long StoreId,long CustomerId,[param:Required,StringLength(100)]string TriggerText);
-public sealed record InterpretVoiceSessionRequest([param:Required,StringLength(250)]string RecognizedText,[param:Range(typeof(decimal),"0","100")]decimal RecognitionConfidence,PreferenceType PreferenceType,long? ReferenceId,[param:StringLength(200)]string? Value,[param:StringLength(500)]string? Reason);
+/// <summary>Phase 10 voice DTO deliberately excludes PreferenceType/ReferenceId/Value; the server resolves category identity from transcript and aliases.</summary>
+public sealed record InterpretVoiceSessionRequest([param:Required,StringLength(250)]string RecognizedText,[param:Range(typeof(decimal),"0","100")]decimal RecognitionConfidence,long? SelectedCategoryId,[param:StringLength(500)]string? Reason);
