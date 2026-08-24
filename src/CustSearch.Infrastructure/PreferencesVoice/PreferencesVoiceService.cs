@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CustSearch.Infrastructure.PreferencesVoice;
 
-/// <summary>Phase 10 preference/voice implementation. It derives tenant/store identity from the authenticated server session and never turns co-visit evidence into family truth.</summary>
+/// <summary>Phase 10 preference/voice implementation. Tenant/store identity is server-derived; voice text resolves only to existing store/tenant categories and aliases.</summary>
 public sealed class PreferencesVoiceService(
     CustSearchDbContext db,
     ICurrentUserContext currentUser,
@@ -93,7 +93,7 @@ public sealed class PreferencesVoiceService(
     public async Task<VoiceSettingView> GetVoiceSettingAsync(long storeId,CancellationToken cancellationToken=default)
     {
         var baseSetting=await tenantOperations.GetVoiceSettingAsync(storeId,cancellationToken).ConfigureAwait(false);var tenantId=RequireTenantId();var runtime=await db.StoreVoiceCommandRuntimeSettings.AsNoTracking().SingleOrDefaultAsync(x=>x.TenantId==tenantId&&x.StoreId==storeId,cancellationToken).ConfigureAwait(false);
-        return new(storeId,baseSetting.TriggerKeyword,baseSetting.ResponseMode.ToString(),baseSetting.IsEnabled,baseSetting.RequireConfirmationForAmbiguousCategory,baseSetting.Aliases,runtime?.LanguageCode??"en-IN",runtime?.RequireConfirmation??true,runtime?.ListeningTimeoutSeconds??15,runtime?.MinimumRecognitionConfidence??70m);
+        return new(storeId,baseSetting.TriggerKeyword,baseSetting.ResponseMode.ToString(),baseSetting.IsEnabled,baseSetting.RequireConfirmationForAmbiguousCategory,baseSetting.Aliases,runtime?.LanguageCode??"en-IN",runtime?.RequireConfirmation??true,runtime?.ListeningTimeoutSeconds??30,runtime?.MinimumRecognitionConfidence??70m);
     }
 
     public async Task<VoiceSettingView> SaveVoiceSettingAsync(long storeId,SaveVoiceRuntimeSettingCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default)
@@ -105,6 +105,26 @@ public sealed class PreferencesVoiceService(
         RecordAudit(tenantId,storeId,audit,"StoreVoiceRuntimeSettingChanged","StoreVoiceCommandRuntimeSetting",storeId,before,new{command.LanguageCode,command.RequireConfirmation,command.ListeningTimeoutSeconds,command.MinimumRecognitionConfidence},now);await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);return await GetVoiceSettingAsync(storeId,cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<ProductCategoryAliasView>> ListCategoryAliasesAsync(long categoryId,long? storeId,CancellationToken cancellationToken=default)
+    {
+        var tenantId=RequireTenantId();var category=await RequireCategoryAsync(categoryId,storeId,cancellationToken).ConfigureAwait(false);
+        if(storeId.HasValue)await RequireAuthorizedStoreAsync(storeId.Value,cancellationToken).ConfigureAwait(false);else if(!IsTenantWide())throw new TenantResourceNotFoundException("Category aliases");
+        var query=db.ProductCategoryAliases.AsNoTracking().Where(x=>x.TenantId==tenantId&&x.ProductCategoryId==category.Id&&x.IsActive);
+        if(storeId.HasValue)query=query.Where(x=>x.StoreId==null||x.StoreId==storeId.Value);
+        return await query.OrderBy(x=>x.AliasText).Select(x=>new ProductCategoryAliasView(x.Id,x.StoreId,x.ProductCategoryId,x.AliasText,x.NormalizedAliasText,x.LanguageCode,x.IsActive,x.CreatedUtc)).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ProductCategoryAliasView> AddCategoryAliasAsync(long categoryId,SaveProductCategoryAliasCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default)
+    {
+        ArgumentNullException.ThrowIfNull(command);ValidateAudit(audit);var tenantId=RequireTenantId();_ = await RequireCategoryAsync(categoryId,command.StoreId,cancellationToken).ConfigureAwait(false);
+        if(command.StoreId.HasValue)await RequireAuthorizedStoreAsync(command.StoreId.Value,cancellationToken).ConfigureAwait(false);else if(!IsTenantWide())throw new TenantResourceNotFoundException("Category");
+        var normalized=ProductCategoryAlias.Normalize(command.AliasText);if(string.IsNullOrWhiteSpace(normalized))throw new TenantBusinessRuleException("Category alias is required.");
+        if(await db.ProductCategoryAliases.AsNoTracking().AnyAsync(x=>x.TenantId==tenantId&&x.ProductCategoryId==categoryId&&x.StoreId==command.StoreId&&x.NormalizedAliasText==normalized&&x.IsActive,cancellationToken).ConfigureAwait(false))throw new TenantBusinessRuleException("Category alias already exists for this scope.");
+        var now=UtcNow();ProductCategoryAlias alias;try{alias=ProductCategoryAlias.Create(tenantId,command.StoreId,categoryId,command.AliasText,command.LanguageCode,audit.ActorUserId,now);}catch(ArgumentException ex){throw new TenantBusinessRuleException(ex.Message);}
+        db.ProductCategoryAliases.Add(alias);RecordAudit(tenantId,command.StoreId,audit,"ProductCategoryAliasAdded","ProductCategoryAlias",0,null,new{categoryId,command.StoreId,command.AliasText,command.LanguageCode},now);await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return MapAlias(alias);
+    }
+
     public async Task<VoiceSessionView> StartVoiceSessionAsync(StartVoiceSessionCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default)
     {
         ArgumentNullException.ThrowIfNull(command);ValidateAudit(audit);var tenantId=RequireTenantId();await RequireCustomerAtStoreAsync(command.CustomerId,command.StoreId,cancellationToken).ConfigureAwait(false);var setting=await GetVoiceSettingAsync(command.StoreId,cancellationToken).ConfigureAwait(false);if(!setting.IsEnabled)throw new TenantBusinessRuleException("Voice commands are disabled for this store.");
@@ -112,13 +132,28 @@ public sealed class PreferencesVoiceService(
         var now=UtcNow();var session=VoiceCommandSession.Start(tenantId,command.StoreId,currentUser.UserId,command.CustomerId,command.TriggerText.Trim(),setting.RequireConfirmation,now,now.AddSeconds(setting.ListeningTimeoutSeconds));db.VoiceCommandSessions.Add(session);RecordAudit(tenantId,command.StoreId,audit,"VoiceCommandStarted","VoiceCommandSession",0,null,new{command.CustomerId,command.TriggerText,setting.LanguageCode},now);await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);return MapVoiceSession(session);
     }
 
-    public async Task<VoiceSessionView> InterpretVoiceSessionAsync(long sessionId,InterpretVoiceSessionCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default)
+    public async Task<VoiceInterpretResult> InterpretVoiceSessionAsync(long sessionId,InterpretVoiceSessionCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default)
     {
-        ArgumentNullException.ThrowIfNull(command);ValidateAudit(audit);var session=await RequireVoiceSessionAsync(sessionId,cancellationToken).ConfigureAwait(false);var setting=await GetVoiceSettingAsync(session.StoreId,cancellationToken).ConfigureAwait(false);if(command.RecognitionConfidence<setting.MinimumRecognitionConfidence)throw new TenantBusinessRuleException("Voice recognition confidence is below the store threshold.");
-        await ValidateReferenceAsync(command.PreferenceType,command.ReferenceId,command.Value,session.StoreId,cancellationToken).ConfigureAwait(false);var now=UtcNow();try{session.Propose(command.RecognizedText,command.RecognitionConfidence,command.PreferenceType,command.ReferenceId,command.Value,now);}catch(InvalidOperationException ex){throw new TenantBusinessRuleException(ex.Message);}
-        RecordAudit(session.TenantId,session.StoreId,audit,"VoiceCommandInterpreted","VoiceCommandSession",session.Id,null,new{command.RecognizedText,command.RecognitionConfidence,command.PreferenceType,command.ReferenceId,command.Value,session.ConfirmationRequired,session.Status},now);
+        ArgumentNullException.ThrowIfNull(command);ValidateAudit(audit);var session=await RequireVoiceSessionAsync(sessionId,cancellationToken).ConfigureAwait(false);var setting=await GetVoiceSettingAsync(session.StoreId,cancellationToken).ConfigureAwait(false);var now=UtcNow();
+        if(command.RecognitionConfidence<setting.MinimumRecognitionConfidence){RecordAudit(session.TenantId,session.StoreId,audit,"VoiceCommandRejectedLowConfidence","VoiceCommandSession",session.Id,null,new{command.RecognitionConfidence,setting.MinimumRecognitionConfidence},now);await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);throw new TenantBusinessRuleException("Voice recognition confidence is below the store threshold.");}
+        var categoryText=ExtractCategoryText(command.RecognizedText,session.MatchedTrigger);if(string.IsNullOrWhiteSpace(categoryText)){RecordAudit(session.TenantId,session.StoreId,audit,"VoiceCommandCategoryNotFound","VoiceCommandSession",session.Id,null,new{command.RecognizedText},now);await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);throw new TenantBusinessRuleException("Category not found.");}
+        var candidates=await ResolveCategoryCandidatesAsync(session.TenantId,session.StoreId,categoryText,cancellationToken).ConfigureAwait(false);
+        if(candidates.Count==0){RecordAudit(session.TenantId,session.StoreId,audit,"VoiceCommandCategoryNotFound","VoiceCommandSession",session.Id,null,new{command.RecognizedText,CategoryText=categoryText},now);await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);throw new TenantBusinessRuleException("Category not found. Add an authorized category/alias instead of creating one from voice text.");}
+        VoiceCategoryCandidate? selected=null;
+        if(command.SelectedCategoryId.HasValue)
+        {
+            selected=candidates.SingleOrDefault(x=>x.CategoryId==command.SelectedCategoryId.Value);if(selected is null)throw new TenantBusinessRuleException("Selected category is not one of the server-resolved candidates.");
+        }
+        else if(candidates.Count==1) selected=candidates[0];
+        if(selected is null)
+        {
+            RecordAudit(session.TenantId,session.StoreId,audit,"VoiceCommandCategoryAmbiguous","VoiceCommandSession",session.Id,null,new{command.RecognizedText,CategoryText=categoryText,Candidates=candidates.Select(x=>x.CategoryId).ToArray()},now);await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return new(MapVoiceSession(session),true,candidates,"Multiple categories matched. Select one of the server-resolved categories before any CRM write.");
+        }
+        try{session.Propose(command.RecognizedText,command.RecognitionConfidence,PreferenceType.Category,selected.CategoryId,selected.CategoryName,now);}catch(InvalidOperationException ex){throw new TenantBusinessRuleException(ex.Message);}
+        RecordAudit(session.TenantId,session.StoreId,audit,"VoiceCommandInterpreted","VoiceCommandSession",session.Id,null,new{command.RecognizedText,command.RecognitionConfidence,SelectedCategoryId=selected.CategoryId,selected.CategoryName,session.ConfirmationRequired,session.Status},now);
         if(session.Status==VoiceCommandSessionStatus.Confirmed)CreateConfirmedVoiceSignal(session,command.Reason,audit.ActorUserId,now);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);return MapVoiceSession(session);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);return new(MapVoiceSession(session),false,[selected],session.Status==VoiceCommandSessionStatus.PendingConfirmation?"Category resolved. CRM write requires confirmation.":"Category resolved and confirmed by store policy.");
     }
 
     public async Task<VoiceSessionView> ConfirmVoiceSessionAsync(long sessionId,TenantAuditContext audit,CancellationToken cancellationToken=default)
@@ -135,9 +170,47 @@ public sealed class PreferencesVoiceService(
     public async Task<IReadOnlyList<PreferenceAuditItem>> GetAuditHistoryAsync(long? customerId,long? storeId,int take=100,CancellationToken cancellationToken=default)
     {
         var tenantId=RequireTenantId();take=Math.Clamp(take,1,200);if(storeId.HasValue)await RequireAuthorizedStoreAsync(storeId.Value,cancellationToken).ConfigureAwait(false);if(customerId.HasValue)_=await RequireVisibleCustomerAsync(customerId.Value,cancellationToken).ConfigureAwait(false);
-        var query=db.AuditLogs.AsNoTracking().Where(x=>x.TenantId==tenantId&&(x.Action.StartsWith("CustomerPreference")||x.Action.StartsWith("HouseholdPreference")||x.Action.StartsWith("PreferenceWeight")||x.Action.StartsWith("VoiceCommand")||x.Action.StartsWith("StoreVoice")));
+        var query=db.AuditLogs.AsNoTracking().Where(x=>x.TenantId==tenantId&&(x.Action.StartsWith("CustomerPreference")||x.Action.StartsWith("HouseholdPreference")||x.Action.StartsWith("PreferenceWeight")||x.Action.StartsWith("VoiceCommand")||x.Action.StartsWith("StoreVoice")||x.Action.StartsWith("ProductCategoryAlias")));
         if(storeId.HasValue)query=query.Where(x=>x.StoreId==storeId.Value);if(customerId.HasValue){var id=customerId.Value.ToString(CultureInfo.InvariantCulture);query=query.Where(x=>x.EntityId==id||x.AfterJson!=null&&x.AfterJson.Contains($"\"CustomerId\":{customerId.Value}"));}
         return await query.OrderByDescending(x=>x.CreatedUtc).Take(take).Select(x=>new PreferenceAuditItem(x.Id,x.StoreId,x.UserId,x.Action,x.EntityType,x.EntityId,x.BeforeJson,x.AfterJson,x.CorrelationId,x.CreatedUtc)).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<VoiceCategoryCandidate>> ResolveCategoryCandidatesAsync(long tenantId,long storeId,string categoryText,CancellationToken cancellationToken)
+    {
+        var normalized=ProductCategoryAlias.Normalize(categoryText);
+        var categories=await db.ProductCategories.AsNoTracking().Where(x=>x.TenantId==tenantId&&x.IsActive&&(x.StoreId==null||x.StoreId==storeId)).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+        var aliases=await db.ProductCategoryAliases.AsNoTracking().Where(x=>x.TenantId==tenantId&&x.IsActive&&(x.StoreId==null||x.StoreId==storeId)).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+        var byId=categories.ToDictionary(x=>x.Id);
+        var matches=new Dictionary<long,VoiceCategoryCandidate>();
+        foreach(var category in categories)
+        {
+            var name=ProductCategoryAlias.Normalize(category.Name);var code=ProductCategoryAlias.Normalize(category.CategoryCode);
+            if(name==normalized||code==normalized)matches[category.Id]=new(category.Id,category.CategoryCode,category.Name,"Category");
+        }
+        foreach(var alias in aliases)
+            if(alias.NormalizedAliasText==normalized&&byId.TryGetValue(alias.ProductCategoryId,out var category))matches[category.Id]=new(category.Id,category.CategoryCode,category.Name,"Alias");
+        if(matches.Count==0)
+        {
+            foreach(var category in categories)
+            {
+                var name=ProductCategoryAlias.Normalize(category.Name);if(name.Contains(normalized,StringComparison.Ordinal)||normalized.Contains(name,StringComparison.Ordinal))matches[category.Id]=new(category.Id,category.CategoryCode,category.Name,"CategoryPartial");
+            }
+            foreach(var alias in aliases)
+                if((alias.NormalizedAliasText.Contains(normalized,StringComparison.Ordinal)||normalized.Contains(alias.NormalizedAliasText,StringComparison.Ordinal))&&byId.TryGetValue(alias.ProductCategoryId,out var category))matches[category.Id]=new(category.Id,category.CategoryCode,category.Name,"AliasPartial");
+        }
+        return matches.Values.OrderBy(x=>x.CategoryName).ToArray();
+    }
+
+    private async Task<ProductCategory> RequireCategoryAsync(long categoryId,long? storeId,CancellationToken cancellationToken)
+    {
+        var tenantId=RequireTenantId();var category=await db.ProductCategories.AsNoTracking().SingleOrDefaultAsync(x=>x.TenantId==tenantId&&x.Id==categoryId&&x.IsActive,cancellationToken).ConfigureAwait(false)??throw new TenantResourceNotFoundException("Category");
+        if(storeId.HasValue&&category.StoreId.HasValue&&category.StoreId.Value!=storeId.Value)throw new TenantResourceNotFoundException("Category");return category;
+    }
+
+    private static string ExtractCategoryText(string recognizedText,string matchedTrigger)
+    {
+        if(string.IsNullOrWhiteSpace(recognizedText))return string.Empty;var text=recognizedText.Trim();var trigger=matchedTrigger.Trim();
+        if(text.StartsWith(trigger,StringComparison.OrdinalIgnoreCase)){text=text[trigger.Length..].TrimStart(' ',':','-');}return text.Trim();
     }
 
     private async Task SyncPurchaseSignalsAsync(long customerId,long actorUserId,CancellationToken cancellationToken)
@@ -155,7 +228,7 @@ public sealed class PreferencesVoiceService(
 
     private void CreateConfirmedVoiceSignal(VoiceCommandSession session,string? reason,long actorUserId,DateTime now)
     {
-        if(session.ProposedPreferenceType is null)throw new TenantBusinessRuleException("Voice session has no preference proposal.");var duplicate=db.CustomerPreferenceSignals.Local.Any(x=>x.TenantId==session.TenantId&&x.CustomerId==session.CustomerId&&x.Source==PreferenceSignalSource.VoiceConfirmed&&x.Reason==$"VoiceSession:{session.Id}");if(duplicate)return;
+        if(session.ProposedPreferenceType is null)throw new TenantBusinessRuleException("Voice session has no preference proposal.");var duplicate=db.CustomerPreferenceSignals.Local.Any(x=>x.TenantId==session.TenantId&&x.CustomerId==session.CustomerId&&x.Source==PreferenceSignalSource.VoiceConfirmed&&x.Reason!=null&&x.Reason.StartsWith($"VoiceSession:{session.Id}",StringComparison.Ordinal));if(duplicate)return;
         db.CustomerPreferenceSignals.Add(CustomerPreferenceSignal.Create(session.TenantId,session.StoreId,session.CustomerId,session.ProposedPreferenceType.Value,session.ProposedReferenceId,session.ProposedValue,100m,PreferenceSignalSource.VoiceConfirmed,session.RecognitionConfidence,actorUserId,$"VoiceSession:{session.Id}{(string.IsNullOrWhiteSpace(reason)?string.Empty:$"; {reason}")}",now));
     }
 
@@ -197,6 +270,7 @@ public sealed class PreferencesVoiceService(
         var scores=await db.CustomerPreferenceScores.AsNoTracking().Where(x=>x.TenantId==customer.TenantId&&x.CustomerId==customer.Id).OrderByDescending(x=>x.Score).Select(x=>new PreferenceScoreView(x.Id,x.PreferenceType,x.ReferenceId,x.Value,x.Score,x.WeightVersionId,x.CalculatedUtc)).ToArrayAsync(cancellationToken).ConfigureAwait(false);return new(customer.Id,customer.CustomerCode,DisplayName(customer),signals,scores);
     }
 
+    private static ProductCategoryAliasView MapAlias(ProductCategoryAlias x)=>new(x.Id,x.StoreId,x.ProductCategoryId,x.AliasText,x.NormalizedAliasText,x.LanguageCode,x.IsActive,x.CreatedUtc);
     private static PreferenceScoreView MapScore(CustomerPreferenceScore x)=>new(x.Id,x.PreferenceType,x.ReferenceId,x.Value,x.Score,x.WeightVersionId,x.CalculatedUtc);
     private static PreferenceWeightView MapWeight(PreferenceWeightVersion x)=>new(x.Id,x.VersionCode,x.ManualStaffWeight,x.PurchaseWeight,x.CategoryInteractionWeight,x.VoiceConfirmedWeight,x.IsActive,x.CreatedUtc);
     private static VoiceSessionView MapVoiceSession(VoiceCommandSession x)=>new(x.Id,x.StoreId,x.CustomerId,x.MatchedTrigger,x.RecognizedText,x.RecognitionConfidence,x.ProposedPreferenceType,x.ProposedReferenceId,x.ProposedValue,x.ConfirmationRequired,x.Status,x.ExpiresUtc,x.ResolvedUtc);
