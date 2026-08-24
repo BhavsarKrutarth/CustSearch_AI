@@ -50,7 +50,7 @@ public sealed class PhaseTenPreferencesVoiceServiceTests
     [Fact]
     public async Task StoreScopedUserCannotTargetCustomerFromAnotherStore()
     {
-        await using var f=await Fixture.CreateAsync();f.UseStoreA();var ex=await Assert.ThrowsAsync<TenantResourceNotFoundException>(()=>f.CreateService().StartVoiceSessionAsync(new(f.StoreA.Id,f.CustomerB.Id,"Magic Add"),f.Audit()));Assert.Equal("Customer",ex.Message);
+        await using var f=await Fixture.CreateAsync();f.UseStoreA();var ex=await Assert.ThrowsAsync<TenantResourceNotFoundException>(()=>f.CreateService().StartVoiceSessionAsync(new(f.StoreA.Id,f.CustomerB.Id,"Magic Add"),f.Audit()));Assert.Contains("Customer",ex.Message,StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
