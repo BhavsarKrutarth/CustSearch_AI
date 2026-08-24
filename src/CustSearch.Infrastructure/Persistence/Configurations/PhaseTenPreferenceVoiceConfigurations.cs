@@ -39,3 +39,13 @@ internal sealed class VoiceCommandSessionConfiguration:IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<VoiceCommandSession> b){b.ToTable("VoiceCommandSessions","dbo");b.HasKey(x=>x.Id);b.Property(x=>x.Id).ValueGeneratedOnAdd();b.Property(x=>x.MatchedTrigger).HasMaxLength(100).IsRequired();b.Property(x=>x.RecognizedText).HasMaxLength(250);b.Property(x=>x.RecognitionConfidence).HasPrecision(6,2);b.Property(x=>x.ProposedValue).HasMaxLength(200);b.Property(x=>x.ExpiresUtc).HasPrecision(7);b.Property(x=>x.ResolvedUtc).HasPrecision(7);b.Property(x=>x.CreatedUtc).HasPrecision(7);b.Property(x=>x.UpdatedUtc).HasPrecision(7);b.HasIndex(x=>new{x.TenantId,x.StoreId,x.CustomerId,x.Status});b.HasIndex(x=>new{x.TenantId,x.StaffUserId,x.CreatedUtc});}
 }
+
+/// <summary>Maps store/tenant category aliases used by the server-side voice parser. Aliases only resolve to existing ProductCategories.</summary>
+internal sealed class ProductCategoryAliasConfiguration:IEntityTypeConfiguration<ProductCategoryAlias>
+{
+    public void Configure(EntityTypeBuilder<ProductCategoryAlias> b)
+    {
+        b.ToTable("ProductCategoryAliases","dbo");b.HasKey(x=>x.Id);b.Property(x=>x.Id).ValueGeneratedOnAdd();b.Property(x=>x.AliasText).HasMaxLength(150).IsRequired();b.Property(x=>x.NormalizedAliasText).HasMaxLength(150).IsRequired();b.Property(x=>x.LanguageCode).HasMaxLength(20).IsRequired();b.Property(x=>x.CreatedUtc).HasPrecision(7);b.Property(x=>x.UpdatedUtc).HasPrecision(7);
+        b.HasIndex(x=>new{x.TenantId,x.StoreId,x.NormalizedAliasText,x.ProductCategoryId}).IsUnique();b.HasIndex(x=>new{x.TenantId,x.ProductCategoryId,x.IsActive});
+    }
+}
