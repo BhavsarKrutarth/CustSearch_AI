@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, co
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AuthSessionService } from '../../core/auth/auth-session.service';
 import { PERMISSIONS } from '../../core/auth/permission-catalog';
+import { preferenceErrorMessage } from './preference-error';
 import { HouseholdPreferences, PreferenceType, PreferencesApiService } from './preferences-api.service';
 
 /** Phase 10 Household preference panel. Only active verified HouseholdMembers contribute to member/aggregate scores. */
@@ -15,5 +16,5 @@ export class HouseholdPreferencesPanel implements OnChanges{
  ngOnChanges(changes:SimpleChanges){if(changes['householdId']&&this.householdId>0)this.load();}
  protected addTag(){if(this.form.invalid)return;const v=this.form.getRawValue();this.saving.set(true);this.api.addHouseholdTag(this.householdId,{preferenceType:(v.preferenceType??5) as PreferenceType,referenceId:v.referenceId||null,value:(v.value??'').trim(),source:v.source??2,reason:v.reason?.trim()||null}).subscribe({next:x=>{this.data.set(x);this.saving.set(false);this.error.set('');},error:e=>this.fail(e)});}
  protected label(t:number){return['','Category','Product','Brand','Price range','Tag'][t]??'Preference';}
- private load(){if(!this.session.hasPermission(PERMISSIONS.preferencesView))return;this.api.household(this.householdId).subscribe({next:x=>this.data.set(x),error:e=>this.fail(e)});}private fail(e:any){this.saving.set(false);this.error.set(e?.error?.message??e?.message??'Household preference request failed.');}
+ private load(){if(!this.session.hasPermission(PERMISSIONS.preferencesView))return;this.api.household(this.householdId).subscribe({next:x=>this.data.set(x),error:e=>this.fail(e)});}private fail(e:unknown){this.saving.set(false);this.error.set(preferenceErrorMessage(e,'Household preference request failed.'));}
 }
