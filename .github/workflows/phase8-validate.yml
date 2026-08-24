@@ -8,19 +8,17 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 60
     env:
-      SA_PASSWORD: 'CustSearch_Phase8_2026!Sql'
+      SA_PASSWORD: 'CustSearch_Phase8_Regression_2026!'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
@@ -39,30 +37,30 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Prepare Phase 7 baseline and Phase 8 final canonical
+      # Phase 8 upgrade repeat-safety was proven when Phase 8 completed.
+      # This workflow is now a regression gate for later phases and must not
+      # assume AIMainBranch is still the pre-Phase-8 V1.6 baseline.
+      - name: Verify Phase 8 canonical baseline is present
         shell: bash
         run: |
-          git show origin/AIMainBranch:database/CustSearchAi.sql > /tmp/CustSearchAi.phase7-base.raw
           python3 - <<'PY'
           from pathlib import Path
-          phase8=Path('database/09_Upgrade/V1.7.0_Phase8_ProductsRetailBilling.sql')
-          raw=Path('/tmp/CustSearchAi.phase7-base.raw').read_bytes()
+          raw=Path('database/CustSearchAi.sql').read_bytes()
           enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
-          base=raw.decode(enc)
-          required=["VersionNumber=N'V1.6.0'","OBJECT_ID(N'dbo.Households',N'U') IS NULL","OBJECT_ID(N'dbo.CustomerVisits',N'U') IS NULL"]
-          missing=[x for x in required if x not in base]
-          if missing: raise SystemExit(f'Canonical Phase 7 baseline incomplete: {missing}')
-          if "VersionNumber=N'V1.7.0'" in base: raise SystemExit('AIMainBranch must remain the Phase 7 baseline until Phase 8 is merged.')
-          p8=phase8.read_text(encoding='utf-8-sig')
-          branch_raw=Path('database/CustSearchAi.sql').read_bytes()
-          branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
-          branch=branch_raw.decode(branch_enc)
-          if "VersionNumber=N'V1.7.0'" in branch:
-              final=branch
-          else:
-              final=base.rstrip()+"\n\n-- ============================================================\n-- PHASE 8 - PRODUCTS & RETAIL BILLING\n-- VERSION: V1.7.0\n-- ============================================================\n"+p8.strip()+"\n"
-          Path('/tmp/CustSearchAi.pre-phase8.sql').write_text(base,encoding='utf-8')
-          Path('/tmp/CustSearchAi.phase8-final.sql').write_text(final,encoding='utf-8')
+          text=raw.decode(enc)
+          required=[
+            "VersionNumber=N'V1.7.0'",
+            "dbo.RetailInvoices",
+            "dbo.RetailInvoiceItems",
+            "dbo.RetailInvoicePayments",
+            "dbo.RetailInvoiceItemAttributions",
+            "dbo.RetailInvoice_Search",
+            "dbo.CustomerPurchaseHistory_Get",
+          ]
+          missing=[x for x in required if x not in text]
+          if missing:
+              raise SystemExit(f'Phase 8 canonical regression baseline incomplete: {missing}')
+          Path('/tmp/CustSearchAi.current.sql').write_text(text,encoding='utf-8')
           PY
 
       - name: Restore .NET
@@ -71,22 +69,18 @@ jobs:
       - name: Build .NET Release
         run: dotnet build CustSearch_AI.sln --configuration Release --no-restore
 
-      - name: Test .NET through Phase 8
-        run: dotnet test CustSearch_AI.sln --configuration Release --no-build --logger "trx;LogFileName=phase8-tests.trx"
+      - name: Test .NET regression
+        run: dotnet test CustSearch_AI.sln --configuration Release --no-build
 
       - name: Install Angular dependencies reproducibly
         working-directory: src/CustSearch.Admin
         run: npm ci --no-audit --no-fund
 
-      - name: Angular version
-        working-directory: src/CustSearch.Admin
-        run: npx ng version
-
       - name: Lint Angular
         working-directory: src/CustSearch.Admin
         run: npm run lint
 
-      - name: Test Angular through Phase 8
+      - name: Test Angular regression
         working-directory: src/CustSearch.Admin
         run: npm run test:ci
 
@@ -96,13 +90,12 @@ jobs:
 
       - name: Prepare Playwright
         working-directory: tests/CustSearch.Admin.E2E
-        shell: bash
         run: |
           if [ ! -f package-lock.json ]; then npm install --package-lock-only --ignore-scripts --no-audit --no-fund; fi
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
 
-      - name: Run full Playwright regression through Phase 8
+      - name: Run full Playwright regression
         working-directory: tests/CustSearch.Admin.E2E
         run: npm test
 
@@ -118,58 +111,22 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
           upgrade=Path('database/09_Upgrade/V1.7.0_Phase8_ProductsRetailBilling.sql').read_text(encoding='utf-8-sig')
           runner=Path('database/run-phase8.sql').read_text(encoding='utf-8-sig')
-          required=['dbo.Products','dbo.ProductStoreAvailabilities','dbo.RetailInvoices','dbo.RetailInvoiceItems','dbo.RetailInvoicePayments','dbo.RetailInvoiceParticipants','dbo.RetailInvoiceItemAttributions','dbo.Product_Search','dbo.RetailInvoice_Search','dbo.RetailInvoice_GetDetail','dbo.CustomerPurchaseHistory_Get','dbo.HouseholdPurchaseSummary_Get','dbo.RetailSalesSummary_Get','dbo.RetailSalesByProduct_Get','dbo.RetailSalesByCategory_Get','dbo.RetailPaymentSummary_Get',"VersionNumber=N'V1.7.0'",'@AllowedStoreIdsCsv','UX_RetailParticipants_OnePayer']
-          missing=[x for x in required if x not in upgrade]
-          if missing: raise SystemExit(f'Missing Phase 8 SQL elements: {missing}')
-          def executable_sql(text: str) -> str:
-              text=re.sub(r'/\*.*?\*/','',text,flags=re.S)
-              return re.sub(r'--[^\r\n]*','',text)
-          lower=executable_sql(runner).lower()
-          if ':r ' in lower or 'powershell' in lower: raise SystemExit('run-phase8.sql must be standalone T-SQL.')
-          if "VersionNumber=N'V1.6.0'" not in runner or "VersionNumber=N'V1.7.0'" not in runner: raise SystemExit('Runner prerequisite/version validation missing.')
+          required=['dbo.Products','dbo.RetailInvoices','dbo.RetailInvoiceItems','dbo.RetailInvoicePayments','dbo.RetailInvoiceParticipants','dbo.RetailInvoiceItemAttributions','dbo.RetailInvoice_Search','dbo.RetailInvoice_GetDetail',"VersionNumber=N'V1.7.0'",'@AllowedStoreIdsCsv']
+          missing=[x for x in required if x not in upgrade or x not in runner]
+          if missing: raise SystemExit(f'Phase 8 SQL regression elements missing: {missing}')
           PY
 
-      - name: Validate V1.7.0 upgrade and standalone runner twice on SQL Server 2022
+      - name: Fresh-install current canonical on SQL Server 2022
         shell: bash
         run: |
-          docker run -d --name phase8-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" -p 14336:1433 mcr.microsoft.com/mssql/server:2022-latest
+          docker run -d --name phase8-regression-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" mcr.microsoft.com/mssql/server:2022-latest
           for i in {1..60}; do
-            if docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then break; fi
-            if [ "$i" = 60 ]; then docker logs phase8-sql; exit 1; fi
+            if docker exec phase8-regression-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then docker logs phase8-regression-sql; exit 1; fi
             sleep 2
           done
-          docker cp /tmp/CustSearchAi.pre-phase8.sql phase8-sql:/tmp/pre.sql
-          docker cp database/09_Upgrade/V1.7.0_Phase8_ProductsRetailBilling.sql phase8-sql:/tmp/phase8.sql
-          docker cp database/run-phase8.sql phase8-sql:/tmp/run-phase8.sql
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/pre.sql
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase8.sql
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase8.sql
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0')<>1 THROW 51701,'V1.7.0 duplicate/missing',1; IF OBJECT_ID(N'dbo.Products',N'U') IS NULL OR OBJECT_ID(N'dbo.RetailInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.RetailInvoiceItemAttributions',N'U') IS NULL THROW 51702,'Phase8 tables missing',1; IF OBJECT_ID(N'dbo.RetailInvoice_Search',N'P') IS NULL OR OBJECT_DEFINITION(OBJECT_ID(N'dbo.RetailInvoice_Search')) NOT LIKE '%@AllowedStoreIdsCsv%' THROW 51703,'Invoice search store predicate missing',1;"
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/pre.sql
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase8.sql
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase8.sql
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0')<>1 THROW 51704,'Runner V1.7.0 duplicate/missing',1;"
-
-      - name: Validate final canonical fresh install through V1.7.0
-        shell: bash
-        run: |
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [CustSearch_AI];"
-          docker cp /tmp/CustSearchAi.phase8-final.sql phase8-sql:/tmp/final.sql
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
-          docker exec phase8-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.4.0')<>1 THROW 51710,'Canonical V1.4.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.5.0')<>1 THROW 51711,'Canonical V1.5.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.6.0')<>1 THROW 51712,'Canonical V1.6.0 invalid',1; IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0')<>1 THROW 51713,'Canonical V1.7.0 invalid',1; IF OBJECT_ID(N'dbo.RetailInvoice_GetDetail',N'P') IS NULL OR OBJECT_ID(N'dbo.RetailInvoiceItemAttributions',N'U') IS NULL THROW 51714,'Canonical Phase8 objects missing',1;"
-
-      - name: Persist validated Phase 8 canonical SQL
-        if: github.event_name == 'push'
-        shell: bash
-        run: |
-          cp /tmp/CustSearchAi.phase8-final.sql database/CustSearchAi.sql
-          if git diff --quiet -- database/CustSearchAi.sql; then echo "Phase 8 canonical already persisted."; exit 0; fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add database/CustSearchAi.sql
-          git commit -m "phase8: persist V1.7 canonical SQL"
-          git push origin HEAD:phase8-products-retail-billing
+          docker cp /tmp/CustSearchAi.current.sql phase8-regression-sql:/tmp/current.sql
+          docker exec phase8-regression-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/current.sql
+          docker exec phase8-regression-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0')<>1 THROW 51720,'Canonical V1.7.0 invalid',1; IF OBJECT_ID(N'dbo.RetailInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.RetailInvoiceItemAttributions',N'U') IS NULL OR OBJECT_ID(N'dbo.RetailInvoice_Search',N'P') IS NULL THROW 51721,'Phase 8 canonical objects missing',1;"

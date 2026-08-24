@@ -7,7 +7,7 @@ namespace CustSearch.Infrastructure.TenantOperations;
 
 /// <summary>
 /// Phase 5 defense-in-depth wrapper. It preserves the existing operational implementation while
-/// enforcing store visibility, tenant-wide role boundaries and user quota checks on reactivation.
+/// enforcing store visibility, tenant-wide role boundaries and effective subscription quotas.
 /// </summary>
 public sealed class TenantOperationsSecurityDecorator(
     TenantOperationsService inner,
@@ -44,7 +44,7 @@ public sealed class TenantOperationsSecurityDecorator(
     public async Task<TenantUserDetail> UpdateUserAsync(long userId, UpdateTenantUserCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default)
     {
         var existing = await GetUserAsync(userId, cancellationToken).ConfigureAwait(false);
-        await EnsureReactivationWithinQuotaAsync(existing.IsActive, command.IsActive, cancellationToken).ConfigureAwait(false);
+        await EnsureUserReactivationWithinQuotaAsync(existing.IsActive, command.IsActive, cancellationToken).ConfigureAwait(false);
         return await inner.UpdateUserAsync(userId, command, audit, cancellationToken).ConfigureAwait(false);
     }
 
@@ -86,6 +86,7 @@ public sealed class TenantOperationsSecurityDecorator(
     {
         EnsureRoleAssignmentAllowed(command.Roles.Count == 0 ? ["SalesStaff"] : command.Roles);
         EnsureRequestedStoresAllowed(command.StoreIds);
+        await EnsureNewStaffWithinQuotaAsync(cancellationToken).ConfigureAwait(false);
         return await inner.CreateStaffAsync(command, audit, cancellationToken).ConfigureAwait(false);
     }
 
@@ -97,7 +98,8 @@ public sealed class TenantOperationsSecurityDecorator(
             .Select(x => x.IsActive)
             .SingleAsync(cancellationToken)
             .ConfigureAwait(false);
-        await EnsureReactivationWithinQuotaAsync(userIsActive, command.IsActive, cancellationToken).ConfigureAwait(false);
+        await EnsureUserReactivationWithinQuotaAsync(userIsActive, command.IsActive, cancellationToken).ConfigureAwait(false);
+        await EnsureStaffReactivationWithinQuotaAsync(existing.IsActive, command.IsActive, cancellationToken).ConfigureAwait(false);
         EnsureRequestedStoresAllowed(command.StoreIds);
         return await inner.UpdateStaffAsync(staffId, command, audit, cancellationToken).ConfigureAwait(false);
     }
@@ -199,7 +201,22 @@ public sealed class TenantOperationsSecurityDecorator(
         EnsureStoreAccess(storeId.Value);
     }
 
-    private async Task EnsureReactivationWithinQuotaAsync(bool isCurrentlyActive, bool requestedActive, CancellationToken cancellationToken)
+    private async Task EnsureNewStaffWithinQuotaAsync(CancellationToken cancellationToken)
+    {
+        var tenantId = RequireTenantId();
+        var maxStaff = await db.Tenants.AsNoTracking()
+            .Where(x => x.Id == tenantId)
+            .Select(x => x.MaxStaff)
+            .SingleAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var activeStaff = await db.StaffProfiles.AsNoTracking()
+            .CountAsync(x => x.TenantId == tenantId && x.IsActive, cancellationToken)
+            .ConfigureAwait(false);
+        if (activeStaff >= maxStaff)
+            throw new TenantBusinessRuleException($"Tenant staff quota ({maxStaff}) has been reached.");
+    }
+
+    private async Task EnsureUserReactivationWithinQuotaAsync(bool isCurrentlyActive, bool requestedActive, CancellationToken cancellationToken)
     {
         if (isCurrentlyActive || !requestedActive) return;
         var tenantId = RequireTenantId();
@@ -207,5 +224,15 @@ public sealed class TenantOperationsSecurityDecorator(
         var activeUsers = await db.UserAccounts.AsNoTracking().CountAsync(x => x.TenantId == tenantId && x.Scope == CustSearch.Domain.Enums.UserScope.Tenant && x.IsActive, cancellationToken).ConfigureAwait(false);
         if (activeUsers >= maxUsers)
             throw new TenantBusinessRuleException($"Tenant user quota ({maxUsers}) has been reached; the account cannot be reactivated.");
+    }
+
+    private async Task EnsureStaffReactivationWithinQuotaAsync(bool isCurrentlyActive, bool requestedActive, CancellationToken cancellationToken)
+    {
+        if (isCurrentlyActive || !requestedActive) return;
+        var tenantId = RequireTenantId();
+        var maxStaff = await db.Tenants.AsNoTracking().Where(x => x.Id == tenantId).Select(x => x.MaxStaff).SingleAsync(cancellationToken).ConfigureAwait(false);
+        var activeStaff = await db.StaffProfiles.AsNoTracking().CountAsync(x => x.TenantId == tenantId && x.IsActive, cancellationToken).ConfigureAwait(false);
+        if (activeStaff >= maxStaff)
+            throw new TenantBusinessRuleException($"Tenant staff quota ({maxStaff}) has been reached; the staff profile cannot be reactivated.");
     }
 }

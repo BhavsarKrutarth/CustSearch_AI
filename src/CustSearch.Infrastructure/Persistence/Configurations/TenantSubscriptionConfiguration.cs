@@ -4,30 +4,19 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace CustSearch.Infrastructure.Persistence.Configurations;
 
-/// <summary>
-/// Maps tenant plan history and guarantees valid billing and date ranges.
-/// </summary>
-internal sealed class TenantSubscriptionConfiguration : IEntityTypeConfiguration<TenantSubscription>
+/// <summary>Maps historical tenant plan assignments and Phase 9 server-authoritative billing periods.</summary>
+internal sealed class TenantSubscriptionConfiguration:IEntityTypeConfiguration<TenantSubscription>
 {
     public void Configure(EntityTypeBuilder<TenantSubscription> builder)
     {
-        builder.ToTable("TenantSubscriptions", "dbo", table =>
+        builder.ToTable("TenantSubscriptions","dbo",table=>
         {
-            table.HasCheckConstraint("CK_TenantSubscriptions_BillingCycle", "[BillingCycle] IN (1, 2)");
-            table.HasCheckConstraint("CK_TenantSubscriptions_Status", "[Status] BETWEEN 1 AND 6");
-            table.HasCheckConstraint("CK_TenantSubscriptions_Period", "[EndsUtc] IS NULL OR [EndsUtc] > [StartsUtc]");
+            table.HasCheckConstraint("CK_TenantSubscriptions_BillingCycle","[BillingCycle] IN (1,2)");
+            table.HasCheckConstraint("CK_TenantSubscriptions_Status","[Status] BETWEEN 1 AND 6");
+            table.HasCheckConstraint("CK_TenantSubscriptions_Period","[EndsUtc] IS NULL OR [EndsUtc] > [StartsUtc]");
+            table.HasCheckConstraint("CK_TenantSubscriptions_CurrentPeriod","[CurrentPeriodEndUtc] IS NULL OR [CurrentPeriodStartUtc] IS NOT NULL AND [CurrentPeriodEndUtc] > [CurrentPeriodStartUtc]");
         });
-        builder.HasKey(subscription => subscription.Id);
-        builder.Property(subscription => subscription.Id).ValueGeneratedOnAdd();
-        builder.Property(subscription => subscription.BillingCycle).HasConversion<byte>().IsRequired();
-        builder.Property(subscription => subscription.Status).HasConversion<byte>().IsRequired();
-        builder.Property(subscription => subscription.StartsUtc).HasPrecision(7).IsRequired();
-        builder.Property(subscription => subscription.EndsUtc).HasPrecision(7);
-        builder.Property(subscription => subscription.CreatedUtc).HasPrecision(7).IsRequired();
-        builder.Property(subscription => subscription.UpdatedUtc).HasPrecision(7).IsRequired().IsConcurrencyToken();
-        builder.Property(subscription => subscription.RowVersion).HasMaxLength(16).IsFixedLength().IsRequired().IsConcurrencyToken();
-        builder.HasOne(subscription => subscription.Tenant).WithMany().HasForeignKey(subscription => subscription.TenantId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(subscription => subscription.SubscriptionPlan).WithMany().HasForeignKey(subscription => subscription.SubscriptionPlanId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasIndex(subscription => new { subscription.TenantId, subscription.Status, subscription.StartsUtc });
+        builder.HasKey(x=>x.Id);builder.Property(x=>x.Id).ValueGeneratedOnAdd();builder.Property(x=>x.BillingCycle).HasConversion<byte>().IsRequired();builder.Property(x=>x.Status).HasConversion<byte>().IsRequired();builder.Property(x=>x.StartsUtc).HasPrecision(7).IsRequired();builder.Property(x=>x.EndsUtc).HasPrecision(7);builder.Property(x=>x.TrialEndUtc).HasPrecision(7);builder.Property(x=>x.CurrentPeriodStartUtc).HasPrecision(7);builder.Property(x=>x.CurrentPeriodEndUtc).HasPrecision(7);builder.Property(x=>x.CancelledUtc).HasPrecision(7);builder.Property(x=>x.CreatedUtc).HasPrecision(7).IsRequired();builder.Property(x=>x.UpdatedUtc).HasPrecision(7).IsRequired().IsConcurrencyToken();builder.Property(x=>x.RowVersion).HasMaxLength(16).IsFixedLength().IsRequired().IsConcurrencyToken();
+        builder.HasOne(x=>x.Tenant).WithMany().HasForeignKey(x=>x.TenantId).OnDelete(DeleteBehavior.Restrict);builder.HasOne(x=>x.SubscriptionPlan).WithMany().HasForeignKey(x=>x.SubscriptionPlanId).OnDelete(DeleteBehavior.Restrict);builder.HasIndex(x=>new{x.TenantId,x.Status,x.StartsUtc});
     }
 }

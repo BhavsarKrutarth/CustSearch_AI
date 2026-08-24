@@ -5,6 +5,8 @@ import { PERMISSIONS } from './core/auth/permission-catalog';
 const platformRoles=['PlatformSuperAdmin','PlatformOperationsAdmin','PlatformBillingAdmin','PlatformSupportAdmin','PlatformAuditor'];
 const tenantRoles=['TenantAdmin','TenantOwner','ShopOwner','StoreAdmin','StoreManager','Manager','SalesStaff','CRMStaff','BillingStaff','CameraOperator','IntegrationAdmin','Auditor'];
 const phase5Page=()=>import('./features/customer-admin/phase-five-management-page').then(m=>m.PhaseFiveManagementPage);
+const platformBillingPage=()=>import('./features/platform-billing/platform-billing-page').then(m=>m.PlatformBillingPage);
+const tenantBillingPage=()=>import('./features/platform-billing/tenant-billing-page').then(m=>m.TenantBillingPage);
 
 export const routes:Routes=[
   {path:'login',title:'Sign in | CustSearch AI',loadComponent:()=>import('./features/auth/login-page').then(m=>m.LoginPage)},
@@ -20,7 +22,6 @@ export const routes:Routes=[
   {path:'customer-admin/categories',pathMatch:'full',redirectTo:'customer-admin/store-categories'},
   {path:'customer-admin/voice-commands',title:'Voice commands | CustSearch AI',data:{mode:'voice',title:'Dynamic voice settings'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.voiceCommandsView])],loadComponent:phase5Page},
   {path:'customer-admin/voice-settings',pathMatch:'full',redirectTo:'customer-admin/voice-commands'},
-
   {path:'customer-admin/customers',title:'Customers | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.customersView])],loadComponent:()=>import('./features/customers/customer-list-page').then(m=>m.CustomerListPage)},
   {path:'customer-admin/customers/:id',title:'Customer profile | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.customersView])],loadComponent:()=>import('./features/customers/customer-detail-page').then(m=>m.CustomerDetailPage)},
   {path:'customer-admin/visitors',title:'Anonymous visitors | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.visitorsView])],loadComponent:()=>import('./features/visitors/visitor-list-page').then(m=>m.VisitorListPage)},
@@ -29,12 +30,17 @@ export const routes:Routes=[
   {path:'customer-admin/visits',title:'Customer visits | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.visitsView])],loadComponent:()=>import('./features/visits/visit-list-page').then(m=>m.VisitListPage)},
   {path:'customer-admin/visit-parties',title:'Visit Party / Co-Visit | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.visitPartiesView])],loadComponent:()=>import('./features/visits/visit-party-list-page').then(m=>m.VisitPartyListPage)},
 
-  // Phase 8 product/retail-billing routes. Backend remains authoritative for tenant/store scope and financial rules.
+  // Phase 8 Retail Billing routes — shop-customer purchases.
   {path:'customer-admin/products',title:'Products | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.productsView])],loadComponent:()=>import('./features/retail/product-list-page').then(m=>m.ProductListPage)},
   {path:'customer-admin/retail/invoices',title:'Retail invoices | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.retailInvoicesView])],loadComponent:()=>import('./features/retail/invoice-list-page').then(m=>m.InvoiceListPage)},
   {path:'customer-admin/retail/invoices/new',title:'Create retail invoice | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.retailInvoicesCreate])],loadComponent:()=>import('./features/retail/invoice-editor-page').then(m=>m.InvoiceEditorPage)},
   {path:'customer-admin/retail/invoices/:id',title:'Retail invoice | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.retailInvoicesView])],loadComponent:()=>import('./features/retail/invoice-detail-page').then(m=>m.InvoiceDetailPage)},
   {path:'customer-admin/retail/reports',title:'Retail reports | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.retailReportsView])],loadComponent:()=>import('./features/retail/retail-reports-page').then(m=>m.RetailReportsPage)},
+
+  // Phase 9 Platform Billing tenant views — CustSearch subscription billing only.
+  {path:'customer-admin/billing',title:'CustSearch billing | CustSearch AI',data:{mode:'summary'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantPlatformBillingSubscriptionsView])],loadComponent:tenantBillingPage},
+  {path:'customer-admin/billing/subscription',title:'Subscription | CustSearch AI',data:{mode:'subscription'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantPlatformBillingSubscriptionsView])],loadComponent:tenantBillingPage},
+  {path:'customer-admin/billing/invoices',title:'Platform invoice history | CustSearch AI',data:{mode:'invoices'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantPlatformBillingInvoicesView])],loadComponent:tenantBillingPage},
 
   {path:'platform-admin',redirectTo:'admin/dashboard',pathMatch:'full'},
   {path:'admin/dashboard',title:'Platform Admin | CustSearch AI',canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.tenantsOperationalSummary])],loadComponent:()=>import('./features/platform-admin/platform-dashboard').then(m=>m.PlatformDashboard)},
@@ -45,5 +51,11 @@ export const routes:Routes=[
     {path:':tenantId',title:'Tenant details | CustSearch AI',loadComponent:()=>import('./features/platform-tenants/tenant-detail-page').then(m=>m.TenantDetailPage)},
   ]},
   {path:'admin/subscription-plans',title:'Subscription plans | CustSearch AI',canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.subscriptionPlansView])],loadComponent:()=>import('./features/platform-tenants/subscription-plans-page').then(m=>m.SubscriptionPlansPage)},
+
+  // Exact Phase 9 platform-admin billing routes requested by the plan.
+  {path:'platform-admin/billing/plans',title:'Platform billing plans | CustSearch AI',data:{mode:'plans'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformBillingPlansView])],loadComponent:platformBillingPage},
+  {path:'platform-admin/billing/subscriptions',title:'Tenant subscriptions | CustSearch AI',data:{mode:'subscriptions'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformBillingSubscriptionsView])],loadComponent:platformBillingPage},
+  {path:'platform-admin/billing/invoices',title:'Platform invoices | CustSearch AI',data:{mode:'invoices'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformBillingInvoicesView])],loadComponent:platformBillingPage},
+  {path:'platform-admin/billing/payments',title:'Platform payments | CustSearch AI',data:{mode:'payments'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformBillingPaymentsView])],loadComponent:platformBillingPage},
   {path:'**',redirectTo:'login'},
 ];
