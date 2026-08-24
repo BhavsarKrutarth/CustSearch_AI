@@ -16,6 +16,7 @@ export const ADMIN_NAVIGATION:Record<'customer'|'platform',readonly AdminNavigat
     {label:'Retail invoices',route:'/customer-admin/retail/invoices',permission:PERMISSIONS.retailInvoicesView},
     {label:'Retail reports',route:'/customer-admin/retail/reports',permission:PERMISSIONS.retailReportsView},
     {label:'Alerts',route:'/customer-admin/alerts',permission:PERMISSIONS.alertsView},
+    {label:'Integrations',route:'/customer-admin/integrations',permission:PERMISSIONS.integrationsView},
     {label:'Monitoring',route:null,permission:PERMISSIONS.camerasView},
   ],
   platform:[

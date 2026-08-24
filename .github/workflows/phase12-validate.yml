@@ -1,0 +1,201 @@
+name: Phase 12 Validate
+
+on:
+  push:
+    branches: [phase12-integrations]
+  pull_request:
+    branches: [AIMainBranch]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    env:
+      SA_PASSWORD: 'CustSearch_Phase12_2026!Sql'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.424
+
+      - name: Setup Node for pinned Angular 21
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: src/CustSearch.Admin/package-lock.json
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Prepare validated Phase 11 baseline and prospective Phase 12 canonical
+        shell: bash
+        run: |
+          git show origin/AIMainBranch:database/CustSearchAi.sql > /tmp/CustSearchAi.phase11-base.raw
+          python3 - <<'PY'
+          from pathlib import Path
+          base_raw=Path('/tmp/CustSearchAi.phase11-base.raw').read_bytes()
+          enc='utf-16' if base_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if base_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          base=base_raw.decode(enc)
+          if "VersionNumber=N'V1.10.0'" not in base:
+              raise SystemExit('AIMainBranch must contain validated Phase 11 V1.10.0 before Phase 12.')
+          if "VersionNumber=N'V1.11.0'" in base:
+              raise SystemExit('AIMainBranch unexpectedly already contains Phase 12 V1.11.0.')
+          upgrade=Path('database/09_Upgrade/V1.11.0_Phase12_Integrations.sql').read_text(encoding='utf-8-sig')
+          branch_raw=Path('database/CustSearchAi.sql').read_bytes()
+          branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          branch=branch_raw.decode(branch_enc)
+          final=branch if "VersionNumber=N'V1.11.0'" in branch else base.rstrip()+"\n\n-- ============================================================\n-- PHASE 12 - SECURE INTEGRATIONS\n-- VERSION: V1.11.0\n-- ============================================================\n"+upgrade.strip()+"\n"
+          Path('/tmp/CustSearchAi.phase11-base.sql').write_text(base,encoding='utf-8')
+          Path('/tmp/CustSearchAi.phase12-final.sql').write_text(final,encoding='utf-8')
+          PY
+
+      - name: Restore .NET
+        run: dotnet restore CustSearch_AI.sln
+      - name: Build .NET Release
+        run: dotnet build CustSearch_AI.sln --configuration Release --no-restore
+      - name: Test .NET through Phase 12
+        run: dotnet test CustSearch_AI.sln --configuration Release --no-build --logger "trx;LogFileName=phase12-tests.trx"
+
+      - name: Install Angular dependencies reproducibly
+        working-directory: src/CustSearch.Admin
+        run: npm ci --no-audit --no-fund
+      - name: Angular version
+        working-directory: src/CustSearch.Admin
+        run: npx ng version
+      - name: Lint Angular
+        working-directory: src/CustSearch.Admin
+        run: npm run lint
+      - name: Test Angular through Phase 12
+        working-directory: src/CustSearch.Admin
+        run: npm run test:ci
+      - name: Build Angular production
+        working-directory: src/CustSearch.Admin
+        run: npm run build:production
+
+      - name: Prepare Playwright
+        working-directory: tests/CustSearch.Admin.E2E
+        shell: bash
+        run: |
+          if [ ! -f package-lock.json ]; then npm install --package-lock-only --ignore-scripts --no-audit --no-fund; fi
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Run full Playwright regression through Phase 12
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm test
+
+      - name: Validate Python baseline
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check -r src/CustSearch.AI/requirements-dev.txt
+          ruff check src/CustSearch.AI tests/CustSearch.AI.Tests
+          PYTHONPATH=src/CustSearch.AI python -m pytest -q tests/CustSearch.AI.Tests
+
+      - name: Validate Phase 12 security and SQL structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          upgrade=Path('database/09_Upgrade/V1.11.0_Phase12_Integrations.sql').read_text(encoding='utf-8-sig')
+          runner=Path('database/run-phase12.sql').read_text(encoding='utf-8-sig')
+          verifier=Path('database/verify-phase12.sql').read_text(encoding='utf-8-sig')
+          required=[
+              'dbo.IntegrationConfigurations','dbo.IntegrationInboundEvents','dbo.IntegrationOutbox',
+              'dbo.IntegrationDeliveryLogs','UX_IntegrationInboundEvents_Tenant_Config_Event',
+              'UX_IntegrationInboundEvents_Tenant_Config_Idempotency','UX_IntegrationOutbox_Tenant_Idempotency',
+              'dbo.IntegrationOutbox_Claim','dbo.IntegrationOutbox_ManualRetry','dbo.IntegrationDeliveryLog_Search',
+              'UPDLOCK','READPAST',"VersionNumber=N'V1.11.0'"
+          ]
+          missing=[x for x in required if x not in upgrade or x not in runner]
+          if missing:
+              raise SystemExit(f'Missing Phase 12 SQL elements: {missing}')
+          def executable(text):
+              return re.sub(r'--[^\r\n]*','',re.sub(r'/\*.*?\*/','',text,flags=re.S)).lower()
+          for name,text in [('runner',runner),('verifier',verifier)]:
+              low=executable(text)
+              if ':r ' in low or 'powershell' in low:
+                  raise SystemExit(f'{name} must remain standalone T-SQL.')
+          inbound=Path('src/CustSearch.Infrastructure/Integrations/InboundIntegrationService.cs').read_text(encoding='utf-8-sig')
+          outbound=Path('src/CustSearch.Integrations/HttpIntegrationTransport.cs').read_text(encoding='utf-8-sig')
+          controller=Path('src/CustSearch.API/Controllers/IntegrationSettingsController.cs').read_text(encoding='utf-8-sig')
+          inbound_controller=Path('src/CustSearch.API/Controllers/InboundIntegrationsController.cs').read_text(encoding='utf-8-sig')
+          contract=Path('src/CustSearch.Application/Integrations/IIntegrationServices.cs').read_text(encoding='utf-8-sig')
+          angular=Path('src/CustSearch.Admin/src/app/features/integrations/integrations-api.service.ts').read_text(encoding='utf-8-sig')
+          delivery_entity=Path('src/CustSearch.Domain/Entities/PhaseTwelveIntegrationEntities.cs').read_text(encoding='utf-8-sig')
+          hmac_terms=['HMACSHA256','FixedTimeEquals','AllowedClockSkewSeconds','ProviderEventId','IdempotencyKey','request.TenantId','request.Body.Span']
+          if any(x not in inbound for x in hmac_terms):
+              raise SystemExit('Exact-body signed tenant/timestamp/event/idempotency HMAC validation is incomplete.')
+          if 'ResolveAsync' not in inbound or 'PreviousSigningSecretValidUntilUtc' not in inbound:
+              raise SystemExit('Runtime secret resolution or rotation grace is missing.')
+          if 'JsonUnmappedMemberHandling.Disallow' not in controller or 'RejectClientTenantId' not in controller:
+              raise SystemExit('Integration settings DTO TenantId injection rejection is missing.')
+          if 'RequestSizeLimit' not in inbound_controller or 'EnableRateLimiting' not in inbound_controller:
+              raise SystemExit('Inbound body/rate limits are missing.')
+          public_view=contract.split('public sealed record IntegrationConfigurationView',1)[1].split(';',1)[0]
+          if 'string?CredentialReference,' in public_view or 'string?WebhookSigningSecretReference,' in public_view:
+              raise SystemExit('Configuration response exposes a full credential reference.')
+          angular_executable=re.sub(r'//[^\r\n]*','',re.sub(r'/\*.*?\*/','',angular,flags=re.S))
+          if re.search(r'\btenantId\b',angular_executable,re.I):
+              raise SystemExit('Angular integration requests must not accept browser TenantId.')
+          if 'IsPublicDestinationAsync' not in outbound or 'IsPublicAddress' not in outbound or 'UriSchemeHttps' not in outbound:
+              raise SystemExit('Outbound HTTPS/SSRF destination validation is missing.')
+          log_section=delivery_entity.split('public sealed class IntegrationDeliveryLog',1)[1]
+          if re.search(r'Payload|Secret|Credential|RequestBody|ResponseBody',log_section,re.I):
+              raise SystemExit('Integration delivery logs contain sensitive/full payload fields.')
+          PY
+
+      - name: Start SQL Server 2022
+        shell: bash
+        run: |
+          docker run -d --name phase12-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" -p 14342:1433 mcr.microsoft.com/mssql/server:2022-latest
+          for i in {1..60}; do if docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then break; fi;if [ "$i" = 60 ]; then docker logs phase12-sql;exit 1;fi;sleep 2;done
+
+      - name: Validate V1.11.0 versioned upgrade twice on SQL Server 2022
+        shell: bash
+        run: |
+          docker cp /tmp/CustSearchAi.phase11-base.sql phase12-sql:/tmp/base.sql
+          docker cp database/09_Upgrade/V1.11.0_Phase12_Integrations.sql phase12-sql:/tmp/phase12.sql
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase12.sql
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase12.sql
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.11.0')<>1 THROW 54220,'V1.11.0 duplicate/missing',1;IF OBJECT_ID(N'dbo.IntegrationConfigurations',N'U') IS NULL OR OBJECT_ID(N'dbo.IntegrationInboundEvents',N'U') IS NULL OR OBJECT_ID(N'dbo.IntegrationOutbox',N'U') IS NULL OR OBJECT_ID(N'dbo.IntegrationDeliveryLogs',N'U') IS NULL THROW 54221,'Phase12 tables missing',1;IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationInboundEvents') AND name=N'UX_IntegrationInboundEvents_Tenant_Config_Event' AND is_unique=1) THROW 54222,'Inbound replay index missing',1;"
+
+      - name: Validate standalone Phase 12 installer twice and verifier
+        shell: bash
+        run: |
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;DROP DATABASE [CustSearch_AI];"
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
+          docker cp database/run-phase12.sql phase12-sql:/tmp/run-phase12.sql
+          docker cp database/verify-phase12.sql phase12-sql:/tmp/verify-phase12.sql
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase12.sql
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run-phase12.sql
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/verify-phase12.sql
+
+      - name: Validate prospective final canonical fresh install through V1.11.0
+        shell: bash
+        run: |
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;DROP DATABASE [CustSearch_AI];"
+          docker cp /tmp/CustSearchAi.phase12-final.sql phase12-sql:/tmp/final.sql
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
+          docker exec phase12-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.10.0')<>1 OR (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.11.0')<>1 THROW 54230,'Canonical version ledger invalid',1;IF OBJECT_ID(N'dbo.NotificationOutbox',N'U') IS NULL OR OBJECT_ID(N'dbo.IntegrationOutbox',N'U') IS NULL OR OBJECT_ID(N'dbo.IntegrationDeliveryLogs',N'U') IS NULL THROW 54231,'Canonical Phase11/12 objects missing',1;DBCC CHECKCONSTRAINTS WITH ALL_CONSTRAINTS;"
+
+      - name: Persist validated Phase 12 canonical SQL
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          cp /tmp/CustSearchAi.phase12-final.sql database/CustSearchAi.sql
+          if git diff --quiet -- database/CustSearchAi.sql; then echo "Phase 12 canonical already persisted.";exit 0;fi
+          git config user.name "github-actions[bot]";git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add database/CustSearchAi.sql;git commit -m "phase12: persist V1.11 canonical SQL";git push origin HEAD:phase12-integrations

@@ -39,7 +39,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Prepare validated Phase 10 baseline and prospective Phase 11 canonical
+      - name: Prepare validated Phase 10/11 baseline and prospective Phase 11 canonical
         shell: bash
         run: |
           git show origin/AIMainBranch:database/CustSearchAi.sql > /tmp/CustSearchAi.phase10-base.raw
@@ -49,7 +49,8 @@ jobs:
           enc='utf-16' if base_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if base_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
           base=base_raw.decode(enc)
           if "VersionNumber=N'V1.9.0'" not in base: raise SystemExit('AIMainBranch must contain validated Phase 10 V1.9.0 before Phase 11.')
-          if "VersionNumber=N'V1.10.0'" in base: raise SystemExit('AIMainBranch must not contain Phase 11 V1.10.0 before Phase 11 merge.')
+          # Later phases intentionally start from an AIMainBranch that already contains
+          # V1.10.0. The idempotent Phase 11 upgrade remains part of their regression gate.
           upgrade=Path('database/09_Upgrade/V1.10.0_Phase11_AlertsRealtime.sql').read_text(encoding='utf-8-sig')
           branch_raw=Path('database/CustSearchAi.sql').read_bytes();branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8');branch=branch_raw.decode(branch_enc)
           final=branch if "VersionNumber=N'V1.10.0'" in branch else base.rstrip()+"\n\n-- ============================================================\n-- PHASE 11 - ALERTS & REAL-TIME\n-- VERSION: V1.10.0\n-- ============================================================\n"+upgrade.strip()+"\n"

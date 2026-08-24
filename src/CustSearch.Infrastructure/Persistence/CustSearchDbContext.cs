@@ -23,5 +23,8 @@ public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> op
     // Phase 11 Alerts & Real-Time — authoritative alerts, durable recovery cursor and transactional notification outbox.
     public DbSet<Alert> Alerts=>Set<Alert>(); public DbSet<RealtimeEvent> RealtimeEvents=>Set<RealtimeEvent>(); public DbSet<NotificationOutboxMessage> NotificationOutbox=>Set<NotificationOutboxMessage>();
 
+    // Phase 12 Integrations — secret-reference configuration, inbound receipts, outbound outbox and payload-free delivery audit.
+    public DbSet<IntegrationConfiguration> IntegrationConfigurations=>Set<IntegrationConfiguration>(); public DbSet<IntegrationInboundEvent> IntegrationInboundEvents=>Set<IntegrationInboundEvent>(); public DbSet<IntegrationOutboxMessage> IntegrationOutbox=>Set<IntegrationOutboxMessage>(); public DbSet<IntegrationDeliveryLog> IntegrationDeliveryLogs=>Set<IntegrationDeliveryLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder){ArgumentNullException.ThrowIfNull(modelBuilder);modelBuilder.ApplyConfigurationsFromAssembly(typeof(CustSearchDbContext).Assembly);base.OnModelCreating(modelBuilder);}
 }

@@ -1,6 +1,6 @@
 # Phase 12 — Integrations
 
-Status: Not Started
+Status: In Progress
 
 ## Scope
 
@@ -8,4 +8,4 @@ Inbound APIs, third-party integrations, HMAC webhooks, idempotency, retries and 
 
 ## Done Summary
 
-Pending approval, implementation and validation.
+User approved Phase 12 on 2026-08-24 after Phase 11 was merged and re-verified green. Implementation and full regression validation are in progress on `phase12-integrations`.

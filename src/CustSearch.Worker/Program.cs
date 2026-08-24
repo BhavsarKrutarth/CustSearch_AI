@@ -1,6 +1,7 @@
 using CustSearch.Worker;
 using CustSearch.Infrastructure;
 using CustSearch.Integrations;
+using Microsoft.Extensions.Options;
 using Serilog;
 using System.Globalization;
 
@@ -21,7 +22,9 @@ try
 
     builder.Services.AddInfrastructure(connectionString);
     builder.Services.AddCustSearchIntegrations();
+    builder.Services.AddOptions<IntegrationDispatcherOptions>().Bind(builder.Configuration.GetSection(IntegrationDispatcherOptions.SectionName)).Validate(x=>x.PollIntervalSeconds is>=1 and<=60,"IntegrationDispatcher:PollIntervalSeconds must be between 1 and 60.").Validate(x=>x.BatchSize is>=1 and<=200,"IntegrationDispatcher:BatchSize must be between 1 and 200.").ValidateOnStart();
     builder.Services.AddHostedService<Worker>();
+    builder.Services.AddHostedService<IntegrationOutboxHostedService>();
 
     var host = builder.Build();
     await host.RunAsync().ConfigureAwait(false);
