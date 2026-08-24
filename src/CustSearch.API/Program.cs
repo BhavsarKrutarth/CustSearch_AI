@@ -1,6 +1,8 @@
 using CustSearch.API.Middleware;
 using CustSearch.API.Security;
 using CustSearch.API.PlatformTenancy;
+using CustSearch.API.AlertsRealtime;
+using CustSearch.Application.AlertsRealtime;
 using CustSearch.Application.Authentication;
 using CustSearch.Application.Authorization;
 using CustSearch.Infrastructure;
@@ -75,6 +77,18 @@ try
             };
             options.Events = new JwtBearerEvents
             {
+                OnMessageReceived = context =>
+                {
+                    // SignalR browser handshakes may carry the short-lived bearer token in the query.
+                    // Normal JWT validation and database-backed session revalidation still run afterwards.
+                    var accessToken = context.Request.Query["access_token"];
+                    if (!Microsoft.Extensions.Primitives.StringValues.IsNullOrEmpty(accessToken)
+                        && context.HttpContext.Request.Path.StartsWithSegments("/hubs/alerts"))
+                    {
+                        context.Token = accessToken.ToString();
+                    }
+                    return Task.CompletedTask;
+                },
                 OnTokenValidated = async context =>
                 {
                     // Active sessions are checked server-side so disabling a user, suspending a
@@ -157,6 +171,12 @@ try
     builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
     builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
     builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ApiAuthorizationResultHandler>();
+    builder.Services.AddSignalR(options=>{options.EnableDetailedErrors=false;options.MaximumReceiveMessageSize=32*1024;});
+    builder.Services.AddSingleton<IAlertConnectionMetrics,AlertConnectionMetrics>();
+    builder.Services.AddSingleton<INotificationChannelAdapter,SignalRNotificationChannelAdapter>();
+    builder.Services.AddScoped<AlertExceptionFilter>();
+    builder.Services.AddOptions<AlertsRealtimeOptions>().Bind(builder.Configuration.GetSection(AlertsRealtimeOptions.SectionName)).Validate(x=>x.PollIntervalSeconds is>=1 and<=60,"AlertsRealtime:PollIntervalSeconds must be between 1 and 60.").Validate(x=>x.BatchSize is>=1 and<=200,"AlertsRealtime:BatchSize must be between 1 and 200.").ValidateOnStart();
+    builder.Services.AddHostedService<NotificationOutboxHostedService>();
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -200,6 +220,7 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
+    app.MapHub<AlertHub>("/hubs/alerts");
     app.MapHealthChecks("/health/live", new HealthCheckOptions
     {
         Predicate = _ => false,

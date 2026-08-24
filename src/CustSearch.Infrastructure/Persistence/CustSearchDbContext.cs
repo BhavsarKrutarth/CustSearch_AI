@@ -20,5 +20,8 @@ public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> op
     // Phase 10 Preferences & Voice — factual signals, derived scores, category aliases and confirmation-controlled voice sessions.
     public DbSet<CustomerPreferenceSignal> CustomerPreferenceSignals=>Set<CustomerPreferenceSignal>(); public DbSet<CustomerPreferenceScore> CustomerPreferenceScores=>Set<CustomerPreferenceScore>(); public DbSet<HouseholdPreferenceTag> HouseholdPreferenceTags=>Set<HouseholdPreferenceTag>(); public DbSet<PreferenceWeightVersion> PreferenceWeightVersions=>Set<PreferenceWeightVersion>(); public DbSet<StoreVoiceCommandRuntimeSetting> StoreVoiceCommandRuntimeSettings=>Set<StoreVoiceCommandRuntimeSetting>(); public DbSet<VoiceCommandSession> VoiceCommandSessions=>Set<VoiceCommandSession>(); public DbSet<ProductCategoryAlias> ProductCategoryAliases=>Set<ProductCategoryAlias>();
 
+    // Phase 11 Alerts & Real-Time — authoritative alerts, durable recovery cursor and transactional notification outbox.
+    public DbSet<Alert> Alerts=>Set<Alert>(); public DbSet<RealtimeEvent> RealtimeEvents=>Set<RealtimeEvent>(); public DbSet<NotificationOutboxMessage> NotificationOutbox=>Set<NotificationOutboxMessage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder){ArgumentNullException.ThrowIfNull(modelBuilder);modelBuilder.ApplyConfigurationsFromAssembly(typeof(CustSearchDbContext).Assembly);base.OnModelCreating(modelBuilder);}
 }

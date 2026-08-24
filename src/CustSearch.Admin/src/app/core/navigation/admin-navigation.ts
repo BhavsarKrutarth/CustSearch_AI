@@ -15,6 +15,7 @@ export const ADMIN_NAVIGATION:Record<'customer'|'platform',readonly AdminNavigat
     {label:'Voice audit',route:'/customer-admin/voice-command-audit',permission:PERMISSIONS.voiceCommandsAudit},
     {label:'Retail invoices',route:'/customer-admin/retail/invoices',permission:PERMISSIONS.retailInvoicesView},
     {label:'Retail reports',route:'/customer-admin/retail/reports',permission:PERMISSIONS.retailReportsView},
+    {label:'Alerts',route:'/customer-admin/alerts',permission:PERMISSIONS.alertsView},
     {label:'Monitoring',route:null,permission:PERMISSIONS.camerasView},
   ],
   platform:[

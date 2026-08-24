@@ -39,7 +39,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Prepare validated Phase 9 baseline and prospective Phase 10 canonical
+      - name: Prepare validated Phase 9/10 baseline and prospective Phase 10 canonical
         shell: bash
         run: |
           git show origin/AIMainBranch:database/CustSearchAi.sql > /tmp/CustSearchAi.phase9-base.raw
@@ -50,8 +50,9 @@ jobs:
           base=base_raw.decode(enc)
           if "VersionNumber=N'V1.8.0'" not in base:
               raise SystemExit('AIMainBranch must contain validated Phase 9 V1.8.0 before Phase 10.')
-          if "VersionNumber=N'V1.9.0'" in base:
-              raise SystemExit('AIMainBranch must not contain Phase 10 V1.9.0 before Phase 10 merge.')
+          # Later-phase pull requests intentionally start from an AIMainBranch that already
+          # contains V1.9.0. The repeat-safe Phase 10 upgrade and full regression suite must
+          # continue to run instead of treating the validated Phase 10 baseline as an error.
           upgrade=Path('database/09_Upgrade/V1.9.0_Phase10_PreferencesVoice.sql').read_text(encoding='utf-8-sig')
           branch_raw=Path('database/CustSearchAi.sql').read_bytes()
           branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
