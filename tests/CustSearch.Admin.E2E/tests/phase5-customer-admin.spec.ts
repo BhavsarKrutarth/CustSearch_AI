@@ -580,8 +580,8 @@ test('dynamic voice settings load and save a store-specific trigger', async ({ p
 
   await page.getByPlaceholder('Store ID').fill('101');
   await page.getByRole('button', { name: 'Load voice settings' }).click();
-  await expect(page.getByPlaceholder('Trigger phrase')).toHaveValue('Aasha Add');
-  await page.getByPlaceholder('Trigger phrase').fill('Mira Add');
+  await expect(page.locator('input[formcontrolname="triggerKeyword"]')).toHaveValue('Aasha Add');
+  await page.locator('input[formcontrolname="triggerKeyword"]').fill('Mira Add');
   await page.getByPlaceholder('Trigger aliases comma separated').fill('Mira Add, Mira Please Add');
   await page.getByRole('button', { name: 'Save voice settings' }).click();
 
