@@ -11,6 +11,8 @@ public interface IPreferencesVoiceService
     Task<CustomerPreferencesView> RecalculateCustomerAsync(long customerId,TenantAuditContext audit,CancellationToken cancellationToken=default);
     Task<HouseholdPreferencesView> GetHouseholdPreferencesAsync(long householdId,CancellationToken cancellationToken=default);
     Task<HouseholdPreferencesView> AddHouseholdTagAsync(long householdId,AddHouseholdPreferenceTagCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default);
+    Task<PreferenceWeightView> GetActiveWeightVersionAsync(CancellationToken cancellationToken=default);
+    Task<PreferenceWeightView> SaveWeightVersionAsync(SavePreferenceWeightCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default);
     Task<VoiceSettingView> GetVoiceSettingAsync(long storeId,CancellationToken cancellationToken=default);
     Task<VoiceSettingView> SaveVoiceSettingAsync(long storeId,SaveVoiceRuntimeSettingCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default);
     Task<VoiceSessionView> StartVoiceSessionAsync(StartVoiceSessionCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default);
@@ -22,6 +24,7 @@ public interface IPreferencesVoiceService
 
 public sealed record AddCustomerPreferenceCommand(long StoreId,PreferenceType PreferenceType,long? ReferenceId,string? Value,decimal? SignalScore,decimal? Confidence,string? Reason);
 public sealed record AddHouseholdPreferenceTagCommand(PreferenceType PreferenceType,long? ReferenceId,string Value,HouseholdPreferenceTagSource Source,string? Reason);
+public sealed record SavePreferenceWeightCommand(string VersionCode,decimal ManualStaffWeight,decimal PurchaseWeight,decimal CategoryInteractionWeight,decimal VoiceConfirmedWeight);
 public sealed record SaveVoiceRuntimeSettingCommand(string TriggerKeyword,string ResponseMode,bool IsEnabled,bool RequireConfirmationForAmbiguousCategory,IReadOnlyList<string> Aliases,string LanguageCode,bool RequireConfirmation,int ListeningTimeoutSeconds,decimal MinimumRecognitionConfidence);
 public sealed record StartVoiceSessionCommand(long StoreId,long CustomerId,string TriggerText);
 public sealed record InterpretVoiceSessionCommand(string RecognizedText,decimal RecognitionConfidence,PreferenceType PreferenceType,long? ReferenceId,string? Value,string? Reason);
@@ -32,6 +35,7 @@ public sealed record CustomerPreferencesView(long CustomerId,string CustomerCode
 public sealed record HouseholdMemberPreferenceView(long CustomerId,string CustomerName,IReadOnlyList<PreferenceScoreView> Scores);
 public sealed record HouseholdTagView(long Id,PreferenceType PreferenceType,long? ReferenceId,string Value,HouseholdPreferenceTagSource Source,string? Reason,DateTime CreatedUtc);
 public sealed record HouseholdPreferencesView(long HouseholdId,string HouseholdName,IReadOnlyList<HouseholdMemberPreferenceView> VerifiedMembers,IReadOnlyList<PreferenceScoreView> AggregateScores,IReadOnlyList<HouseholdTagView> SharedTags);
+public sealed record PreferenceWeightView(long Id,string VersionCode,decimal ManualStaffWeight,decimal PurchaseWeight,decimal CategoryInteractionWeight,decimal VoiceConfirmedWeight,bool IsActive,DateTime CreatedUtc);
 public sealed record VoiceSettingView(long StoreId,string TriggerKeyword,string ResponseMode,bool IsEnabled,bool RequireConfirmationForAmbiguousCategory,IReadOnlyList<string> Aliases,string LanguageCode,bool RequireConfirmation,int ListeningTimeoutSeconds,decimal MinimumRecognitionConfidence);
 public sealed record VoiceSessionView(long Id,long StoreId,long CustomerId,string MatchedTrigger,string? RecognizedText,decimal? RecognitionConfidence,PreferenceType? ProposedPreferenceType,long? ProposedReferenceId,string? ProposedValue,bool ConfirmationRequired,VoiceCommandSessionStatus Status,DateTime ExpiresUtc,DateTime? ResolvedUtc);
 public sealed record PreferenceAuditItem(long Id,long? StoreId,long? UserId,string Action,string EntityType,string? EntityId,string? BeforeJson,string? AfterJson,string CorrelationId,DateTime CreatedUtc);
