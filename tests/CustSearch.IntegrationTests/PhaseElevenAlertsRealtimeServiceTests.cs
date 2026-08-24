@@ -1,3 +1,4 @@
+using System.Globalization;
 using CustSearch.Application.AlertsRealtime;
 using CustSearch.Application.Authentication;
 using CustSearch.Application.TenantOperations;
@@ -32,19 +33,19 @@ public sealed class PhaseElevenAlertsRealtimeServiceTests:IAsyncLifetime
     [Fact]
     public async Task StoreScopedUserCannotReadRecoverOrAcknowledgeAnotherStoreAlert()
     {
-        await using var db=CreateDb();var user=User([storeA.Id]);var service=Service(db,user);var alert=await service.CreateAsync(new("store.alert",storeA.Id,AlertSeverity.Info,"Store A","Scoped.","Store",storeA.Id.ToString(),"store-a:1"),Audit());user.StoreIdsValue=new HashSet<long>([storeB.Id]);Assert.Empty((await service.ListAsync(null,null)).Items);Assert.Empty((await service.RecoverAsync(0)).Events);await Assert.ThrowsAsync<AlertResourceNotFoundException>(()=>service.AcknowledgeAsync(alert.Id,Audit()));
+        await using var db=CreateDb();var user=User([storeA.Id]);var service=Service(db,user);var alert=await service.CreateAsync(new("store.alert",storeA.Id,AlertSeverity.Info,"Store A","Scoped.","Store",storeA.Id.ToString(CultureInfo.InvariantCulture),"store-a:1"),Audit());user.StoreIdsValue=new HashSet<long>([storeB.Id]);Assert.Empty((await service.ListAsync(null,null)).Items);Assert.Empty((await service.RecoverAsync(0)).Events);await Assert.ThrowsAsync<AlertResourceNotFoundException>(()=>service.AcknowledgeAsync(alert.Id,Audit()));
     }
 
     [Fact]
     public async Task TenantWideAlertIsVisibleButStoreAlertRemainsStoreIsolated()
     {
-        await using var db=CreateDb();var user=User([storeA.Id]);var service=Service(db,user);await service.CreateAsync(new("tenant.notice",null,AlertSeverity.Info,"Tenant notice","All stores.","Tenant",tenant.Id.ToString(),"tenant:notice:1"),Audit());await service.CreateAsync(new("store.notice",storeA.Id,AlertSeverity.Warning,"Store notice","Store only.","Store",storeA.Id.ToString(),"store:notice:1"),Audit());user.StoreIdsValue=new HashSet<long>([storeB.Id]);var list=await service.ListAsync(null,null);Assert.Single(list.Items);Assert.Null(list.Items[0].StoreId);var recovery=await service.RecoverAsync(0);Assert.Single(recovery.Events);Assert.Null(recovery.Events[0].StoreId);
+        await using var db=CreateDb();var user=User([storeA.Id]);var service=Service(db,user);await service.CreateAsync(new("tenant.notice",null,AlertSeverity.Info,"Tenant notice","All stores.","Tenant",tenant.Id.ToString(CultureInfo.InvariantCulture),"tenant:notice:1"),Audit());await service.CreateAsync(new("store.notice",storeA.Id,AlertSeverity.Warning,"Store notice","Store only.","Store",storeA.Id.ToString(CultureInfo.InvariantCulture),"store:notice:1"),Audit());user.StoreIdsValue=new HashSet<long>([storeB.Id]);var list=await service.ListAsync(null,null);Assert.Single(list.Items);Assert.Null(list.Items[0].StoreId);var recovery=await service.RecoverAsync(0);Assert.Single(recovery.Events);Assert.Null(recovery.Events[0].StoreId);
     }
 
     [Fact]
     public async Task FailedDeliveryRetriesAndEventuallyMarksAlertDelivered()
     {
-        await using var db=CreateDb();var clock=new MutableTimeProvider(Now);var service=Service(db,User([storeA.Id]),clock);var alert=await service.CreateAsync(new("retry.alert",storeA.Id,AlertSeverity.Warning,"Retry","Retry delivery.","Store",storeA.Id.ToString(),"retry:1"),Audit());var adapter=new FlakyAdapter(1);var processor=new NotificationOutboxProcessor(db,[adapter],clock);var first=await processor.ProcessDueAsync();Assert.Equal(1,first.Failed);var failed=await db.NotificationOutbox.SingleAsync();Assert.Equal(NotificationOutboxStatus.Failed,failed.Status);clock.Advance(TimeSpan.FromSeconds(5));var second=await processor.ProcessDueAsync();Assert.Equal(1,second.Delivered);Assert.Equal(2,failed.AttemptCount);Assert.Equal(AlertStatus.Delivered,(await db.Alerts.SingleAsync(x=>x.Id==alert.Id)).Status);Assert.Equal(1,adapter.Delivered);
+        await using var db=CreateDb();var clock=new MutableTimeProvider(Now);var service=Service(db,User([storeA.Id]),clock);var alert=await service.CreateAsync(new("retry.alert",storeA.Id,AlertSeverity.Warning,"Retry","Retry delivery.","Store",storeA.Id.ToString(CultureInfo.InvariantCulture),"retry:1"),Audit());var adapter=new FlakyAdapter(1);var processor=new NotificationOutboxProcessor(db,[adapter],clock);var first=await processor.ProcessDueAsync();Assert.Equal(1,first.Failed);var failed=await db.NotificationOutbox.SingleAsync();Assert.Equal(NotificationOutboxStatus.Failed,failed.Status);clock.Advance(TimeSpan.FromSeconds(5));var second=await processor.ProcessDueAsync();Assert.Equal(1,second.Delivered);Assert.Equal(2,failed.AttemptCount);Assert.Equal(AlertStatus.Delivered,(await db.Alerts.SingleAsync(x=>x.Id==alert.Id)).Status);Assert.Equal(1,adapter.Delivered);
     }
 
     private CustSearchDbContext CreateDb()=>new(new DbContextOptionsBuilder<CustSearchDbContext>().UseSqlite(new SqliteConnectionStringBuilder{DataSource=databasePath,Cache=SqliteCacheMode.Shared,Mode=SqliteOpenMode.ReadWriteCreate}.ToString()).Options);
