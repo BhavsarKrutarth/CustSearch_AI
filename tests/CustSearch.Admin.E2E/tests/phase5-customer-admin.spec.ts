@@ -95,11 +95,14 @@ interface CategoryState {
 interface VoiceState {
   storeId: number;
   triggerKeyword: string;
-  responseMode: number;
+  responseMode: string;
   isEnabled: boolean;
   requireConfirmationForAmbiguousCategory: boolean;
   aliases: string[];
-  updatedUtc: string;
+  languageCode: string;
+  requireConfirmation: boolean;
+  listeningTimeoutSeconds: number;
+  minimumRecognitionConfidence: number;
 }
 
 interface MockOptions {
@@ -180,11 +183,14 @@ async function mockPhaseFiveApi(page: Page, options: MockOptions = {}): Promise<
     voice: {
       storeId: 101,
       triggerKeyword: 'Aasha Add',
-      responseMode: 4,
+      responseMode: 'InAppAndVoice',
       isEnabled: true,
       requireConfirmationForAmbiguousCategory: true,
       aliases: ['Asha Add'],
-      updatedUtc: '2026-08-23T08:00:00Z',
+      languageCode: 'en-IN',
+      requireConfirmation: true,
+      listeningTimeoutSeconds: 30,
+      minimumRecognitionConfidence: 70,
     },
     calls: [],
   };
@@ -341,14 +347,13 @@ async function mockPhaseFiveApi(page: Page, options: MockOptions = {}): Promise<
       return json(route, target);
     }
 
-    const voice = path.match(/^stores\/(\d+)\/voice-command-setting$/);
+    const voice = path.match(/^stores\/(\d+)\/voice-command-runtime$/);
     if (voice && method === 'GET') return json(route, state.voice);
     if (voice && method === 'PUT') {
       state.voice = {
         ...state.voice,
-        ...(request.postDataJSON() as Omit<VoiceState, 'storeId' | 'updatedUtc'>),
+        ...(request.postDataJSON() as Omit<VoiceState, 'storeId'>),
         storeId: Number(voice[1]),
-        updatedUtc: new Date().toISOString(),
       };
       return json(route, state.voice);
     }
@@ -380,8 +385,8 @@ const navigation: Record<string, string> = {
 async function openViaSpa(page: Page, path: string): Promise<void> {
   const linkName = navigation[path];
   if (!linkName) throw new Error(`No Phase 5 SPA navigation mapping for ${path}`);
-  const dashboard = page.locator('app-phase-five-dashboard');
-  await dashboard.getByRole('link', { name: linkName, exact: true }).click();
+  const dashboardNav = page.locator('app-phase-five-dashboard main.wrap nav.nav');
+  await dashboardNav.getByRole('link', { name: linkName, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
 }
 
@@ -573,11 +578,12 @@ test('dynamic voice settings load and save a store-specific trigger', async ({ p
   await signIn(page);
   await openViaSpa(page, '/customer-admin/voice-commands');
 
-  await page.locator('select[formcontrolname="storeId"]').selectOption('101');
-  await expect(page.getByPlaceholder('Dynamic trigger')).toHaveValue('Aasha Add');
-  await page.getByPlaceholder('Dynamic trigger').fill('Mira Add');
-  await page.getByPlaceholder('Aliases comma separated').fill('Mira Add, Mira Please Add');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByPlaceholder('Store ID').fill('101');
+  await page.getByRole('button', { name: 'Load voice settings' }).click();
+  await expect(page.getByPlaceholder('Trigger phrase')).toHaveValue('Aasha Add');
+  await page.getByPlaceholder('Trigger phrase').fill('Mira Add');
+  await page.getByPlaceholder('Trigger aliases comma separated').fill('Mira Add, Mira Please Add');
+  await page.getByRole('button', { name: 'Save voice settings' }).click();
 
   await expect(page.getByText('Voice settings saved.', { exact: true })).toBeVisible();
   await expect.poll(() => state.voice.triggerKeyword).toBe('Mira Add');
