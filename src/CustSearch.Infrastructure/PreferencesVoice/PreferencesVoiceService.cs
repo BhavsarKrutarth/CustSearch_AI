@@ -171,7 +171,9 @@ public sealed class PreferencesVoiceService(
     {
         var tenantId=RequireTenantId();take=Math.Clamp(take,1,200);if(storeId.HasValue)await RequireAuthorizedStoreAsync(storeId.Value,cancellationToken).ConfigureAwait(false);if(customerId.HasValue)_=await RequireVisibleCustomerAsync(customerId.Value,cancellationToken).ConfigureAwait(false);
         var query=db.AuditLogs.AsNoTracking().Where(x=>x.TenantId==tenantId&&(x.Action.StartsWith("CustomerPreference")||x.Action.StartsWith("HouseholdPreference")||x.Action.StartsWith("PreferenceWeight")||x.Action.StartsWith("VoiceCommand")||x.Action.StartsWith("StoreVoice")||x.Action.StartsWith("ProductCategoryAlias")));
-        if(storeId.HasValue)query=query.Where(x=>x.StoreId==storeId.Value);if(customerId.HasValue){var id=customerId.Value.ToString(CultureInfo.InvariantCulture);query=query.Where(x=>x.EntityId==id||x.AfterJson!=null&&x.AfterJson.Contains($"\"CustomerId\":{customerId.Value}"));}
+        if(storeId.HasValue)query=query.Where(x=>x.StoreId==storeId.Value);
+        else if(!IsTenantWide()){var allowedStoreIds=currentUser.StoreIds.ToArray();query=query.Where(x=>x.StoreId==null||(x.StoreId.HasValue&&allowedStoreIds.Contains(x.StoreId.Value)));}
+        if(customerId.HasValue){var id=customerId.Value.ToString(CultureInfo.InvariantCulture);query=query.Where(x=>x.EntityId==id||x.AfterJson!=null&&x.AfterJson.Contains($"\"CustomerId\":{customerId.Value}"));}
         return await query.OrderByDescending(x=>x.CreatedUtc).Take(take).Select(x=>new PreferenceAuditItem(x.Id,x.StoreId,x.UserId,x.Action,x.EntityType,x.EntityId,x.BeforeJson,x.AfterJson,x.CorrelationId,x.CreatedUtc)).ToArrayAsync(cancellationToken).ConfigureAwait(false);
     }
 

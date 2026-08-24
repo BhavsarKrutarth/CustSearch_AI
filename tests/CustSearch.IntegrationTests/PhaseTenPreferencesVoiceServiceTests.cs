@@ -54,6 +54,23 @@ public sealed class PhaseTenPreferencesVoiceServiceTests
     }
 
     [Fact]
+    public async Task StoreScopedAuditWithoutStoreFilterExcludesOtherStores()
+    {
+        await using var f=await Fixture.CreateAsync();f.UseStoreA();
+        f.Db.AuditLogs.AddRange(
+            AuditLog.Record(f.Tenant.Id,f.StoreA.Id,f.Actor.Id,"User","VoiceCommandStarted","VoiceCommandSession","101",null,null,"127.0.0.1","Phase10Test","phase10-store-a",Now),
+            AuditLog.Record(f.Tenant.Id,f.StoreB.Id,f.Actor.Id,"User","VoiceCommandStarted","VoiceCommandSession","102",null,null,"127.0.0.1","Phase10Test","phase10-store-b",Now.AddSeconds(1)),
+            AuditLog.Record(f.Tenant.Id,null,f.Actor.Id,"User","PreferenceWeightVersionChanged","PreferenceWeightVersion","103",null,null,"127.0.0.1","Phase10Test","phase10-tenant",Now.AddSeconds(2)));
+        await f.Db.SaveChangesAsync();
+
+        var audit=await f.CreateService().GetAuditHistoryAsync(null,null);
+
+        Assert.Contains(audit,x=>x.StoreId==f.StoreA.Id);
+        Assert.Contains(audit,x=>x.StoreId is null);
+        Assert.DoesNotContain(audit,x=>x.StoreId==f.StoreB.Id);
+    }
+
+    [Fact]
     public async Task RecalculationIsDeterministicForSameFactsAndWeightVersion()
     {
         await using var f=await Fixture.CreateAsync();f.UseStoreA();var service=f.CreateService();await service.AddCustomerTagAsync(f.CustomerA.Id,new(f.StoreA.Id,PreferenceType.Category,f.CategoryA.Id,f.CategoryA.Name,80,100,"manual"),f.Audit());var first=await service.RecalculateCustomerAsync(f.CustomerA.Id,f.Audit());var second=await service.RecalculateCustomerAsync(f.CustomerA.Id,f.Audit());Assert.Single(first.Scores);Assert.Single(second.Scores);Assert.Equal(first.Scores[0].Score,second.Scores[0].Score);Assert.Equal(first.Scores[0].PreferenceType,second.Scores[0].PreferenceType);Assert.Equal(first.Scores[0].ReferenceId,second.Scores[0].ReferenceId);
