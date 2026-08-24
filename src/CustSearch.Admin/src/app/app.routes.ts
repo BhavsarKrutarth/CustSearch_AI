@@ -7,6 +7,7 @@ const tenantRoles=['TenantAdmin','TenantOwner','ShopOwner','StoreAdmin','StoreMa
 const phase5Page=()=>import('./features/customer-admin/phase-five-management-page').then(m=>m.PhaseFiveManagementPage);
 const platformBillingPage=()=>import('./features/platform-billing/platform-billing-page').then(m=>m.PlatformBillingPage);
 const tenantBillingPage=()=>import('./features/platform-billing/tenant-billing-page').then(m=>m.TenantBillingPage);
+const voicePreferencesPage=()=>import('./features/preferences/voice-preferences-page').then(m=>m.VoicePreferencesPage);
 
 export const routes:Routes=[
   {path:'login',title:'Sign in | CustSearch AI',loadComponent:()=>import('./features/auth/login-page').then(m=>m.LoginPage)},
@@ -20,7 +21,8 @@ export const routes:Routes=[
   {path:'customer-admin/staff/:id',title:'Staff detail | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.staffView])],loadComponent:()=>import('./features/customer-admin/phase-five-staff-detail-page').then(m=>m.PhaseFiveStaffDetailPage)},
   {path:'customer-admin/store-categories',title:'Categories | CustSearch AI',data:{mode:'categories',title:'Store categories'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.storeCategoriesView])],loadComponent:phase5Page},
   {path:'customer-admin/categories',pathMatch:'full',redirectTo:'customer-admin/store-categories'},
-  {path:'customer-admin/voice-commands',title:'Voice commands | CustSearch AI',data:{mode:'voice',title:'Dynamic voice settings'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.voiceCommandsView])],loadComponent:phase5Page},
+  {path:'customer-admin/voice-commands',title:'Voice commands | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.voiceCommandsView])],loadComponent:voicePreferencesPage},
+  {path:'customer-admin/voice-command-audit',title:'Voice command audit | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.voiceCommandsAudit])],loadComponent:voicePreferencesPage},
   {path:'customer-admin/voice-settings',pathMatch:'full',redirectTo:'customer-admin/voice-commands'},
   {path:'customer-admin/customers',title:'Customers | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.customersView])],loadComponent:()=>import('./features/customers/customer-list-page').then(m=>m.CustomerListPage)},
   {path:'customer-admin/customers/:id',title:'Customer profile | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.customersView])],loadComponent:()=>import('./features/customers/customer-detail-page').then(m=>m.CustomerDetailPage)},
