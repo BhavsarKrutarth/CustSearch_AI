@@ -1,12 +1,9 @@
 # Phase 9 — Platform Billing Implementation Plan
 
-**Status:** In Progress  
+**Status:** Completed  
 **Branch:** `phase9-platform-billing`  
 **Database target:** SQL Server 2022 / V1.8.0  
-**Sources:**
-- `planning_document/phase_implementation/PHASE_09_PLATFORM_BILLING.md`
-- `planning_document/CustSearch_AI_Final_Planning_ShopOwner_Staff_CCTV_AashaDynamic.md`
-- validated Phase 8 baseline and `planning_document/PHASE_08_TEST_REPORT.md`
+**Final evidence:** `planning_document/PHASE_09_TEST_REPORT.md`
 
 ## Phase boundary
 
@@ -14,78 +11,78 @@ Phase 9 is **Platform Billing**: a tenant/shop owner pays CustSearch for a subsc
 
 Phase 8 is **Retail Billing**: a shop customer buys products from a tenant/store.
 
-These domains must never share invoice/payment tables, report models or permissions. Phase 9 may read authoritative tenant resource usage for quota enforcement, but it must not read or write `RetailInvoices`, `RetailInvoiceItems`, `RetailInvoicePayments`, retail spend attribution or retail reports.
+These domains remain separate in persistence, APIs, permissions and tests. Phase 9 may read authoritative tenant resource usage for quota enforcement but does not use retail invoices/payments as platform billing facts.
 
 ## Baseline gate
 
-Phase 8 baseline is green before Phase 9 starts:
-- .NET build and tests green.
-- Angular, Playwright and Python regressions green.
-- SQL Server 2022 V1.7.0 upgrade and standalone runner double-run green.
-- canonical `database/CustSearchAi.sql` contains V1.7.0.
-- `planning_document/PHASE_08_TEST_REPORT.md` exists.
+Phase 8 was green before Phase 9 started:
 
-Phase 9 branch was created from the latest `AIMainBranch` baseline after the Phase 8 report/status reconciliation.
+- .NET build/tests green
+- Angular/Playwright/Python regressions green
+- SQL Server 2022 V1.7.0 upgrade and standalone runner double-run green
+- canonical `database/CustSearchAi.sql` contained V1.7.0
+- `planning_document/PHASE_08_TEST_REPORT.md` existed
 
-## 9A — Subscription plan catalog
+## 9A — Subscription plan catalog — Completed
 
-Extend the existing `SubscriptionPlans` foundation rather than create a duplicate plan master.
+The existing `SubscriptionPlans` foundation was extended with:
 
-Required commercial fields:
-- PlanCode / Name
-- Description
+- PlanCode / Name / Description
 - MonthlyPrice / AnnualPrice
 - Currency
 - TrialDays
 - MaxStores / MaxUsers / MaxStaff / MaxCameras
-- explicit feature-limit fields plus extensible FeatureLimitsJson
+- explicit/extensible feature limits
 - IsActive / DisplayOrder / CreatedUtc / UpdatedUtc
 
-Only Platform Admin may manage plans. Tenant users never receive a plan-management API.
+Only Platform Admin can manage plans.
 
-## 9B — Tenant subscriptions
+## 9B — Tenant subscriptions — Completed
 
-Extend the existing historical `TenantSubscriptions` foundation with server-authoritative Phase 9 lifecycle fields:
-- TenantId / PlanId
+Existing `TenantSubscriptions` now supports:
+
+- server-derived TenantId / PlanId
 - StartUtc / TrialEndUtc
 - CurrentPeriodStartUtc / CurrentPeriodEndUtc
 - CancelAtPeriodEnd / CancelledUtc
 - Trial / Active / PastDue / Suspended / Cancelled / Expired
 
-Platform-admin commands create, renew, change plans and cancel subscriptions. Client payloads do not choose arbitrary authoritative status transitions. Plan changes and creation reject quotas below current authoritative store/user/staff/camera usage.
+Creation and plan changes validate authoritative store/user/staff/camera usage against plan quotas.
 
-## 9C — Platform invoices
+## 9C — Platform invoices — Completed
 
-Create separate:
+Separate:
+
 - `PlatformInvoices`
 - `PlatformInvoiceItems`
 
-Invoice items preserve immutable commercial snapshots including plan name, description, quantity, rate, discount, tax, subtotal and total. No Phase 9 code may use `RetailInvoices`.
+Commercial plan snapshots are preserved. No platform financial FK points to `RetailInvoices`.
 
-## 9D — Platform payments
+## 9D — Platform payments — Completed
 
-Create separate `PlatformPayments` with Pending / Successful / Failed / Refunded state.
+Separate `PlatformPayments` supports Pending / Successful / Failed / Refunded. `TransactionReference` provides idempotency and conflicting reuse is rejected. Refund transitions safely reverse successful paid amount.
 
-`TransactionReference` is an idempotency boundary. A repeated callback with the same factual values returns the existing payment; conflicting reuse is rejected. Gateway integration remains provider-neutral.
+## 9E — Angular UI — Completed
 
-## 9E — Angular UI
+Platform Admin:
 
-Platform Admin routes:
 - `/platform-admin/billing/plans`
 - `/platform-admin/billing/subscriptions`
 - `/platform-admin/billing/invoices`
 - `/platform-admin/billing/payments`
 
-Tenant Admin routes:
+Tenant Admin:
+
 - `/customer-admin/billing`
 - `/customer-admin/billing/invoices`
 - `/customer-admin/billing/subscription`
 
 Tenant Angular requests never carry TenantId.
 
-## 9F — Authorization
+## 9F — Authorization — Completed
 
-Stable Phase 9 permissions:
+Platform permissions:
+
 - `PlatformBilling.Plans.View`
 - `PlatformBilling.Plans.Manage`
 - `PlatformBilling.Subscriptions.View`
@@ -93,36 +90,45 @@ Stable Phase 9 permissions:
 - `PlatformBilling.Invoices.View`
 - `PlatformBilling.Payments.View`
 
-Platform-scope grants authorize cross-tenant platform operations. Tenant-scope grants are view-only and the tenant is derived from the authenticated server context.
+Tenant read-only grants:
 
-## 9G — Database and validation
+- `TenantPlatformBilling.Subscriptions.View`
+- `TenantPlatformBilling.Invoices.View`
+- `TenantPlatformBilling.Payments.View`
 
-Create:
+## 9G — Database and validation — Completed
+
+Created and validated:
+
 - `database/09_Upgrade/V1.8.0_Phase9_PlatformBilling.sql`
 - `database/run-phase9.sql`
+- `database/verify-phase9.sql`
 - `.github/workflows/phase9-validate.yml`
-- `planning_document/PHASE_09_TEST_REPORT.md` only with final observed evidence
+- `.github/workflows/phase9-sql-validate.yml`
+- `planning_document/PHASE_09_TEST_REPORT.md`
 
-Canonical `database/CustSearchAi.sql` is persisted only after the complete V1.8.0 validation matrix is green.
+The canonical `database/CustSearchAi.sql` contains the validated V1.8.0 block.
 
-Required test coverage:
-- subscription creation and trial
-- renewal
-- plan change
-- cancellation / cancel-at-period-end
-- quota enforcement including staff
-- invoice server calculation and immutable plan snapshots
-- payment idempotency
-- cross-tenant denial
-- tenant cannot edit plan
-- retail invoice cannot appear in platform billing
-- platform invoice cannot appear in retail billing
-- full Phase 5–9 regression
-- SQL Server 2022 V1.8.0 upgrade twice
-- standalone `database/run-phase9.sql` twice
-- exactly one V1.8.0 DatabaseVersions row
-- prospective canonical fresh install through V1.8.0
+## Final observed validation
 
-## Completion rule
+`Phase 9 Validate` run `32678432020`:
 
-Do **not** mark Phase 9 Completed until the final Phase 9 workflow is green and `planning_document/PHASE_09_TEST_REPORT.md` contains exact observed results.
+- .NET Release: 0 warnings / 0 errors
+- Unit: 62/62
+- Integration: 117/117
+- Angular lint: green
+- Angular tests: 54/54
+- Angular production build: green
+- Playwright Phase 5–9: 27/27
+- Python Ruff: green
+- Python pytest: 3/3
+- SQL Server 2022 V1.8.0 upgrade twice: green
+- `database/run-phase9.sql` twice: green
+- exactly one V1.8.0 row: green
+- canonical fresh install through V1.8.0: green
+
+Independent SQL-only validation also passed in run `32655635075`.
+
+## Completion rule result
+
+All required Phase 9 gates are green. Phase 9 is Completed and is the validated prerequisite for Phase 10 once its final corrective commits/documentation are present in `AIMainBranch`.
