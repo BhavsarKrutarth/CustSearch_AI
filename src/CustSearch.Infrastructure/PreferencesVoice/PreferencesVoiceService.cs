@@ -267,7 +267,8 @@ public sealed class PreferencesVoiceService(
     private async Task<CustomerPreferencesView> MapCustomerPreferencesAsync(Customer customer,CancellationToken cancellationToken)
     {
         var signals=await db.CustomerPreferenceSignals.AsNoTracking().Where(x=>x.TenantId==customer.TenantId&&x.CustomerId==customer.Id).OrderByDescending(x=>x.LastObservedUtc).Select(x=>new PreferenceSignalView(x.Id,x.StoreId,x.PreferenceType,x.ReferenceId,x.Value,x.SignalScore,x.Source,x.Confidence,x.FirstObservedUtc,x.LastObservedUtc,x.IsActive,x.Reason)).ToArrayAsync(cancellationToken).ConfigureAwait(false);
-        var scores=await db.CustomerPreferenceScores.AsNoTracking().Where(x=>x.TenantId==customer.TenantId&&x.CustomerId==customer.Id).OrderByDescending(x=>x.Score).Select(x=>new PreferenceScoreView(x.Id,x.PreferenceType,x.ReferenceId,x.Value,x.Score,x.WeightVersionId,x.CalculatedUtc)).ToArrayAsync(cancellationToken).ConfigureAwait(false);return new(customer.Id,customer.CustomerCode,DisplayName(customer),signals,scores);
+        var rawScores=await db.CustomerPreferenceScores.AsNoTracking().Where(x=>x.TenantId==customer.TenantId&&x.CustomerId==customer.Id).Select(x=>new PreferenceScoreView(x.Id,x.PreferenceType,x.ReferenceId,x.Value,x.Score,x.WeightVersionId,x.CalculatedUtc)).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+        var scores=rawScores.OrderByDescending(x=>x.Score).ThenBy(x=>x.Id).ToArray();return new(customer.Id,customer.CustomerCode,DisplayName(customer),signals,scores);
     }
 
     private static ProductCategoryAliasView MapAlias(ProductCategoryAlias x)=>new(x.Id,x.StoreId,x.ProductCategoryId,x.AliasText,x.NormalizedAliasText,x.LanguageCode,x.IsActive,x.CreatedUtc);
