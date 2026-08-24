@@ -186,7 +186,7 @@ CREATE OR ALTER PROCEDURE dbo.IntegrationOutbox_ManualRetry @TenantId BIGINT,@De
 AS
 BEGIN
     SET NOCOUNT ON;IF @UtcNow IS NULL SET @UtcNow=SYSUTCDATETIME();
-    UPDATE dbo.IntegrationOutbox SET Status=5,AttemptCount=0,NextAttemptUtc=@UtcNow,LastResponseCode=NULL,LastError=NULL,DeliveredUtc=NULL,CompletedUtc=NULL WHERE TenantId=@TenantId AND Id=@DeliveryId AND Status IN(4,6);
+    UPDATE dbo.IntegrationOutbox SET Status=5,AttemptCount=0,NextAttemptUtc=@UtcNow,LastResponseCode=NULL,LastError=NULL,DeliveredUtc=NULL,CompletedUtc=NULL WHERE TenantId=@TenantId AND Id=@DeliveryId AND Status IN(4,5,6);
     IF @@ROWCOUNT<>1 THROW 54020,'Failed/dead-letter integration delivery was not found.',1;
 END;
 GO
