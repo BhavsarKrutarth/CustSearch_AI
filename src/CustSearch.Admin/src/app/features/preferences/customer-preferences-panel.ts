@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, co
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AuthSessionService } from '../../core/auth/auth-session.service';
 import { PERMISSIONS } from '../../core/auth/permission-catalog';
+import { preferenceErrorMessage } from './preference-error';
 import { CustomerPreferences, PreferenceType, PreferencesApiService } from './preferences-api.service';
 
 /** Embedded Phase 10 customer preference section. Factual signals and derived scores are intentionally shown separately. */
@@ -16,5 +17,5 @@ export class CustomerPreferencesPanel implements OnChanges{
  protected addTag(){if(this.form.invalid)return;const v=this.form.getRawValue();if(!v.storeId)return;this.saving.set(true);this.api.addCustomerTag(this.customerId,{storeId:v.storeId,preferenceType:(v.preferenceType??5) as PreferenceType,referenceId:v.referenceId||null,value:v.value?.trim()||null,signalScore:null,confidence:v.confidence??100,reason:v.reason?.trim()||null}).subscribe({next:x=>{this.data.set(x);this.saving.set(false);this.error.set('');},error:e=>this.fail(e)});}
  protected recalculate(){this.saving.set(true);this.api.recalculateCustomer(this.customerId).subscribe({next:x=>{this.data.set(x);this.saving.set(false);this.error.set('');},error:e=>this.fail(e)});}
  protected label(t:number){return['','Category','Product','Brand','Price range','Tag'][t]??'Preference';}protected source(s:number){return['','Manual staff','Purchase','Category interaction','Voice confirmed'][s]??'Source';}
- private load(){if(!this.session.hasPermission(PERMISSIONS.preferencesView))return;this.api.customer(this.customerId).subscribe({next:x=>this.data.set(x),error:e=>this.fail(e)});}private fail(e:any){this.saving.set(false);this.error.set(e?.error?.message??e?.message??'Preference request failed.');}
+ private load(){if(!this.session.hasPermission(PERMISSIONS.preferencesView))return;this.api.customer(this.customerId).subscribe({next:x=>this.data.set(x),error:e=>this.fail(e)});}private fail(e:unknown){this.saving.set(false);this.error.set(preferenceErrorMessage(e,'Preference request failed.'));}
 }
