@@ -39,6 +39,9 @@ export const routes:Routes=[
   {path:'customer-admin/retail/invoices/:id',title:'Retail invoice | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.retailInvoicesView])],loadComponent:()=>import('./features/retail/invoice-detail-page').then(m=>m.InvoiceDetailPage)},
   {path:'customer-admin/retail/reports',title:'Retail reports | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.retailReportsView])],loadComponent:()=>import('./features/retail/retail-reports-page').then(m=>m.RetailReportsPage)},
 
+  // Phase 11 alert center is REST-authoritative and supplements state with authenticated SignalR events.
+  {path:'customer-admin/alerts',title:'Notification center | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.alertsView])],loadComponent:()=>import('./features/alerts/notification-center-page').then(m=>m.NotificationCenterPage)},
+
   // Phase 9 Platform Billing tenant views — CustSearch subscription billing only.
   {path:'customer-admin/billing',title:'CustSearch billing | CustSearch AI',data:{mode:'summary'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantPlatformBillingSubscriptionsView])],loadComponent:tenantBillingPage},
   {path:'customer-admin/billing/subscription',title:'Subscription | CustSearch AI',data:{mode:'subscription'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantPlatformBillingSubscriptionsView])],loadComponent:tenantBillingPage},

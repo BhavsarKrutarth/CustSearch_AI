@@ -28,7 +28,7 @@
             @for (option of themes; track option) { <option [value]="option">{{ option }}</option> }
           </select>
         </label>
-        <button class="icon-button" aria-label="Notifications">♢<span class="notification-dot"></span></button>
+        @if(adminType()==='customer'&&session.hasPermission('Alerts.View')){<a class="icon-button" routerLink="/customer-admin/alerts" aria-label="Notifications">♢<span class="notification-dot"></span></a>}@else{<button class="icon-button" aria-label="Notifications" disabled>♢</button>}
       </div>
     </header>
     <main id="main-content" tabindex="-1">
