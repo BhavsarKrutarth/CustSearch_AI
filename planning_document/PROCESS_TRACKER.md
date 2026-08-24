@@ -96,7 +96,7 @@ Individual implementation files for all 18 phases are indexed in `phase_implemen
 | 8 — Products & Retail Billing | Products, retail invoices/items/payments/participants, spend attribution and tenant reports | Transaction/idempotency/attribution/isolation tests; invoice E2E | Completed |
 | 9 — Platform Billing | Platform invoices/items/payments, subscription plan and tenant billing pages | Platform-vs-retail separation tests; authorization and E2E | Completed |
 | 10 — Preferences & Staff Voice Tagging | Personal/household preferences, manual tags, store-configured trigger parser, aliases, confirmation, recalculation, audit | Parser ambiguity/unknown-category/security tests; no hard-coded trigger; feature E2E | Completed |
-| 11 — Alerts & Real-Time | Alerts/notifications, SignalR, authorized groups, Angular realtime client, reconnect/recovery/de-duplication, outbox, health metrics | Authenticated connect, unauthorized group denial, reconnect, duplicate-event and REST recovery tests | In Progress |
+| 11 — Alerts & Real-Time | Alerts/notifications, SignalR, authorized groups, Angular realtime client, reconnect/recovery/de-duplication, outbox, health metrics | Authenticated connect, unauthorized group denial, reconnect, duplicate-event and REST recovery tests | Completed |
 | 12 — Integrations | Inbound APIs, integrations, HMAC webhooks, idempotency, retries and delivery logs | Signature/idempotency/retry/tenant-scope tests; integration E2E | Not Started |
 | 13 — Cameras, Python CCTV & Tracking | Cameras/zones, Python FastAPI/OpenCV/ONNX, person/customer/staff sessions, dwell/zone/proximity evidence, visit parties; Demo Mode | Python lint/tests, API integration tests, demo E2E without physical camera, optional approved RTSP smoke test | Not Started |
 | 14 — Consent-Based Recognition | Consent-gated enrollment/recognition and review workflow | Consent/withdrawal/data-minimization/security tests; recognition review E2E | Not Started |
@@ -152,6 +152,7 @@ Also validate, as applicable:
 | 2026-08-16 | 4 — Platform Tenant Management | Completed | Tenant lifecycle/plans/quotas/usage/audit APIs and Platform UI completed; SQL passed twice; 15 unit, 41 integration, 37 Angular, 5 Playwright and 3 Python tests passed; independent re-audit release-ready | Await explicit approval for Phase 5 |
 | 2026-08-24 | 10 — Preferences & Staff Voice Tagging | Completed | Phase 10 Validate run 32740932609: Release build, 71 unit, 141 integration, 59 Angular, 32 Playwright and 3 Python tests passed; V1.9 upgrade twice, standalone installer twice plus verifier, and canonical fresh install passed on SQL Server 2022 | Merge the fully tested Phase 10 branch into AIMainBranch |
 | 2026-08-24 | 11 — Alerts & Real-Time | In Progress | User approved Phase 11 after the merged Phase 10 baseline and all Phase 6–10 workflow results were re-verified green | Complete alert/outbox/SignalR/Angular implementation and full regression validation |
+| 2026-08-24 | 11 — Alerts & Real-Time | Completed | Phase 11 Validate run 32746620273: Release build, 75 unit, 157 integration, 64 Angular, 34 Playwright and 3 Python tests passed; V1.10 upgrade twice, standalone installer twice plus verifier, and canonical fresh install passed on SQL Server 2022 | Keep draft PR unmerged until explicit merge approval |
 
 ## Phase 1 Completion Evidence
 
