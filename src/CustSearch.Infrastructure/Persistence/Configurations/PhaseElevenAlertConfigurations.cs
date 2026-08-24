@@ -20,7 +20,7 @@ internal sealed class RealtimeEventConfiguration:IEntityTypeConfiguration<Realti
 {
     public void Configure(EntityTypeBuilder<RealtimeEvent>b)
     {
-        b.ToTable("RealtimeEvents","dbo");b.HasKey(x=>x.Id);b.Property(x=>x.Id).ValueGeneratedOnAdd();b.Property(x=>x.EventName).HasMaxLength(100).IsRequired();b.Property(x=>x.PayloadJson).HasColumnType("nvarchar(max)").IsRequired();b.Property(x=>x.CorrelationId).HasMaxLength(64).IsRequired();b.Property(x=>x.DeduplicationKey).HasMaxLength(200).IsRequired();b.Property(x=>x.OccurredUtc).HasPrecision(7);b.HasIndex(x=>new{x.TenantId,x.DeduplicationKey}).IsUnique();b.HasIndex(x=>new{x.TenantId,x.StoreId,x.Id});b.HasIndex(x=>new{x.TenantId,x.OccurredUtc});
+        b.ToTable("RealtimeEvents","dbo");b.HasKey(x=>x.Id);b.Property(x=>x.Id).ValueGeneratedOnAdd();b.Property(x=>x.EventName).HasMaxLength(100).IsRequired();b.Property(x=>x.PayloadJson).IsRequired();b.Property(x=>x.CorrelationId).HasMaxLength(64).IsRequired();b.Property(x=>x.DeduplicationKey).HasMaxLength(200).IsRequired();b.Property(x=>x.OccurredUtc).HasPrecision(7);b.HasIndex(x=>new{x.TenantId,x.DeduplicationKey}).IsUnique();b.HasIndex(x=>new{x.TenantId,x.StoreId,x.Id});b.HasIndex(x=>new{x.TenantId,x.OccurredUtc});
     }
 }
 
@@ -29,6 +29,6 @@ internal sealed class NotificationOutboxMessageConfiguration:IEntityTypeConfigur
 {
     public void Configure(EntityTypeBuilder<NotificationOutboxMessage>b)
     {
-        b.ToTable("NotificationOutbox","dbo",t=>{t.HasCheckConstraint("CK_NotificationOutbox_Status","[Status] BETWEEN 1 AND 6");t.HasCheckConstraint("CK_NotificationOutbox_AttemptCount","[AttemptCount]>=0");});b.HasKey(x=>x.Id);b.Property(x=>x.Id).ValueGeneratedOnAdd();b.Property(x=>x.Channel).HasMaxLength(30).IsRequired();b.Property(x=>x.EventType).HasMaxLength(100).IsRequired();b.Property(x=>x.PayloadJson).HasColumnType("nvarchar(max)").IsRequired();b.Property(x=>x.LastError).HasMaxLength(2000);b.Property(x=>x.CorrelationId).HasMaxLength(64).IsRequired();b.Property(x=>x.IdempotencyKey).HasMaxLength(200).IsRequired();b.Property(x=>x.CreatedUtc).HasPrecision(7);b.Property(x=>x.NextAttemptUtc).HasPrecision(7);b.Property(x=>x.ProcessedUtc).HasPrecision(7);b.Property(x=>x.RowVersion).IsRowVersion();b.HasIndex(x=>x.IdempotencyKey).IsUnique();b.HasIndex(x=>new{x.Status,x.NextAttemptUtc,x.Id});b.HasIndex(x=>new{x.TenantId,x.Status,x.CreatedUtc});
+        b.ToTable("NotificationOutbox","dbo",t=>{t.HasCheckConstraint("CK_NotificationOutbox_Status","[Status] BETWEEN 1 AND 6");t.HasCheckConstraint("CK_NotificationOutbox_AttemptCount","[AttemptCount]>=0");});b.HasKey(x=>x.Id);b.Property(x=>x.Id).ValueGeneratedOnAdd();b.Property(x=>x.Channel).HasMaxLength(30).IsRequired();b.Property(x=>x.EventType).HasMaxLength(100).IsRequired();b.Property(x=>x.PayloadJson).IsRequired();b.Property(x=>x.LastError).HasMaxLength(2000);b.Property(x=>x.CorrelationId).HasMaxLength(64).IsRequired();b.Property(x=>x.IdempotencyKey).HasMaxLength(200).IsRequired();b.Property(x=>x.CreatedUtc).HasPrecision(7);b.Property(x=>x.NextAttemptUtc).HasPrecision(7);b.Property(x=>x.ProcessedUtc).HasPrecision(7);b.Property(x=>x.RowVersion).IsRowVersion();b.HasIndex(x=>x.IdempotencyKey).IsUnique();b.HasIndex(x=>new{x.Status,x.NextAttemptUtc,x.Id});b.HasIndex(x=>new{x.TenantId,x.Status,x.CreatedUtc});
     }
 }
