@@ -8,7 +8,7 @@ namespace CustSearch.Infrastructure.AlertsRealtime;
 /// <summary>Claims due outbox rows optimistically and delivers only through explicitly registered channel adapters.</summary>
 public sealed class NotificationOutboxProcessor(CustSearchDbContext db,IEnumerable<INotificationChannelAdapter> adapters,TimeProvider clock):INotificationOutboxProcessor
 {
-    private readonly IReadOnlyDictionary<string,INotificationChannelAdapter> channels=adapters.ToDictionary(x=>x.Channel,StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string,INotificationChannelAdapter> channels=adapters.ToDictionary(x=>x.Channel,StringComparer.OrdinalIgnoreCase);
     public async Task<OutboxProcessResult> ProcessDueAsync(int batchSize=50,CancellationToken cancellationToken=default)
     {
         batchSize=Math.Clamp(batchSize,1,200);var now=clock.GetUtcNow().UtcDateTime;var due=await db.NotificationOutbox.AsNoTracking().Where(x=>(x.Status==NotificationOutboxStatus.Pending||x.Status==NotificationOutboxStatus.Failed||x.Status==NotificationOutboxStatus.Retrying||x.Status==NotificationOutboxStatus.Processing)&&x.NextAttemptUtc<=now).OrderBy(x=>x.NextAttemptUtc).ThenBy(x=>x.Id).Select(x=>x.Id).Take(batchSize).ToListAsync(cancellationToken).ConfigureAwait(false);var claimed=0;var delivered=0;var failed=0;var dead=0;
