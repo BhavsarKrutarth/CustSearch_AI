@@ -1,6 +1,6 @@
 # CustSearch AI — Phase Process Tracker
 
-Last updated: 2026-08-16 (Asia/Calcutta)
+Last updated: 2026-08-24 (Asia/Calcutta)
 
 ## Execution Rules
 
@@ -90,12 +90,12 @@ Individual implementation files for all 18 phases are indexed in `phase_implemen
 | 2 — Multi-Tenant Auth Foundation | Tenant model and ownership, tenant context, tenant-aware repositories/SPs, Platform/Tenant authentication, refresh-token flow, full dynamic JWT/session-expiry handling; shared custom Light/Dark/System design system and initial Platform/Customer Admin shells based on approved references | Auth unit/integration tests including expiry/rotation/revocation/reuse; cross-tenant denial tests; theme persistence/accessibility/UI tests; all Phase 1 gates remain green | Completed |
 | 3 — Authorization & Admin Shells | Platform/tenant roles and permissions, Angular shells/navigation, auth/role/permission guards, typed clients, suspension/session rules | API policy tests, UI guard tests, unauthorized/forbidden E2E coverage, full builds | Completed |
 | 4 — Platform Tenant Management | Platform dashboard, tenant CRUD, activate/suspend, plans, quotas, usage, detail summary, platform audit | CRUD/business/security/integration tests; Platform Admin E2E | Completed |
-| 5 — Tenant Users, Stores, Shop Owner & Staff | Tenant users/roles, ShopOwner/TenantOwner, staff profiles/assignments/shifts/presence, stores/quotas/categories, canonical address/map coordinates/geofence/time-zone/location verification, dynamic store voice settings, Customer Admin dashboard base | Tenant/store isolation, location validation, permission and CRUD tests; Customer Admin E2E slice | Awaiting Approval |
-| 6 — Shopper Customers | Customer, anonymous visitor and search APIs; Angular customer/visitor features; smart profile | API/unit/integration/UI tests; tenant-isolation validation | Not Started |
-| 7 — Households & Visits | Households, members, visit parties and visits with verified relationship rules | Relationship/privacy rules and tenant isolation tests; feature E2E | Not Started |
-| 8 — Products & Retail Billing | Products, retail invoices/items/payments/participants, spend attribution and tenant reports | Transaction/idempotency/attribution/isolation tests; invoice E2E | Not Started |
-| 9 — Platform Billing | Platform invoices/items/payments, subscription plan and tenant billing pages | Platform-vs-retail separation tests; authorization and E2E | Not Started |
-| 10 — Preferences & Staff Voice Tagging | Personal/household preferences, manual tags, store-configured trigger parser, aliases, confirmation, recalculation, audit | Parser ambiguity/unknown-category/security tests; no hard-coded trigger; feature E2E | Not Started |
+| 5 — Tenant Users, Stores, Shop Owner & Staff | Tenant users/roles, ShopOwner/TenantOwner, staff profiles/assignments/shifts/presence, stores/quotas/categories, canonical address/map coordinates/geofence/time-zone/location verification, dynamic store voice settings, Customer Admin dashboard base | Tenant/store isolation, location validation, permission and CRUD tests; Customer Admin E2E slice | Completed |
+| 6 — Shopper Customers | Customer, anonymous visitor and search APIs; Angular customer/visitor features; smart profile | API/unit/integration/UI tests; tenant-isolation validation | Completed |
+| 7 — Households & Visits | Households, members, visit parties and visits with verified relationship rules | Relationship/privacy rules and tenant isolation tests; feature E2E | Completed |
+| 8 — Products & Retail Billing | Products, retail invoices/items/payments/participants, spend attribution and tenant reports | Transaction/idempotency/attribution/isolation tests; invoice E2E | Completed |
+| 9 — Platform Billing | Platform invoices/items/payments, subscription plan and tenant billing pages | Platform-vs-retail separation tests; authorization and E2E | Completed |
+| 10 — Preferences & Staff Voice Tagging | Personal/household preferences, manual tags, store-configured trigger parser, aliases, confirmation, recalculation, audit | Parser ambiguity/unknown-category/security tests; no hard-coded trigger; feature E2E | Completed |
 | 11 — Alerts & Real-Time | Alerts/notifications, SignalR, authorized groups, Angular realtime client, reconnect/recovery/de-duplication, outbox, health metrics | Authenticated connect, unauthorized group denial, reconnect, duplicate-event and REST recovery tests | Not Started |
 | 12 — Integrations | Inbound APIs, integrations, HMAC webhooks, idempotency, retries and delivery logs | Signature/idempotency/retry/tenant-scope tests; integration E2E | Not Started |
 | 13 — Cameras, Python CCTV & Tracking | Cameras/zones, Python FastAPI/OpenCV/ONNX, person/customer/staff sessions, dwell/zone/proximity evidence, visit parties; Demo Mode | Python lint/tests, API integration tests, demo E2E without physical camera, optional approved RTSP smoke test | Not Started |
@@ -150,6 +150,7 @@ Also validate, as applicable:
 | 2026-08-16 | 3 — Authorization & Admin Shells | Completed | Database-authoritative authorization/session rules, typed Angular guards/navigation and repeat-safe V1.2.0 SQL completed; 11 unit, 30 integration, 32 Angular, 2 Playwright and 3 Python tests passed; independent audit clear | Await explicit approval for Phase 4 |
 | 2026-08-16 | 4 — Platform Tenant Management | In Progress | User explicitly approved Phase 4 and requested multiple agents; safe Git fetch remained ahead 0/behind 0; SQL/data, backend/API and Angular/E2E workstreams started | Complete tenant lifecycle, plans, quotas, usage, audit and Platform Admin validation |
 | 2026-08-16 | 4 — Platform Tenant Management | Completed | Tenant lifecycle/plans/quotas/usage/audit APIs and Platform UI completed; SQL passed twice; 15 unit, 41 integration, 37 Angular, 5 Playwright and 3 Python tests passed; independent re-audit release-ready | Await explicit approval for Phase 5 |
+| 2026-08-24 | 10 — Preferences & Staff Voice Tagging | Completed | Phase 10 Validate run 32740932609: Release build, 71 unit, 141 integration, 59 Angular, 32 Playwright and 3 Python tests passed; V1.9 upgrade twice, standalone installer twice plus verifier, and canonical fresh install passed on SQL Server 2022 | Merge the fully tested Phase 10 branch into AIMainBranch |
 
 ## Phase 1 Completion Evidence
 

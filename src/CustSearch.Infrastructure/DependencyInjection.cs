@@ -3,6 +3,7 @@ using CustSearch.Application.Abstractions.Data;
 using CustSearch.Application.HouseholdsVisits;
 using CustSearch.Application.PlatformBilling;
 using CustSearch.Application.PlatformTenancy;
+using CustSearch.Application.PreferencesVoice;
 using CustSearch.Application.RetailBilling;
 using CustSearch.Application.ShopperCustomers;
 using CustSearch.Application.Tenancy;
@@ -13,6 +14,7 @@ using CustSearch.Infrastructure.HouseholdsVisits;
 using CustSearch.Infrastructure.Persistence;
 using CustSearch.Infrastructure.PlatformBilling;
 using CustSearch.Infrastructure.PlatformTenancy;
+using CustSearch.Infrastructure.PreferencesVoice;
 using CustSearch.Infrastructure.RetailBilling;
 using CustSearch.Infrastructure.Security;
 using CustSearch.Infrastructure.ShopperCustomers;
@@ -36,7 +38,7 @@ public static class DependencyInjection
         services.AddScoped<AuthenticationService>();services.AddScoped<IAuthenticationService,PhaseFiveAuthenticationServiceDecorator>();
         services.AddScoped<ITenantUserRepository,TenantUserRepository>();services.AddScoped<IPlatformTenantManagementService,PlatformTenantManagementService>();services.AddScoped<IPlatformBillingService,PlatformBillingService>();services.AddScoped<ITenantOperationsRepository,TenantOperationsRepository>();services.AddScoped<TenantOperationsService>();services.AddScoped<ITenantOperationsService,TenantOperationsSecurityDecorator>();
         services.AddScoped<IShopperCustomerRepository,ShopperCustomerRepository>();services.AddScoped<IShopperCustomerService,ShopperCustomerService>();services.AddScoped<IHouseholdsVisitsRepository,HouseholdsVisitsRepository>();services.AddScoped<IHouseholdsVisitsService,HouseholdsVisitsService>();
-        services.AddScoped<IRetailBillingRepository,RetailBillingRepository>();services.AddScoped<IRetailBillingService,RetailBillingService>();
+        services.AddScoped<IRetailBillingRepository,RetailBillingRepository>();services.AddScoped<IRetailBillingService,RetailBillingService>();services.AddScoped<IPreferencesVoiceService,PreferencesVoiceService>();
         return services;
     }
 }
