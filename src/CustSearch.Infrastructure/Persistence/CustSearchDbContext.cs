@@ -32,5 +32,8 @@ public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> op
     // Phase 14 Consent-Based Recognition — purpose consent, encrypted derived templates and human-reviewed candidates.
     public DbSet<CustomerRecognitionConsent> CustomerRecognitionConsents=>Set<CustomerRecognitionConsent>(); public DbSet<BiometricTemplate> BiometricTemplates=>Set<BiometricTemplate>(); public DbSet<RecognitionCandidate> RecognitionCandidates=>Set<RecognitionCandidate>();
 
+    // Phase 15 Reports & Async Exports — durable authorized jobs; report rows are queried through Dapper stored procedures.
+    public DbSet<ExportJob> ExportJobs=>Set<ExportJob>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder){ArgumentNullException.ThrowIfNull(modelBuilder);modelBuilder.ApplyConfigurationsFromAssembly(typeof(CustSearchDbContext).Assembly);base.OnModelCreating(modelBuilder);}
 }

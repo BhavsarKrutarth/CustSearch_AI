@@ -45,6 +45,7 @@ export const routes:Routes=[
   {path:'customer-admin/integrations',title:'Integration Settings | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.integrationsView])],loadComponent:()=>import('./features/integrations/integration-settings-page').then(m=>m.IntegrationSettingsPage)},
   {path:'customer-admin/cameras',title:'Camera operations | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.camerasView])],loadComponent:()=>import('./features/cameras/camera-operations-page').then(m=>m.CameraOperationsPage)},
   {path:'customer-admin/recognition',title:'Consent-based recognition | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.recognitionView])],loadComponent:()=>import('./features/recognition/recognition-review-page').then(m=>m.RecognitionReviewPage)},
+  {path:'customer-admin/reports',title:'Reports & exports | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.reportsView])],loadComponent:()=>import('./features/reports/reports-dashboard-page').then(m=>m.ReportsDashboardPage)},
 
   // Phase 9 Platform Billing tenant views — CustSearch subscription billing only.
   {path:'customer-admin/billing',title:'CustSearch billing | CustSearch AI',data:{mode:'summary'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantPlatformBillingSubscriptionsView])],loadComponent:tenantBillingPage},
