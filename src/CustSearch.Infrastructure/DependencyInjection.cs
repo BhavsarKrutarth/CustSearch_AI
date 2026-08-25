@@ -3,6 +3,7 @@ using CustSearch.Application.Abstractions.Data;
 using CustSearch.Application.AlertsRealtime;
 using CustSearch.Application.HouseholdsVisits;
 using CustSearch.Application.Integrations;
+using CustSearch.Application.CamerasTracking;
 using CustSearch.Application.PlatformBilling;
 using CustSearch.Application.PlatformTenancy;
 using CustSearch.Application.PreferencesVoice;
@@ -15,6 +16,7 @@ using CustSearch.Infrastructure.Data;
 using CustSearch.Infrastructure.AlertsRealtime;
 using CustSearch.Infrastructure.HouseholdsVisits;
 using CustSearch.Infrastructure.Integrations;
+using CustSearch.Infrastructure.CamerasTracking;
 using CustSearch.Infrastructure.Persistence;
 using CustSearch.Infrastructure.PlatformBilling;
 using CustSearch.Infrastructure.PlatformTenancy;
@@ -45,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<IRetailBillingRepository,RetailBillingRepository>();services.AddScoped<IRetailBillingService,RetailBillingService>();services.AddScoped<IPreferencesVoiceService,PreferencesVoiceService>();
         services.AddSingleton<AlertDeduplicationCoordinator>();services.AddScoped<IAlertsRealtimeService,AlertsRealtimeService>();services.AddScoped<INotificationOutboxProcessor,NotificationOutboxProcessor>();
         services.AddScoped<IIntegrationManagementService,IntegrationManagementService>();services.AddScoped<IInboundIntegrationService,InboundIntegrationService>();services.AddScoped<IIntegrationOutboxProcessor,IntegrationOutboxProcessor>();
+        services.AddScoped<ICameraTrackingService,CameraTrackingService>();
         return services;
     }
 }

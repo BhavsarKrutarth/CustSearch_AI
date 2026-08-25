@@ -1,6 +1,6 @@
 # Phase 13 — Cameras, Python CCTV & Tracking
 
-Status: Not Started
+Status: In Progress
 
 ## Scope
 
@@ -8,4 +8,4 @@ Cameras/zones, Python FastAPI/OpenCV/ONNX, visitor/customer/staff tracking sessi
 
 ## Done Summary
 
-Pending approval, implementation and validation.
+Implementation is active on `phase13-cctv-tracking`. Completion remains blocked on the full green Phase 5–13 regression and tested V1.12.0 canonical SQL. Phase 13 remains anonymous tracking only; recognition is not included.
