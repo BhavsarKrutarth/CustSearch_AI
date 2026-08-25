@@ -17,7 +17,7 @@ export const ADMIN_NAVIGATION:Record<'customer'|'platform',readonly AdminNavigat
     {label:'Retail reports',route:'/customer-admin/retail/reports',permission:PERMISSIONS.retailReportsView},
     {label:'Alerts',route:'/customer-admin/alerts',permission:PERMISSIONS.alertsView},
     {label:'Integrations',route:'/customer-admin/integrations',permission:PERMISSIONS.integrationsView},
-    {label:'Monitoring',route:null,permission:PERMISSIONS.camerasView},
+    {label:'Camera operations',route:'/customer-admin/cameras',permission:PERMISSIONS.camerasView},
   ],
   platform:[
     {label:'Dashboard',route:'/admin/dashboard',permission:PERMISSIONS.tenantsOperationalSummary},

@@ -1,6 +1,6 @@
 # CustSearch.AI
 
-FastAPI boundary for person detection/tracking, face detection and consent-based recognition. Phase 1 provides health, configuration, structured logging and Demo Mode only; camera/model workflows are implemented in their approved phases.
+FastAPI/OpenCV/ONNX boundary for anonymous person detection and operational tracking. Phase 13 does not perform identity or biometric recognition, stores no frames, and publishes normalized metadata only through the authenticated .NET API. Demo Mode is deterministic and cannot run in Production.
 
 ```powershell
 python -m venv .venv

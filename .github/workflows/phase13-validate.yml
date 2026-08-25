@@ -1,0 +1,132 @@
+name: Phase 13 Validate
+
+on:
+  push:
+    branches: [phase13-cctv-tracking]
+  pull_request:
+    branches: [AIMainBranch]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SA_PASSWORD: 'CustSearch_Phase13_2026!Sql'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with: {dotnet-version: 8.0.424}
+      - name: Setup Node for pinned Angular 21
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: src/CustSearch.Admin/package-lock.json
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+
+      - name: Prepare validated Phase 12 baseline and prospective Phase 13 canonical
+        shell: bash
+        run: |
+          git show origin/AIMainBranch:database/CustSearchAi.sql > /tmp/CustSearchAi.phase12-base.raw
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/CustSearchAi.phase12-base.raw').read_bytes();enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8');base=raw.decode(enc)
+          if "VersionNumber=N'V1.11.0'" not in base: raise SystemExit('AIMainBranch must contain validated Phase 12 V1.11.0 before Phase 13.')
+          upgrade=Path('database/09_Upgrade/V1.12.0_Phase13_CamerasTracking.sql').read_text(encoding='utf-8-sig')
+          branch_raw=Path('database/CustSearchAi.sql').read_bytes();branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8');branch=branch_raw.decode(branch_enc)
+          final=branch if "VersionNumber=N'V1.12.0'" in branch else base.rstrip()+"\n\n-- ============================================================\n-- PHASE 13 - CAMERAS & ANONYMOUS TRACKING\n-- VERSION: V1.12.0\n-- ============================================================\n"+upgrade.strip()+"\n"
+          Path('/tmp/CustSearchAi.phase12-base.sql').write_text(base,encoding='utf-8');Path('/tmp/CustSearchAi.phase13-final.sql').write_text(final,encoding='utf-8')
+          PY
+
+      - name: Restore and build .NET Release
+        run: dotnet restore CustSearch_AI.sln && dotnet build CustSearch_AI.sln --configuration Release --no-restore
+      - name: Test .NET through Phase 13
+        run: dotnet test CustSearch_AI.sln --configuration Release --no-build --logger "trx;LogFileName=phase13-tests.trx"
+      - name: Install Angular dependencies reproducibly
+        working-directory: src/CustSearch.Admin
+        run: npm ci --no-audit --no-fund
+      - name: Lint, test and build Angular through Phase 13
+        working-directory: src/CustSearch.Admin
+        run: npm run lint && npm run test:ci && npm run build:production
+      - name: Prepare Playwright
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Run full Playwright regression through Phase 13
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm test
+      - name: Ruff and pytest through Phase 13
+        run: |
+          python -m pip install --disable-pip-version-check -r src/CustSearch.AI/requirements-dev.txt
+          ruff check src/CustSearch.AI tests/CustSearch.AI.Tests
+          PYTHONPATH=src/CustSearch.AI python -m pytest -q tests/CustSearch.AI.Tests
+
+      - name: Validate Phase 13 security and database structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          files=[Path('database/09_Upgrade/V1.12.0_Phase13_CamerasTracking.sql').read_text(),Path('database/run-phase13.sql').read_text()]
+          required=['dbo.Cameras','dbo.CameraZoneConfigurations','dbo.PersonTrackSessions','dbo.CameraTrackHandoffs','dbo.CameraOperationalEvents','RtspConfigurationReference','UX_CameraEvents_Service_Event','UX_CameraEvents_Service_Idempotency','CK_PersonTracks_Subject',"VersionNumber=N'V1.12.0'"]
+          for text in files:
+              missing=[x for x in required if x not in text]
+              if missing: raise SystemExit(f'Missing Phase 13 SQL markers: {missing}')
+              low=re.sub(r'--[^\r\n]*','',re.sub(r'/\*.*?\*/','',text,flags=re.S)).lower()
+              if ':r ' in low or 'powershell' in low: raise SystemExit('Phase 13 SQL must remain standalone T-SQL.')
+              if re.search(r'\b(rawframe|embedding|biometrictemplate|rtspurl|camerapassword)\b',low): raise SystemExit('Phase 13 SQL contains forbidden image/biometric/plain camera credential storage.')
+          service=Path('src/CustSearch.Infrastructure/CamerasTracking/CameraTrackingService.cs').read_text()
+          controller=Path('src/CustSearch.API/Controllers/CctvEventsController.cs').read_text()
+          python=Path('src/CustSearch.AI/app/tracking.py').read_text()
+          ui=Path('src/CustSearch.Admin/src/app/features/cameras/cameras-api.service.ts').read_text()
+          if any(x not in service for x in ['HMACSHA256','FixedTimeEquals','credential.TenantId','credential.StoreIds','ForbiddenCctvFields','IdempotencyKey']): raise SystemExit('CCTV HMAC, service scope, identity rejection or idempotency guard is incomplete.')
+          if 'RequestSizeLimit' not in controller or 'EnableRateLimiting' not in controller: raise SystemExit('CCTV API size/rate limits are missing.')
+          ui_executable=re.sub(r'//[^\r\n]*','',re.sub(r'/\*.*?\*/','',ui,flags=re.S))
+          if re.search(r'\btenantId\b',ui_executable,re.I): raise SystemExit('Angular camera client must not accept browser TenantId.')
+          if 'deterministic_demo_events' not in python: raise SystemExit('Deterministic Python Demo Mode is missing.')
+          if 'IsProduction()' not in Path('src/CustSearch.API/Program.cs').read_text() or 'reject_production_demo' not in Path('src/CustSearch.AI/app/config.py').read_text(): raise SystemExit('Production Demo Mode gates are missing.')
+          PY
+
+      - name: Start SQL Server 2022
+        run: |
+          docker run -d --name phase13-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" -p 14343:1433 mcr.microsoft.com/mssql/server:2022-latest
+          for i in {1..60}; do if docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then break;fi;if [ "$i" = 60 ];then docker logs phase13-sql;exit 1;fi;sleep 2;done
+      - name: Validate V1.12.0 upgrade twice
+        run: |
+          docker cp /tmp/CustSearchAi.phase12-base.sql phase13-sql:/tmp/base.sql
+          docker cp database/09_Upgrade/V1.12.0_Phase13_CamerasTracking.sql phase13-sql:/tmp/phase13.sql
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase13.sql
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase13.sql
+      - name: Validate standalone runner twice and verifier
+        run: |
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;DROP DATABASE [CustSearch_AI];"
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
+          docker cp database/run-phase13.sql phase13-sql:/tmp/run.sql
+          docker cp database/verify-phase13.sql phase13-sql:/tmp/verify.sql
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run.sql
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run.sql
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/verify.sql
+      - name: Validate prospective canonical fresh install
+        run: |
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;DROP DATABASE [CustSearch_AI];"
+          docker cp /tmp/CustSearchAi.phase13-final.sql phase13-sql:/tmp/final.sql
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
+          docker exec phase13-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF(SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.12.0')<>1 THROW 54620,'Canonical V1.12.0 invalid',1;IF OBJECT_ID(N'dbo.Cameras',N'U') IS NULL OR OBJECT_ID(N'dbo.CameraOperationalEvents',N'U') IS NULL THROW 54621,'Canonical Phase 13 objects missing',1;DBCC CHECKCONSTRAINTS WITH ALL_CONSTRAINTS;"
+      - name: Stop SQL Server
+        if: always()
+        run: docker rm -f phase13-sql >/dev/null 2>&1 || true
+      - name: Persist tested Phase 13 canonical SQL
+        if: github.event_name == 'push'
+        run: |
+          cp /tmp/CustSearchAi.phase13-final.sql database/CustSearchAi.sql
+          if git diff --quiet -- database/CustSearchAi.sql;then echo 'Phase 13 canonical already persisted.';exit 0;fi
+          git config user.name "github-actions[bot]";git config user.email "41898282+github-actions[bot]@users.noreply.github.com";git add database/CustSearchAi.sql;git commit -m "phase13: persist V1.12 canonical SQL";git push origin HEAD:phase13-cctv-tracking

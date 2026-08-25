@@ -26,5 +26,8 @@ public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> op
     // Phase 12 Integrations — secret-reference configuration, inbound receipts, outbound outbox and payload-free delivery audit.
     public DbSet<IntegrationConfiguration> IntegrationConfigurations=>Set<IntegrationConfiguration>(); public DbSet<IntegrationInboundEvent> IntegrationInboundEvents=>Set<IntegrationInboundEvent>(); public DbSet<IntegrationOutboxMessage> IntegrationOutbox=>Set<IntegrationOutboxMessage>(); public DbSet<IntegrationDeliveryLog> IntegrationDeliveryLogs=>Set<IntegrationDeliveryLog>();
 
+    // Phase 13 Cameras & Tracking — configuration references, versioned zones and anonymous-first operational tracks.
+    public DbSet<Camera> Cameras=>Set<Camera>(); public DbSet<CameraZoneConfiguration> CameraZoneConfigurations=>Set<CameraZoneConfiguration>(); public DbSet<PersonTrackSession> PersonTrackSessions=>Set<PersonTrackSession>(); public DbSet<CameraTrackHandoff> CameraTrackHandoffs=>Set<CameraTrackHandoff>(); public DbSet<CameraOperationalEvent> CameraOperationalEvents=>Set<CameraOperationalEvent>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder){ArgumentNullException.ThrowIfNull(modelBuilder);modelBuilder.ApplyConfigurationsFromAssembly(typeof(CustSearchDbContext).Assembly);base.OnModelCreating(modelBuilder);}
 }

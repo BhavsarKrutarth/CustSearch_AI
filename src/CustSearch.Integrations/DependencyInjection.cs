@@ -1,4 +1,5 @@
 using CustSearch.Application.Integrations;
+using CustSearch.Application.CamerasTracking;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CustSearch.Integrations;
@@ -12,6 +13,7 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<IIntegrationSecretResolver,ConfigurationIntegrationSecretResolver>();
+        services.AddSingleton<ICctvServiceSecretResolver,ConfigurationCctvServiceSecretResolver>();
         services.AddHttpClient<IIntegrationTransport,HttpIntegrationTransport>(client=>client.Timeout=Timeout.InfiniteTimeSpan);
         return services;
     }
