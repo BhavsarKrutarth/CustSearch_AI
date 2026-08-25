@@ -1,6 +1,6 @@
 # CustSearch AI — Phase Process Tracker
 
-Last updated: 2026-08-24 (Asia/Calcutta)
+Last updated: 2026-08-25 (Asia/Kolkata)
 
 ## Execution Rules
 
@@ -98,7 +98,7 @@ Individual implementation files for all 18 phases are indexed in `phase_implemen
 | 10 — Preferences & Staff Voice Tagging | Personal/household preferences, manual tags, store-configured trigger parser, aliases, confirmation, recalculation, audit | Parser ambiguity/unknown-category/security tests; no hard-coded trigger; feature E2E | Completed |
 | 11 — Alerts & Real-Time | Alerts/notifications, SignalR, authorized groups, Angular realtime client, reconnect/recovery/de-duplication, outbox, health metrics | Authenticated connect, unauthorized group denial, reconnect, duplicate-event and REST recovery tests | Completed |
 | 12 — Integrations | Inbound APIs, integrations, HMAC webhooks, idempotency, retries and delivery logs | Signature/idempotency/retry/tenant-scope tests; integration E2E | Completed |
-| 13 — Cameras, Python CCTV & Tracking | Cameras/zones, Python FastAPI/OpenCV/ONNX, person/customer/staff sessions, dwell/zone/proximity evidence, visit parties; Demo Mode | Python lint/tests, API integration tests, demo E2E without physical camera, optional approved RTSP smoke test | Not Started |
+| 13 — Cameras, Python CCTV & Tracking | Cameras/zones, Python FastAPI/OpenCV/ONNX, person/customer/staff sessions, dwell/zone/proximity evidence, visit parties; Demo Mode | Python lint/tests, API integration tests, demo E2E without physical camera, optional approved RTSP smoke test | Completed |
 | 14 — Consent-Based Recognition | Consent-gated enrollment/recognition and review workflow | Consent/withdrawal/data-minimization/security tests; recognition review E2E | Not Started |
 | 15 — Reports & Async Exports | Platform/tenant, staff, conversion, dwell, voice, family and billing reports; async CSV/Excel/PDF exports and progress events | Accuracy/authorization/isolation tests; worker/export/WebSocket E2E | Not Started |
 | 16 — Operational Platform | Audit, worker hardening, Redis/backplane readiness, settings, health, retention | Worker/retry/cache/health/retention tests; operational smoke tests | Not Started |
@@ -155,6 +155,7 @@ Also validate, as applicable:
 | 2026-08-24 | 11 — Alerts & Real-Time | Completed | Phase 11 Validate run 32746620273: Release build, 75 unit, 157 integration, 64 Angular, 34 Playwright and 3 Python tests passed; V1.10 upgrade twice, standalone installer twice plus verifier, and canonical fresh install passed on SQL Server 2022 | Keep draft PR unmerged until explicit merge approval |
 | 2026-08-24 | 12 — Integrations | In Progress | Phase 11 PR 13, AIMain merge, V1.10 canonical and all Phase 6–11 checks re-verified green; safe Phase 12 branch created from merge commit b851c467 | Complete secure integrations implementation and full Phase 5–12 validation |
 | 2026-08-24 | 12 — Integrations | Completed | 81 unit, 174 integration/API, 67 Angular, 36 Playwright and 3 Python tests green; Phase 6–12 workflows green; V1.11 upgrade/runner/verifier/canonical fresh install green | Draft PR 14 retained for review; no AIMain merge requested |
+| 2026-08-25 | 13 — Cameras, Python CCTV & Tracking | Completed | Phase 13 Validate run 32798417105: 86 unit, 188 integration/API, 70 Angular, 38 Playwright and 7 Python tests green; Phase 6–12 workflows green; V1.12 upgrade/runner/verifier/canonical fresh install green | Create Phase 14 branch from the exact tested Phase 13 head |
 
 ## Phase 1 Completion Evidence
 
