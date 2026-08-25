@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using CustSearch.API.AlertsRealtime;
 using CustSearch.API.Recognition;
 using CustSearch.API.Security;
 using CustSearch.Application.Authentication;
