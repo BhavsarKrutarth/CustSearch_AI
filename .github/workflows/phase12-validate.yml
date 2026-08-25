@@ -50,8 +50,8 @@ jobs:
           base=base_raw.decode(enc)
           if "VersionNumber=N'V1.10.0'" not in base:
               raise SystemExit('AIMainBranch must contain validated Phase 11 V1.10.0 before Phase 12.')
-          if "VersionNumber=N'V1.11.0'" in base:
-              raise SystemExit('AIMainBranch unexpectedly already contains Phase 12 V1.11.0.')
+          # Later phases intentionally start from an AIMainBranch that already contains
+          # V1.11.0. The idempotent Phase 12 upgrade remains part of their regression gate.
           upgrade=Path('database/09_Upgrade/V1.11.0_Phase12_Integrations.sql').read_text(encoding='utf-8-sig')
           branch_raw=Path('database/CustSearchAi.sql').read_bytes()
           branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
