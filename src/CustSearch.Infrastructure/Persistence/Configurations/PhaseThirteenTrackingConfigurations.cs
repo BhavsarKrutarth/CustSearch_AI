@@ -10,7 +10,7 @@ internal sealed class CameraConfiguration:IEntityTypeConfiguration<Camera>
 }
 internal sealed class CameraZoneConfigurationConfiguration:IEntityTypeConfiguration<CameraZoneConfiguration>
 {
-    public void Configure(EntityTypeBuilder<CameraZoneConfiguration>b){b.ToTable("CameraZoneConfigurations","dbo",t=>{t.HasCheckConstraint("CK_CameraZones_Type","[ZoneType] BETWEEN 1 AND 7");t.HasCheckConstraint("CK_CameraZones_Version","[Version]>=1");});b.HasKey(x=>x.Id);b.Property(x=>x.Id).ValueGeneratedOnAdd();b.Property(x=>x.ZoneCode).HasMaxLength(50).IsRequired();b.Property(x=>x.Name).HasMaxLength(150).IsRequired();b.Property(x=>x.GeometryJson).HasMaxLength(8000).IsRequired();b.Property(x=>x.EffectiveUtc).HasPrecision(7);b.Property(x=>x.SupersededUtc).HasPrecision(7);b.HasIndex(x=>new{x.TenantId,x.CameraId,x.ZoneCode,x.Version}).IsUnique();b.HasIndex(x=>new{x.TenantId,x.StoreId,x.CameraId,x.IsActive});}
+    public void Configure(EntityTypeBuilder<CameraZoneConfiguration>b){b.ToTable("CameraZoneConfigurations","dbo",t=>{t.HasCheckConstraint("CK_CameraZones_Type","[ZoneType] BETWEEN 1 AND 7");t.HasCheckConstraint("CK_CameraZones_Version","[Version]>=1");});b.HasKey(x=>x.Id);b.Property(x=>x.Id).ValueGeneratedOnAdd();b.Property(x=>x.ZoneCode).HasMaxLength(50).IsRequired();b.Property(x=>x.Name).HasMaxLength(150).IsRequired();b.Property(x=>x.GeometryJson).HasColumnType("nvarchar(max)").IsRequired();b.Property(x=>x.EffectiveUtc).HasPrecision(7);b.Property(x=>x.SupersededUtc).HasPrecision(7);b.HasIndex(x=>new{x.TenantId,x.CameraId,x.ZoneCode,x.Version}).IsUnique();b.HasIndex(x=>new{x.TenantId,x.StoreId,x.CameraId,x.IsActive});}
 }
 internal sealed class PersonTrackSessionConfiguration:IEntityTypeConfiguration<PersonTrackSession>
 {
