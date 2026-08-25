@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using CustSearch.API.AlertsRealtime;
 using CustSearch.API.ReportsExports;
+using CustSearch.API.Security;
 using CustSearch.Application.Authentication;
 using CustSearch.Application.Authorization;
 using CustSearch.Application.ReportsExports;
