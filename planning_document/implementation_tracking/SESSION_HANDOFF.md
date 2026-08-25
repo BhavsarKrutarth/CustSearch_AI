@@ -34,7 +34,7 @@
 ## Known Blockers
 
 1. SQL Server 2022, Redis multi-node and IIS deployment environments are not configured.
-2. Phase 18 V1.16 live schema provenance/source branch is missing.
+2. Phase 18 V1.16 SQL is on divergent AIMain commit `055b052`; selected-chain application code is missing.
 
 ## Files Currently Being Worked On
 
@@ -54,4 +54,5 @@
 
 - Never downgrade/recreate the live database; its latest ledger row is V1.16.
 - Smoke cleanup requires exact token `DELETE-SMOKE-TENANT-001`; it has not been executed so the UAT graph remains reusable.
-- Keep PRs #10, #18 and #19 open/unmerged. Phase 18 must wait for source/live reconciliation.
+- Keep PRs #10, #18 and #19 open/unmerged. AIMain and Phase16 diverge 3-vs-15 commits from `b73704a`;
+  Phase 18 must wait for deliberate integration and source/live verification.

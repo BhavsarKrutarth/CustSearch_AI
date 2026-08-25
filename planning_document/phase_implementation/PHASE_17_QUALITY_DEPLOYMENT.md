@@ -24,13 +24,13 @@ configuration hardening, IIS SPA/WebSocket deployment and final security review.
 - Add/validate deployable IIS SPA rewrite artifact and perform an actual IIS/WebSocket smoke test.
 - Validate on an actual SQL Server 2022 environment.
 - Validate Redis multi-node SignalR/backplane behavior.
-- Close any remaining critical/high security findings; live V1.16/source drift blocks Phase 18.
+- Close remaining critical/high findings; divergent V1.16 SQL/application integration blocks Phase 18.
 
 ## Done Summary
 
 Not complete. Local implementation/testing is in progress; deployment/environment gates above remain
 blocked or pending. Do not start Phase 18 application implementation until Phase 17 is evidence-green
-and V1.16 schema provenance is safely reconciled.
+and the recovered AIMain V1.16 SQL is deliberately integrated and verified against live state.
 
 ## Observed local regression
 

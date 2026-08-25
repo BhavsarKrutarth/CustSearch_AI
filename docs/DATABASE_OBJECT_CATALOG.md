@@ -26,7 +26,8 @@ engine is version 17; SQL Server 2022-specific execution remains a separate bloc
 ## Version ledger
 
 Exactly one row was observed for each version `V1.0.0` through `V1.16.0`. The selected branch's
-canonical script ends at `V1.15.0`; `V1.16.0` is a live-only Phase 18 foundation and is documented
+canonical script ends at `V1.15.0`; V1.16 SQL was recovered on divergent `origin/AIMainBranch`
+commit `055b052` and is not yet integrated into this branch. The live Phase 18 foundation is documented
 as code/schema drift. It must not be removed or treated as source-complete.
 
 ## Tables by domain

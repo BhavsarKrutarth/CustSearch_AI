@@ -55,4 +55,5 @@ fails if either appears for the smoke tenant.
 - Redis multi-node/SignalR backplane behavior: no Redis topology configured.
 - Physical RTSP/ONNX calibration: Demo Mode only.
 - IIS deployment/WebSocket smoke: no deployed IIS site configured.
-- Phase 18 flows: source branch absent and live schema provenance unresolved.
+- Phase 18 flows: V1.16 SQL provenance was found on divergent `origin/AIMainBranch` commit `055b052`,
+  but application/worker/UI/Python flows and selected-chain integration are absent.

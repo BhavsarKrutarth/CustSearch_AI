@@ -19,6 +19,9 @@
 - Files changed: canonical SQL/build/verifier; readiness checks/tests; export stream sharing; disposable SQLite test configurations; Phase 16 report; this checkpoint
 - Detected drift: live database contains a later Phase 18 foundation that is absent from the selected Phase 16 source branch; never downgrade or recreate the live database
 - Phase 17 audit checkpoint: `fdc1e84d3e1150cbb44ff4660f215ad35c411d27`
+- Phase 18 provenance correction: repeat-safe V1.16 SQL/verifier exist on divergent
+  `origin/AIMainBranch` commit `055b052`; AIMain is 3 commits ahead while Phase16 is 15 commits ahead
+  from merge base `b73704a`. No merge/cherry-pick was performed.
 - Next exact action: push the dedicated audit branch, then configure and execute IIS/HTTPS/WebSocket deployment smoke
 - Recommended next setup: keep PRs #10/#18/#19 open and unmerged; use the dedicated audit branch and close external SQL Server 2022/Redis topology blockers before declaring Phase 16 universally verified
 

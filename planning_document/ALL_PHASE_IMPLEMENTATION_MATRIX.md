@@ -35,7 +35,7 @@ Contracts (C), Application (A), Infrastructure (I), API, Worker (W), Admin (NG),
 `1 → 2 → … → 16 → 17 → 18` is the authoritative order. Phase 16 is locally green but retains
 two external environment blockers. The first implementable repository gap is Phase 17 documentation,
 deployment hardening and smoke automation. Phase 18 source must only begin after recovering or safely
-reconstructing the live V1.16 schema into a repeat-safe versioned script and completing Phase 17 gates.
+reviewing/integrating the recovered repeat-safe V1.16 SQL from divergent AIMain and completing Phase 17 gates.
 
 ## Documentation drift found
 

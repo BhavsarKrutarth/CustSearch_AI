@@ -18,7 +18,7 @@ Observed run: `CUSTSEARCH_SMOKE_20260825_001`.
 
 | Severity | Finding | Evidence | Required action |
 |---|---|---|---|
-| Critical | Phase 18 live schema has no matching source script/application chain on this branch. | Live `V1.16.0`, nine tables and six procedures; no Phase 18 branch/files. | Recover provenance or script the live definition repeat-safely before any Phase 18 application work. Never downgrade live DB. |
+| Critical | Phase 18 live schema has no matching application chain on this branch. | Live `V1.16.0`; repeat-safe SQL/verifier recovered at `origin/AIMainBranch` commit `055b052`, but no application flow exists in the selected chain. | Integrate the divergent branch deliberately, verify source/live equivalence, then implement the reviewed flow. Never downgrade live DB. |
 | High | Phase 18 APIs, service authorization, evidence access, ingestion replay controls and tests are absent in selected source. | No Security controller/service/Admin routes/Python events in branch. | Implement only after Phase 17 and source/schema reconciliation. |
 | High | Production reverse-proxy/HSTS/AllowedHosts/IIS evidence is incomplete. | `AllowedHosts` remains wildcard; no deployment smoke evidence. | Phase 17 must add environment-specific hardening and IIS validation. |
 | Medium | SQL Server 2022-specific validation cannot be executed locally. | Local engine `17.0.1000.7`; Docker unavailable. | Execute current scripts on an approved SQL Server 2022 environment. |

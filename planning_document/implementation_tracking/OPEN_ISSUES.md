@@ -2,9 +2,10 @@
 
 ## Critical
 
-- Phase 18 source/live drift: live V1.16 contains nine security tables and six procedures while the
-  selected Phase 16 source chain contains no Phase 18 implementation. Blocking; recover provenance
-  and create a reviewed repeat-safe script before implementation or canonical update.
+- Phase 18 branch/application drift: live V1.16 contains nine security tables and six procedures. Its
+  repeat-safe SQL/verifier were recovered at divergent `origin/AIMainBranch` commit `055b052`, while
+  the selected Phase 16 chain contains no Phase 18 application implementation. Blocking; review the
+  3-vs-15 commit divergence and integrate deliberately before application work.
 
 ## High
 

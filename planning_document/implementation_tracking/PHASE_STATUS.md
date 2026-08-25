@@ -32,5 +32,5 @@ Detailed per-requirement status is maintained in `../ALL_PHASE_IMPLEMENTATION_MA
 - Planning file: `../phase_implementation/PHASE_18_RETAIL_SECURITY_THEFT_DETECTION.md`
 - Status: BLOCKED
 - Completed: planning read and live-object inventory only.
-- Pending: reconcile V1.16 provenance before any source implementation.
-- Known issue: nine tables and six procedures exist live without matching selected branch source.
+- Pending: review/integrate recovered V1.16 SQL, then implement application/worker/UI/Python flows.
+- Known issue: SQL/verifier exist only at divergent AIMain commit `055b052`; no selected-chain app implementation.

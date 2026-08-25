@@ -10,6 +10,6 @@
 | 15 | reports/export jobs | stored procedures/Dapper/API/Worker/Admin | integration/E2E/export tests |
 | 16 | operations/leases/retention/health | API/Worker/Admin | live runner/verifier + regression |
 | 17 | no schema planned | hardening/docs/deployment | local green; IIS blocked |
-| 18 | security incident objects live-only | no selected-branch consumers | blocked by provenance drift |
+| 18 | security incident objects live; source SQL on divergent AIMain | no selected-branch consumers | blocked by branch integration/application gap |
 
 The complete per-requirement mapping is `../ALL_PHASE_IMPLEMENTATION_MATRIX.md`.

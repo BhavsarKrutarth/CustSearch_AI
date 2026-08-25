@@ -11,4 +11,4 @@
 | Export unavailable | job not complete/expired/requester mismatch | inspect job status; re-request rather than sharing a token |
 | CCTV 401/409 | service key/signature/time/replay/camera mismatch | verify clock, key reference and camera/store ownership |
 | Recognition disabled | consent/key configuration absent | keep disabled until lawful consent and key storage exist |
-| Phase 18 objects appear only in SQL | known code/schema drift | do not manipulate them manually; recover V1.16 source provenance |
+| Phase 18 objects appear only in SQL | known code/schema drift | inspect `origin/AIMainBranch` commit `055b052`; integrate only after review |
