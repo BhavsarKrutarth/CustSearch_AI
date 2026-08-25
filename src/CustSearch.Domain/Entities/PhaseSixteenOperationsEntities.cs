@@ -5,13 +5,14 @@ namespace CustSearch.Domain.Entities;
 
 public sealed class OperationalSetting
 {
+    private static readonly string[]SensitiveKeyFragments=["password","secret","token","credential","connectionstring","signingkey"];
     private OperationalSetting(){}
     private OperationalSetting(OperationalScope scope,long?tenantId,long?storeId,string key,string valueJson,DateTime utcNow){ValidateScope(scope,tenantId,storeId);Scope=scope;TenantId=tenantId;StoreId=storeId;Key=SafeKey(key);ValueJson=Json(valueJson);CreatedUtc=Utc(utcNow);UpdatedUtc=CreatedUtc;}
     public long Id{get;private set;}public OperationalScope Scope{get;private set;}public long?TenantId{get;private set;}public long?StoreId{get;private set;}public string Key{get;private set;}=string.Empty;public string ValueJson{get;private set;}="{}";public DateTime CreatedUtc{get;private set;}public DateTime UpdatedUtc{get;private set;}public byte[]?RowVersion{get;private set;}
     public static OperationalSetting Create(OperationalScope scope,long?tenantId,long?storeId,string key,string valueJson,DateTime utcNow)=>new(scope,tenantId,storeId,key,valueJson,utcNow);
     public void Update(string valueJson,DateTime utcNow){ValueJson=Json(valueJson);UpdatedUtc=Utc(utcNow);}
     public static void ValidateScope(OperationalScope scope,long?tenantId,long?storeId){if(!Enum.IsDefined(scope))throw new ArgumentOutOfRangeException(nameof(scope));if(scope==OperationalScope.Platform&&(tenantId.HasValue||storeId.HasValue)||scope==OperationalScope.Tenant&&(!tenantId.HasValue||storeId.HasValue)||scope==OperationalScope.Store&&(!tenantId.HasValue||!storeId.HasValue))throw new ArgumentException("Operational setting scope is invalid.");if(tenantId is<=0||storeId is<=0)throw new ArgumentOutOfRangeException(nameof(tenantId));}
-    private static string SafeKey(string value){var key=Required(value,120);var lower=key.ToLowerInvariant();if(new[]{"password","secret","token","credential","connectionstring","signingkey"}.Any(lower.Contains))throw new ArgumentException("Secrets must use the separate secret-reference store.",nameof(value));return key;}
+    private static string SafeKey(string value){var key=Required(value,120);var lower=key.ToLowerInvariant();if(SensitiveKeyFragments.Any(lower.Contains))throw new ArgumentException("Secrets must use the separate secret-reference store.",nameof(value));return key;}
     private static string Json(string value){var json=Required(value,4000);using var _=JsonDocument.Parse(json,new JsonDocumentOptions{MaxDepth=16});return json;}
     private static string Required(string value,int max){ArgumentException.ThrowIfNullOrWhiteSpace(value);var result=value.Trim();return result.Length<=max?result:throw new ArgumentOutOfRangeException(nameof(value));}
     private static DateTime Utc(DateTime value)=>value.Kind==DateTimeKind.Utc?value:throw new ArgumentException("Timestamp must be UTC.",nameof(value));
