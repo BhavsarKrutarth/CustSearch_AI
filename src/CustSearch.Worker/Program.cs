@@ -2,6 +2,8 @@ using CustSearch.Worker;
 using CustSearch.Infrastructure;
 using CustSearch.Integrations;
 using CustSearch.Application.ReportsExports;
+using CustSearch.Application.Authentication;
+using CustSearch.Application.AlertsRealtime;
 using CustSearch.Infrastructure.Operations;
 using Microsoft.Extensions.Options;
 using Serilog;
@@ -23,6 +25,11 @@ try
         ?? throw new InvalidOperationException("ConnectionStrings:CustSearchDatabase is required.");
 
     builder.Services.AddInfrastructure(connectionString);
+    // Infrastructure also contains request-facing services. The Worker supplies a deliberately
+    // unauthenticated context so DI validation succeeds while any accidental user operation still
+    // fails its platform/tenant authorization guard instead of inheriting a fabricated identity.
+    builder.Services.AddScoped<ICurrentUserContext, BackgroundCurrentUserContext>();
+    builder.Services.AddSingleton<IAlertConnectionMetrics, BackgroundAlertConnectionMetrics>();
     builder.Services.AddCustSearchIntegrations();
     builder.Services.AddOptions<IntegrationDispatcherOptions>().Bind(builder.Configuration.GetSection(IntegrationDispatcherOptions.SectionName)).Validate(x=>x.PollIntervalSeconds is>=1 and<=60,"IntegrationDispatcher:PollIntervalSeconds must be between 1 and 60.").Validate(x=>x.BatchSize is>=1 and<=200,"IntegrationDispatcher:BatchSize must be between 1 and 200.").ValidateOnStart();
     builder.Services.AddOptions<ReportsExportsOptions>().Bind(builder.Configuration.GetSection(ReportsExportsOptions.SectionName)).Validate(x=>x.IsValid(false),"ReportsExports settings are invalid.").ValidateOnStart();

@@ -15,7 +15,9 @@ class Settings(BaseSettings):
     environment: str = "Development"
     demo_mode: bool = True
     api_key: SecretStr = SecretStr("")
-    dotnet_event_url: str = ""
+    # Development publishes normalized CCTV metadata to the protected .NET boundary, never SQL.
+    # Deployments override this URL and the service credentials through environment variables.
+    dotnet_event_url: str = "https://localhost:7277/api/internal/cctv/events"
     service_id: str = ""
     service_secret: SecretStr = SecretStr("")
 

@@ -16,3 +16,6 @@ Observed run: `CUSTSEARCH_SMOKE_20260825_001`
 | 16 | SQL Server 2022 | execute on SQL 2022 | local engine is v17 | BLOCKED | exact environment absent |
 | 11/16 | Redis multi-node | prove backplane behavior | topology absent | BLOCKED | external setup required |
 | 17 | IIS/WebSocket | deployed smoke | site absent | BLOCKED | external setup required |
+| 16/17 | Manual API/Worker startup | no connection env required | both running; live/ready 200; heartbeat fresh | PASS | committed Windows-auth local settings |
+| 17 | Angular to API | dev proxy reaches API/SQL auth | UI 200; invalid login 401 through proxy | PASS | actual processes |
+| 13/17 | Python service | local health and .NET event target | health 200; protected API URL configured | PASS | no direct SQL access |

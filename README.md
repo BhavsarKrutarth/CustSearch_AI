@@ -20,6 +20,9 @@ AI observation. Recognition is consent-gated. Security observations require huma
 
 ## Local secrets and connection
 
+For exact API → Worker → Angular → Python startup order and commands, use
+[Project-Wise Manual Run Guide](docs/PROJECT_WISE_MANUAL_RUN_GUIDE.md).
+
 Committed runtime settings deliberately contain no workstation database connection or production
 signing keys. Set them in the current PowerShell process or an approved secret store:
 
@@ -28,6 +31,10 @@ $env:ConnectionStrings__CustSearchDatabase = 'Server=KRUTARTH-BHAVSA;Database=Cu
 $env:Jwt__SigningKey = '<at-least-32-byte-local-secret>'
 $env:ReportsExports__DownloadSigningKey = '<different-at-least-32-byte-local-secret>'
 ```
+
+The same Windows-authenticated local connection is included in API and Worker `appsettings` for
+manual development on `KRUTARTH-BHAVSA`. The environment variable remains the supported override for
+another machine or deployed environment; production deployment must replace the local value.
 
 Recognition, CCTV service, integration, Redis, and webhook credentials must also come from
 environment variables or secret storage. Do not commit passwords, access tokens, camera URLs,

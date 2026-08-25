@@ -14,6 +14,10 @@ $env:Jwt__SigningKey = '<local-secret-at-least-32-bytes>'
 $env:ReportsExports__DownloadSigningKey = '<different-local-secret-at-least-32-bytes>'
 ```
 
+For this workstation, API and Worker also contain this Windows-authenticated Development connection,
+so Visual Studio or `dotnet run` works without setting the connection variable. Set the variable when
+targeting any other server; environment configuration overrides `appsettings`.
+
 Add only the service secrets needed by the flow under test. Never place them in `appsettings.json`.
 
 ## 3. Verify SQL before starting

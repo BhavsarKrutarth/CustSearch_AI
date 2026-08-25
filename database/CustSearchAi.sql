@@ -3859,6 +3859,19 @@ BEGIN
  CREATE INDEX IX_WorkerHeartbeats_LastHeartbeat ON dbo.WorkerHeartbeats(LastHeartbeatUtc);
 END;
 GO
+/* Preserve and adapt legacy Phase 16 heartbeat rows for the current Worker entity. */
+IF COL_LENGTH(N'dbo.WorkerHeartbeats',N'WorkerType') IS NULL
+ ALTER TABLE dbo.WorkerHeartbeats ADD WorkerType NVARCHAR(80) NOT NULL CONSTRAINT DF_WorkerHeartbeats_WorkerType DEFAULT(N'custsearch-worker') WITH VALUES;
+IF COL_LENGTH(N'dbo.WorkerHeartbeats',N'IsReady') IS NULL
+BEGIN
+ ALTER TABLE dbo.WorkerHeartbeats ADD IsReady BIT NOT NULL CONSTRAINT DF_WorkerHeartbeats_IsReady DEFAULT(0) WITH VALUES;
+ IF COL_LENGTH(N'dbo.WorkerHeartbeats',N'Status') IS NOT NULL EXEC(N'UPDATE dbo.WorkerHeartbeats SET IsReady=CASE WHEN Status=1 THEN 1 ELSE 0 END;');
+END;
+IF COL_LENGTH(N'dbo.WorkerHeartbeats',N'WorkerName') IS NOT NULL AND EXISTS(SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.WorkerHeartbeats') AND name=N'WorkerName' AND default_object_id=0)
+ ALTER TABLE dbo.WorkerHeartbeats ADD CONSTRAINT DF_WorkerHeartbeats_WorkerName DEFAULT(N'CustSearch.Worker') FOR WorkerName;
+IF COL_LENGTH(N'dbo.WorkerHeartbeats',N'Status') IS NOT NULL AND EXISTS(SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.WorkerHeartbeats') AND name=N'Status' AND default_object_id=0)
+ ALTER TABLE dbo.WorkerHeartbeats ADD CONSTRAINT DF_WorkerHeartbeats_StatusCompat DEFAULT(1) FOR Status;
+GO
 IF OBJECT_ID(N'dbo.RetentionPolicies',N'U') IS NULL
 BEGIN
  CREATE TABLE dbo.RetentionPolicies(Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RetentionPolicies PRIMARY KEY,Domain TINYINT NOT NULL,TenantId BIGINT NULL,StoreId BIGINT NULL,RetentionDays INT NOT NULL,Enabled BIT NOT NULL,CreatedUtc DATETIME2(7) NOT NULL,UpdatedUtc DATETIME2(7) NOT NULL,RowVersion ROWVERSION NOT NULL,

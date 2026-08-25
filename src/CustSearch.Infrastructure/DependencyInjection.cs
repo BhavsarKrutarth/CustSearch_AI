@@ -45,7 +45,11 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services,string connectionString)
     {
         ArgumentNullException.ThrowIfNull(services);ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
-        services.AddDbContext<CustSearchDbContext>(options=>options.UseSqlServer(connectionString,sqlOptions=>sqlOptions.EnableRetryOnFailure(5,TimeSpan.FromSeconds(10),null)));
+        // The application deliberately owns atomic transactions in its services and worker leases.
+        // EF's automatic retrying strategy rejects those transactions unless every operation is
+        // wrapped as one replayable unit; background loops and idempotent APIs already retry at the
+        // workflow boundary, so SQL is configured without an unsafe implicit transaction replay.
+        services.AddDbContext<CustSearchDbContext>(options=>options.UseSqlServer(connectionString));
         services.AddSingleton<IDbConnectionFactory>(_=>new SqlConnectionFactory(connectionString));services.TryAddSingleton(TimeProvider.System);services.AddScoped<IPasswordHasher<UserAccount>,PasswordHasher<UserAccount>>();services.AddSingleton<JwtTokenService>();
         services.AddScoped<AuthenticationService>();services.AddScoped<IAuthenticationService,PhaseFiveAuthenticationServiceDecorator>();
         services.AddScoped<ITenantUserRepository,TenantUserRepository>();services.AddScoped<IPlatformTenantManagementService,PlatformTenantManagementService>();services.AddScoped<IPlatformBillingService,PlatformBillingService>();services.AddScoped<ITenantOperationsRepository,TenantOperationsRepository>();services.AddScoped<TenantOperationsService>();services.AddScoped<ITenantOperationsService,TenantOperationsSecurityDecorator>();

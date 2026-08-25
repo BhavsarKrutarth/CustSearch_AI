@@ -1,10 +1,10 @@
 # Session Handoff
 
-- Last Updated: 2026-08-26 03:30 +05:30
+- Last Updated: 2026-08-26 04:00 +05:30
 - Current Branch: `audit/all-phases-database-smoke`
 - Phase 17 Checkpoint Commit: `fdc1e84d3e1150cbb44ff4660f215ad35c411d27`
 - Current Phase: Phase 17
-- Current Task: push the committed checkpoint and configure external Phase 17 validation environments
+- Current Task: rerun Redis two-API-node SignalR backplane test after live startup repairs
 - Last Completed Phase: Phase 15 universally; Phase 16 locally passed with environment blockers
 
 ## Completed This Session
@@ -15,16 +15,20 @@
 4. Fixed real-SQL refresh transaction retry behavior.
 5. Added project/database/security/API/deployment documentation and major service comments.
 6. Ran full .NET, Angular, Playwright and Python regression plus dependency audits.
+7. Added local API/Worker SQL settings and proved API, Worker, Angular proxy and Python startup.
+8. Reconciled legacy heartbeat/export schema drift and removed unsafe EF transaction replay.
 
 ## Database Changes
 
 1. Applied the repeat-safe V1.15 runner twice and verified constraints.
 2. Inserted deterministic smoke tenants 10019/10020 and their connected Phase 1-16 graph.
+3. Added current heartbeat compatibility columns/defaults and selected-chain `ExportJobs` objects.
 
 ## Tests Passed
 
 1. 104 unit, 225 integration, 78 Angular, 49 Playwright and 7 Python tests.
 2. Live SQL seed rerun/verifier/DBCC and real auth/cross-tenant probes.
+3. Manual API/Worker live/ready 200, Worker heartbeat, Angular-to-API proxy and Python health.
 
 ## Tests Failed
 
@@ -43,7 +47,7 @@
 
 ## Exact Next Step
 
-1. Configure an IIS/HTTPS/WebSocket test site using `deployment/iis`, then execute the deployment runbook.
+1. Rerun `src/CustSearch.Admin/scripts/redis-backplane-smoke.mjs` against two API nodes and portable Redis.
 
 ## Commands To Run Next
 

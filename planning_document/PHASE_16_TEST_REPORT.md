@@ -71,3 +71,12 @@ report does not claim that blocked platform check passed.
 - To close the Redis topology blocker, configure the approved Redis/backplane environment, set
   `OperationalPlatform:RedisEnabled=true`, and exercise readiness, reconnect, and multi-node
   SignalR delivery. Secrets must be supplied through environment/secret storage, never Git.
+
+## 2026-08-26 connected startup follow-up
+
+The first portable Redis/two-API-node attempt reached SQL and exposed two real blockers: the live
+legacy `WorkerHeartbeats` shape lacked current columns, and EF automatic retry rejected service-owned
+transactions. Both were repaired without deleting data. Phase 16/15 repeat-safe scripts and verifiers
+passed, API/Worker manual startup then returned live/ready HTTP 200 with a fresh ready heartbeat, and
+104 unit plus 225 integration tests passed. Cross-node Redis event delivery must now be rerun; it is
+still `BLOCKED`, not yet passed.

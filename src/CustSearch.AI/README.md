@@ -9,3 +9,8 @@ python -m venv .venv
 .\.venv\Scripts\python -m pytest
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
+
+In Development the service targets
+`https://localhost:7277/api/internal/cctv/events`. It never connects to SQL Server directly. Set
+`CUSTSEARCH_AI_DOTNET_EVENT_URL`, `CUSTSEARCH_AI_SERVICE_ID` and
+`CUSTSEARCH_AI_SERVICE_SECRET` for another API endpoint or authenticated event publishing.
