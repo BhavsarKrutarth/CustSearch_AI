@@ -34,6 +34,6 @@ public sealed class CamerasTrackingController(ICameraTrackingService service,ICu
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SaveCameraRequest([param:Range(1,long.MaxValue)]long StoreId,[param:Required,StringLength(50)]string CameraCode,[param:Required,StringLength(150)]string Name,[param:StringLength(200)]string?RtspConfigurationReference,[param:StringLength(250)]string?Location,CameraDirection Direction,bool IsActive){public SaveCameraCommand Command()=>new(StoreId,CameraCode,Name,RtspConfigurationReference,Location,Direction,IsActive);}
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record SaveCameraZoneRequest([param:Required,StringLength(50)]string ZoneCode,[param:Required,StringLength(150)]string Name,CameraZoneType ZoneType,[param:Required,StringLength(8000)]string GeometryJson,long?CategoryId){public SaveCameraZoneCommand Command()=>new(ZoneCode,Name,ZoneType,GeometryJson,CategoryId);}
+public sealed record SaveCameraZoneRequest([param:Required,StringLength(50)]string ZoneCode,[param:Required,StringLength(150)]string Name,CameraZoneType ZoneType,[param:Required,StringLength(4000)]string GeometryJson,long?CategoryId){public SaveCameraZoneCommand Command()=>new(ZoneCode,Name,ZoneType,GeometryJson,CategoryId);}
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record AssociateTrackRequest(TrackingSubjectKind SubjectKind,[param:Range(1,long.MaxValue)]long SubjectId);
