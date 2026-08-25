@@ -23,7 +23,7 @@ public sealed class LocalExportFileStore:IExportFileStore
     private static string Escape(string?value){var v=value??string.Empty;return v.IndexOfAny([',','"','\r','\n'])>=0?$"\"{v.Replace("\"","\"\"",StringComparison.Ordinal)}\"":v;}
     private static string Row(IEnumerable<string>values)=>$"<row>{string.Concat(values.Select(x=>$"<c t=\"inlineStr\"><is><t>{Xml(x)}</t></is></c>"))}</row>";
     private static string Xml(string value)=>System.Security.SecurityElement.Escape(value)??string.Empty;
-    private static string PdfText(string value)=>new(value.Select(x=>x is>=32 and<=126?x:'?').ToArray()).Replace("\\","\\\\",StringComparison.Ordinal).Replace("(","\\(",StringComparison.Ordinal).Replace(")","\\)",StringComparison.Ordinal);
+    private static string PdfText(string value)=>new string(value.Select(x=>x is>=' ' and<='~'?x:'?').ToArray()).Replace("\\","\\\\",StringComparison.Ordinal).Replace("(","\\(",StringComparison.Ordinal).Replace(")","\\)",StringComparison.Ordinal);
     private static void Write(ZipArchive zip,string path,string content){var entry=zip.CreateEntry(path,CompressionLevel.Fastest);using var writer=new StreamWriter(entry.Open(),new UTF8Encoding(false));writer.Write(content);}
     private static void WriteAscii(Stream stream,string value){var bytes=Encoding.ASCII.GetBytes(value);stream.Write(bytes);}
 }
