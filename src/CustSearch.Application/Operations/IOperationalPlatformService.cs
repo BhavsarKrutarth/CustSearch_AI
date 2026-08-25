@@ -35,8 +35,7 @@ public interface IWorkerRuntimeGate
 {
     Task<WorkerLeaseHandle?>TryAcquireAsync(string workerType,string ownerId,TimeSpan duration,CancellationToken ct=default);
     Task ReleaseAsync(WorkerLeaseHandle lease,CancellationToken ct=default);
-    Task HeartbeatAsync(string instanceId,string workerType,bool ready,string?error,CancellationToken ct=default);
+    Task HeartbeatAsync(string instanceId,string workerType,bool ready,string?errorMessage,CancellationToken ct=default);
 }
 
 public interface IRetentionProcessor{Task<RetentionBatchResult>RunDueAsync(int batchSize,CancellationToken ct=default);}
-
