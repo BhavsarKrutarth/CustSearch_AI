@@ -1,6 +1,6 @@
 # Phase 16 — Operational Platform
 
-Status: Not Started
+Status: In Progress
 
 ## Scope
 
@@ -8,4 +8,4 @@ Audit and worker hardening, Redis/backplane readiness, settings, health, retenti
 
 ## Done Summary
 
-Pending approval, implementation and validation.
+Implementation is active on `phase16-operations`, created from the exact fully green Phase 15 head. Completion remains blocked on the full Phase 5–16 regression and tested V1.15.0 canonical SQL.

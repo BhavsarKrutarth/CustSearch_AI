@@ -160,6 +160,7 @@ Also validate, as applicable:
 | 2026-08-25 | 14 — Consent-Based Recognition | Completed | Phase 14 Validate run 32800628656: 90 unit, 204 integration/API, 73 Angular, 40 Playwright and 7 Python tests green; privacy/security gates and V1.13 upgrade/runner/verifier/canonical fresh install green | Draft PR 16 retained for review; no AIMain merge requested |
 | 2026-08-25 | 15 — Reports & Async Exports | In Progress | Phase 14 final head b73704a2 and all Phase 6–14 workflows re-verified green; Phase 15 branch created from that exact head | Complete reports/exports implementation and Phase 5–15 validation |
 | 2026-08-25 | 15 — Reports & Async Exports | Completed | Phase 15 Validate run 32807216952: Release build 0 warnings/errors, 97 unit, 213 integration/API, 76 Angular, 42 Playwright and 7 Python tests green; V1.14 upgrade/runner/verifier/fresh canonical green | Create Phase 16 branch from the exact tested Phase 15 head; keep draft PR 18 unmerged |
+| 2026-08-25 | 16 — Operational Platform | In Progress | Branch created from exact final-green Phase 15 head baeee4d0; audit, worker coordination, settings, health, retention and controls implementation started | Complete Phase 5–16 validation |
 
 ## Phase 1 Completion Evidence
 
