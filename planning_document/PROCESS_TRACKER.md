@@ -157,6 +157,7 @@ Also validate, as applicable:
 | 2026-08-24 | 12 — Integrations | Completed | 81 unit, 174 integration/API, 67 Angular, 36 Playwright and 3 Python tests green; Phase 6–12 workflows green; V1.11 upgrade/runner/verifier/canonical fresh install green | Draft PR 14 retained for review; no AIMain merge requested |
 | 2026-08-25 | 13 — Cameras, Python CCTV & Tracking | Completed | Phase 13 Validate run 32798417105: 86 unit, 188 integration/API, 70 Angular, 38 Playwright and 7 Python tests green; Phase 6–12 workflows green; V1.12 upgrade/runner/verifier/canonical fresh install green | Create Phase 14 branch from the exact tested Phase 13 head |
 | 2026-08-25 | 14 — Consent-Based Recognition | In Progress | Branch created from fully green Phase 13 head 9aa0b256; consent, encrypted derived-template, human-review and V1.13 implementation started | Complete Phase 5–14 validation |
+| 2026-08-25 | 14 — Consent-Based Recognition | Completed | Phase 14 Validate run 32800628656: 90 unit, 204 integration/API, 73 Angular, 40 Playwright and 7 Python tests green; privacy/security gates and V1.13 upgrade/runner/verifier/canonical fresh install green | Draft PR 16 retained for review; no AIMain merge requested |
 
 ## Phase 1 Completion Evidence
 
