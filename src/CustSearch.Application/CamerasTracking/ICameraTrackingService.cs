@@ -5,13 +5,13 @@ namespace CustSearch.Application.CamerasTracking;
 
 public interface ICameraTrackingService
 {
-    Task<IReadOnlyList<CameraView>> ListCamerasAsync(long?storeId,CancellationToken cancellationToken=default);
-    Task<CameraView> SaveCameraAsync(long?cameraId,SaveCameraCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default);
-    Task<IReadOnlyList<CameraZoneView>> ListZonesAsync(long cameraId,CancellationToken cancellationToken=default);
-    Task<CameraZoneView> AddZoneVersionAsync(long cameraId,SaveCameraZoneCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default);
-    Task<IReadOnlyList<PersonTrackView>> ListTracksAsync(long?storeId,long?afterId,int take=100,CancellationToken cancellationToken=default);
-    Task<PersonTrackView> AssociateAsync(long trackId,AssociateTrackCommand command,TenantAuditContext audit,CancellationToken cancellationToken=default);
-    Task<CctvEventAcknowledgement> ReceiveAsync(CctvInboundEnvelope envelope,CancellationToken cancellationToken=default);
+    Task<IReadOnlyList<CameraView>> ListCamerasAsync(long?storeId,CancellationToken ct=default);
+    Task<CameraView> SaveCameraAsync(long?cameraId,SaveCameraCommand command,TenantAuditContext audit,CancellationToken ct=default);
+    Task<IReadOnlyList<CameraZoneView>> ListZonesAsync(long cameraId,CancellationToken ct=default);
+    Task<CameraZoneView> AddZoneVersionAsync(long cameraId,SaveCameraZoneCommand command,TenantAuditContext audit,CancellationToken ct=default);
+    Task<IReadOnlyList<PersonTrackView>> ListTracksAsync(long?storeId,long?afterId,int take=100,CancellationToken ct=default);
+    Task<PersonTrackView> AssociateAsync(long trackId,AssociateTrackCommand command,TenantAuditContext audit,CancellationToken ct=default);
+    Task<CctvEventAcknowledgement> ReceiveAsync(CctvInboundEnvelope envelope,CancellationToken ct=default);
 }
 
 public interface ICctvServiceSecretResolver
