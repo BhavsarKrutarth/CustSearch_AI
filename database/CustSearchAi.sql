@@ -3648,3 +3648,76 @@ IF(SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.12.0')<>1 
 IF OBJECT_ID(N'dbo.Cameras',N'U') IS NULL OR OBJECT_ID(N'dbo.CameraZoneConfigurations',N'U') IS NULL OR OBJECT_ID(N'dbo.PersonTrackSessions',N'U') IS NULL OR OBJECT_ID(N'dbo.CameraTrackHandoffs',N'U') IS NULL OR OBJECT_ID(N'dbo.CameraOperationalEvents',N'U') IS NULL THROW 54591,'Phase 13 tables are incomplete.',1;
 IF OBJECT_ID(N'dbo.Camera_Search',N'P') IS NULL OR OBJECT_ID(N'dbo.PersonTrack_Search',N'P') IS NULL THROW 54592,'Phase 13 procedures are incomplete.',1;
 GO
+
+-- ============================================================
+-- PHASE 14 - CONSENT-BASED RECOGNITION
+-- VERSION: V1.13.0
+-- ============================================================
+/* CustSearch AI Phase 14 — consent-gated recognition metadata and encrypted derived templates. */
+USE [CustSearch_AI];
+GO
+SET NOCOUNT ON;SET XACT_ABORT ON;SET ANSI_NULLS ON;SET QUOTED_IDENTIFIER ON;SET ANSI_PADDING ON;SET ANSI_WARNINGS ON;SET CONCAT_NULL_YIELDS_NULL ON;SET ARITHABORT ON;SET NUMERIC_ROUNDABORT OFF;
+GO
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.12.0') THROW 54700,'Phase 13 V1.12.0 must be installed before Phase 14.',1;
+GO
+
+IF OBJECT_ID(N'dbo.CustomerRecognitionConsents',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.CustomerRecognitionConsents(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CustomerRecognitionConsents PRIMARY KEY,TenantId BIGINT NOT NULL,CustomerId BIGINT NOT NULL,ConsentType TINYINT NOT NULL,Purpose NVARCHAR(200) NOT NULL,GrantedUtc DATETIME2(7) NOT NULL,ExpiresUtc DATETIME2(7) NULL,WithdrawnUtc DATETIME2(7) NULL,ConsentVersion NVARCHAR(50) NOT NULL,CapturedByUserId BIGINT NOT NULL,EvidenceReference NVARCHAR(500) NULL,CreatedUtc DATETIME2(7) NOT NULL,
+  CONSTRAINT FK_RecognitionConsents_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),CONSTRAINT FK_RecognitionConsents_Customers FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),CONSTRAINT CK_RecognitionConsents_Type CHECK(ConsentType=1),CONSTRAINT CK_RecognitionConsents_Period CHECK(ExpiresUtc IS NULL OR ExpiresUtc>GrantedUtc),CONSTRAINT CK_RecognitionConsents_Withdrawal CHECK(WithdrawnUtc IS NULL OR WithdrawnUtc>=GrantedUtc)
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CustomerRecognitionConsents') AND name=N'UX_RecognitionConsents_Tenant_Id') CREATE UNIQUE INDEX UX_RecognitionConsents_Tenant_Id ON dbo.CustomerRecognitionConsents(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CustomerRecognitionConsents') AND name=N'IX_RecognitionConsents_Tenant_Customer_Purpose') CREATE INDEX IX_RecognitionConsents_Tenant_Customer_Purpose ON dbo.CustomerRecognitionConsents(TenantId,CustomerId,ConsentType,Purpose,GrantedUtc DESC);
+GO
+
+IF OBJECT_ID(N'dbo.BiometricTemplates',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.BiometricTemplates(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_BiometricTemplates PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,CustomerId BIGINT NOT NULL,ConsentId BIGINT NOT NULL,EncryptedTemplate VARBINARY(MAX) NOT NULL,Nonce VARBINARY(12) NOT NULL,AuthenticationTag VARBINARY(16) NOT NULL,EncryptionKeyReference NVARCHAR(200) NOT NULL,Algorithm NVARCHAR(50) NOT NULL,TemplateVersion NVARCHAR(50) NOT NULL,Status TINYINT NOT NULL,CreatedUtc DATETIME2(7) NOT NULL,DisabledUtc DATETIME2(7) NULL,DeletedUtc DATETIME2(7) NULL,RetentionUntilUtc DATETIME2(7) NULL,
+  CONSTRAINT FK_BiometricTemplates_Stores FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),CONSTRAINT FK_BiometricTemplates_Customers FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),CONSTRAINT FK_BiometricTemplates_Consents FOREIGN KEY(TenantId,ConsentId) REFERENCES dbo.CustomerRecognitionConsents(TenantId,Id),CONSTRAINT CK_BiometricTemplates_Status CHECK(Status BETWEEN 1 AND 3),CONSTRAINT CK_BiometricTemplates_Protected CHECK((Status=1 AND DATALENGTH(EncryptedTemplate)>0 AND DATALENGTH(Nonce)=12 AND DATALENGTH(AuthenticationTag)=16) OR (Status IN(2,3) AND DATALENGTH(EncryptedTemplate)=0 AND DATALENGTH(Nonce)=0 AND DATALENGTH(AuthenticationTag)=0)),CONSTRAINT CK_BiometricTemplates_Deletion CHECK((Status=1 AND DisabledUtc IS NULL AND DeletedUtc IS NULL) OR (Status IN(2,3) AND DisabledUtc IS NOT NULL))
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.BiometricTemplates') AND name=N'UX_BiometricTemplates_Tenant_Store_Id') CREATE UNIQUE INDEX UX_BiometricTemplates_Tenant_Store_Id ON dbo.BiometricTemplates(TenantId,StoreId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.BiometricTemplates') AND name=N'UX_BiometricTemplates_Current') CREATE UNIQUE INDEX UX_BiometricTemplates_Current ON dbo.BiometricTemplates(TenantId,StoreId,CustomerId) WHERE Status=1;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.BiometricTemplates') AND name=N'IX_BiometricTemplates_Consent') CREATE INDEX IX_BiometricTemplates_Consent ON dbo.BiometricTemplates(TenantId,ConsentId,Status);
+GO
+
+IF OBJECT_ID(N'dbo.RecognitionCandidates',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.RecognitionCandidates(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RecognitionCandidates PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,PersonTrackSessionId BIGINT NOT NULL,BiometricTemplateId BIGINT NOT NULL,CustomerId BIGINT NOT NULL,RequestId NVARCHAR(150) NOT NULL,Purpose NVARCHAR(200) NOT NULL,Confidence DECIMAL(5,4) NOT NULL,Quality DECIMAL(5,4) NOT NULL,SecondBestConfidence DECIMAL(5,4) NULL,Status TINYINT NOT NULL,CreatedUtc DATETIME2(7) NOT NULL,ReviewedUtc DATETIME2(7) NULL,ReviewedByUserId BIGINT NULL,ReviewReason NVARCHAR(500) NULL,
+  CONSTRAINT FK_RecognitionCandidates_Tracks FOREIGN KEY(TenantId,StoreId,PersonTrackSessionId) REFERENCES dbo.PersonTrackSessions(TenantId,StoreId,Id),CONSTRAINT FK_RecognitionCandidates_Templates FOREIGN KEY(TenantId,StoreId,BiometricTemplateId) REFERENCES dbo.BiometricTemplates(TenantId,StoreId,Id),CONSTRAINT FK_RecognitionCandidates_Customers FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),CONSTRAINT CK_RecognitionCandidates_Status CHECK(Status BETWEEN 1 AND 5),CONSTRAINT CK_RecognitionCandidates_Scores CHECK(Confidence BETWEEN 0 AND 1 AND Quality BETWEEN 0 AND 1 AND (SecondBestConfidence IS NULL OR SecondBestConfidence BETWEEN 0 AND 1)),CONSTRAINT CK_RecognitionCandidates_Review CHECK((Status IN(1,2) AND ReviewedUtc IS NULL AND ReviewedByUserId IS NULL) OR (Status IN(3,4,5) AND ReviewedUtc IS NOT NULL AND ReviewedByUserId IS NOT NULL))
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RecognitionCandidates') AND name=N'UX_RecognitionCandidates_Tenant_Store_Request') CREATE UNIQUE INDEX UX_RecognitionCandidates_Tenant_Store_Request ON dbo.RecognitionCandidates(TenantId,StoreId,RequestId);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RecognitionCandidates') AND name=N'IX_RecognitionCandidates_Tenant_Store_Status') CREATE INDEX IX_RecognitionCandidates_Tenant_Store_Status ON dbo.RecognitionCandidates(TenantId,StoreId,Status,CreatedUtc DESC,Id DESC);
+GO
+
+DECLARE @Phase14Permissions TABLE(Name NVARCHAR(150),Description NVARCHAR(300));
+INSERT @Phase14Permissions VALUES
+(N'Recognition.View',N'View consent, template metadata and recognition candidates.'),(N'Recognition.Enroll',N'Enroll a derived biometric template for an explicitly consenting customer.'),(N'Recognition.Review',N'Human-review recognition candidates.'),(N'Recognition.Settings.Manage',N'Manage recognition thresholds and submit protected candidate results.'),(N'Recognition.Consent.Manage',N'Record and withdraw purpose-specific recognition consent.');
+INSERT dbo.Permissions(Scope,Name,Description,IsActive,CreatedUtc) SELECT 2,p.Name,p.Description,1,SYSUTCDATETIME() FROM @Phase14Permissions p WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Name=p.Name);
+GO
+INSERT dbo.RolePermissions(RoleId,PermissionId) SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1 WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName IN(N'TENANTADMIN',N'TENANTOWNER',N'SHOPOWNER',N'STOREADMIN',N'STOREMANAGER') AND p.Name IN(N'Recognition.View',N'Recognition.Enroll',N'Recognition.Review',N'Recognition.Settings.Manage',N'Recognition.Consent.Manage') AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+INSERT dbo.RolePermissions(RoleId,PermissionId) SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1 WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName=N'CAMERAOPERATOR' AND p.Name IN(N'Recognition.View',N'Recognition.Review') AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+INSERT dbo.RolePermissions(RoleId,PermissionId) SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1 WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName=N'CRMSTAFF' AND p.Name IN(N'Recognition.View',N'Recognition.Enroll',N'Recognition.Consent.Manage') AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+GO
+
+CREATE OR ALTER PROCEDURE dbo.RecognitionConsent_Search @TenantId BIGINT,@CustomerId BIGINT
+AS BEGIN SET NOCOUNT ON;SELECT Id,CustomerId,ConsentType,Purpose,GrantedUtc,ExpiresUtc,WithdrawnUtc,ConsentVersion,CapturedByUserId,EvidenceReference,CreatedUtc FROM dbo.CustomerRecognitionConsents WHERE TenantId=@TenantId AND CustomerId=@CustomerId ORDER BY GrantedUtc DESC,Id DESC;END;
+GO
+CREATE OR ALTER PROCEDURE dbo.RecognitionCandidate_Search @TenantId BIGINT,@StoreId BIGINT=NULL,@Status TINYINT=NULL
+AS BEGIN SET NOCOUNT ON;SELECT TOP(500) Id,StoreId,PersonTrackSessionId,BiometricTemplateId,CustomerId,RequestId,Purpose,Confidence,Quality,SecondBestConfidence,Status,CreatedUtc,ReviewedUtc,ReviewedByUserId,ReviewReason FROM dbo.RecognitionCandidates WHERE TenantId=@TenantId AND (@StoreId IS NULL OR StoreId=@StoreId) AND (@Status IS NULL OR Status=@Status) ORDER BY CreatedUtc DESC,Id DESC;END;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.13.0') INSERT dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy) VALUES(N'V1.13.0',N'Phase 14 consent-gated encrypted biometric templates and human-reviewed recognition candidates',SYSUTCDATETIME(),SUSER_SNAME());
+GO
+IF(SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.13.0')<>1 THROW 54790,'V1.13.0 DatabaseVersions row must exist exactly once.',1;
+IF OBJECT_ID(N'dbo.CustomerRecognitionConsents',N'U') IS NULL OR OBJECT_ID(N'dbo.BiometricTemplates',N'U') IS NULL OR OBJECT_ID(N'dbo.RecognitionCandidates',N'U') IS NULL THROW 54791,'Phase 14 tables are incomplete.',1;
+IF OBJECT_ID(N'dbo.RecognitionConsent_Search',N'P') IS NULL OR OBJECT_ID(N'dbo.RecognitionCandidate_Search',N'P') IS NULL THROW 54792,'Phase 14 procedures are incomplete.',1;
+GO
