@@ -1,0 +1,136 @@
+name: Phase 15 Validate
+
+on:
+  push:
+    branches: [phase15-reports-exports]
+  pull_request:
+    branches: [phase14-consent-recognition]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      SA_PASSWORD: 'CustSearch_Phase15_2026!Sql'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with: {dotnet-version: 8.0.424}
+      - name: Setup Node for pinned Angular 21
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: src/CustSearch.Admin/package-lock.json
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+
+      - name: Prepare validated Phase 14 baseline and prospective Phase 15 canonical
+        shell: bash
+        run: |
+          git show origin/phase14-consent-recognition:database/CustSearchAi.sql > /tmp/CustSearchAi.phase14-base.raw
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/CustSearchAi.phase14-base.raw').read_bytes();enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8');base=raw.decode(enc)
+          if "VersionNumber=N'V1.13.0'" not in base: raise SystemExit('The tested Phase 14 branch must contain canonical V1.13.0 before Phase 15.')
+          upgrade=Path('database/09_Upgrade/V1.14.0_Phase15_ReportsExports.sql').read_text(encoding='utf-8-sig')
+          branch_raw=Path('database/CustSearchAi.sql').read_bytes();branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8');branch=branch_raw.decode(branch_enc)
+          final=branch if "VersionNumber=N'V1.14.0'" in branch else base.rstrip()+"\n\n-- ============================================================\n-- PHASE 15 - REPORTS AND ASYNC EXPORTS\n-- VERSION: V1.14.0\n-- ============================================================\n"+upgrade.strip()+"\n"
+          Path('/tmp/CustSearchAi.phase14-base.sql').write_text(base,encoding='utf-8');Path('/tmp/CustSearchAi.phase15-final.sql').write_text(final,encoding='utf-8')
+          PY
+
+      - name: Restore and build .NET Release
+        run: dotnet restore CustSearch_AI.sln && dotnet build CustSearch_AI.sln --configuration Release --no-restore
+      - name: Test .NET through Phase 15
+        run: dotnet test CustSearch_AI.sln --configuration Release --no-build --logger "trx;LogFileName=phase15-tests.trx"
+      - name: Install Angular dependencies reproducibly
+        working-directory: src/CustSearch.Admin
+        run: npm ci --no-audit --no-fund
+      - name: Lint, test and build Angular through Phase 15
+        working-directory: src/CustSearch.Admin
+        run: npm run lint && npm run test:ci && npm run build:production
+      - name: Prepare Playwright
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Run full Playwright regression through Phase 15
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm test
+      - name: Ruff and pytest through Phase 15
+        run: |
+          python -m pip install --disable-pip-version-check -r src/CustSearch.AI/requirements-dev.txt
+          ruff check src/CustSearch.AI tests/CustSearch.AI.Tests
+          PYTHONPATH=src/CustSearch.AI python -m pytest -q tests/CustSearch.AI.Tests
+
+      - name: Validate Phase 15 authorization, formats and database structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          files=[Path('database/09_Upgrade/V1.14.0_Phase15_ReportsExports.sql').read_text(),Path('database/run-phase15.sql').read_text()]
+          required=['dbo.ExportJobs','dbo.Report_TenantOperationalSummary','dbo.Report_PlatformTenantSummary','@TenantId','@StoreIdsJson','Reports.Export','PlatformReports.Export',"VersionNumber=N'V1.14.0'"]
+          for text in files:
+              missing=[x for x in required if x not in text]
+              if missing: raise SystemExit(f'Missing Phase 15 SQL markers: {missing}')
+              executable=re.sub(r'--[^\r\n]*','',re.sub(r'/\*.*?\*/','',text,flags=re.S)).lower()
+              if ':r ' in executable or 'powershell' in executable: raise SystemExit('Phase 15 SQL must remain standalone T-SQL.')
+              if re.search(r'\b(drop\s+database|truncate\s+table)\b',executable): raise SystemExit('Phase 15 SQL contains a destructive database operation.')
+          repository=Path('src/CustSearch.Infrastructure/ReportsExports/DapperReportQueryRepository.cs').read_text()
+          service=Path('src/CustSearch.Infrastructure/ReportsExports/ReportsExportsService.cs').read_text()
+          processor=Path('src/CustSearch.Infrastructure/ReportsExports/ExportJobProcessor.cs').read_text()
+          formats=Path('src/CustSearch.Infrastructure/ReportsExports/LocalExportFileStore.cs').read_text()
+          controller=Path('src/CustSearch.API/Controllers/ReportsExportsController.cs').read_text()
+          angular=Path('src/CustSearch.Admin/src/app/features/reports/reports-api.service.ts').read_text()
+          if 'CommandType.StoredProcedure' not in repository or 'TenantId' not in repository or 'StoreIdsJson' not in repository: raise SystemExit('Dapper stored-procedure reporting boundary is incomplete.')
+          if any(x not in service+processor for x in ['export.created','export.progress','export.completed','export.failed','AuthorizedStoreIdsJson','RevalidateAsync']): raise SystemExit('Async export authorization or Phase 11 progress events are incomplete.')
+          if any(x not in formats for x in ['ExportFormat.Csv','ExportFormat.Excel','ExportFormat.Pdf','ZipArchive','%PDF-1.4']): raise SystemExit('CSV/Excel/PDF format support is incomplete.')
+          if 'RejectClientTenantId' not in controller or 'string path' in controller.lower(): raise SystemExit('Tenant injection or file-path access guard is incomplete.')
+          angular_exec=re.sub(r'//[^\r\n]*','',re.sub(r'/\*.*?\*/','',angular,flags=re.S))
+          if re.search(r'\btenantId\b',angular_exec,re.I): raise SystemExit('Angular reports client must not accept browser TenantId.')
+          if 'MaximumExportRows' not in processor or 'Take(batchSize)' not in processor: raise SystemExit('Export processing must be bounded.')
+          PY
+
+      - name: Start SQL Server 2022
+        run: |
+          docker run -d --name phase15-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" -p 14345:1433 mcr.microsoft.com/mssql/server:2022-latest
+          for i in {1..60}; do if docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1;then break;fi;if [ "$i" = 60 ];then docker logs phase15-sql;exit 1;fi;sleep 2;done
+      - name: Validate V1.14.0 upgrade twice
+        run: |
+          docker cp /tmp/CustSearchAi.phase14-base.sql phase15-sql:/tmp/base.sql
+          docker cp database/09_Upgrade/V1.14.0_Phase15_ReportsExports.sql phase15-sql:/tmp/phase15.sql
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase15.sql
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase15.sql
+      - name: Validate standalone runner twice and verifier
+        run: |
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;DROP DATABASE [CustSearch_AI];"
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
+          docker cp database/run-phase15.sql phase15-sql:/tmp/run.sql
+          docker cp database/verify-phase15.sql phase15-sql:/tmp/verify.sql
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run.sql
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run.sql
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/verify.sql
+      - name: Validate prospective canonical fresh install
+        run: |
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;DROP DATABASE [CustSearch_AI];"
+          docker cp /tmp/CustSearchAi.phase15-final.sql phase15-sql:/tmp/final.sql
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
+          docker exec phase15-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF(SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.14.0')<>1 THROW 55020,'Canonical V1.14.0 invalid',1;IF OBJECT_ID(N'dbo.ExportJobs',N'U') IS NULL OR OBJECT_ID(N'dbo.Report_TenantOperationalSummary',N'P') IS NULL THROW 55021,'Canonical Phase 15 objects missing',1;DBCC CHECKCONSTRAINTS WITH ALL_CONSTRAINTS;"
+      - name: Stop SQL Server
+        if: always()
+        run: docker rm -f phase15-sql >/dev/null 2>&1 || true
+      - name: Persist tested Phase 15 canonical SQL
+        if: github.event_name == 'push'
+        run: |
+          cp /tmp/CustSearchAi.phase15-final.sql database/CustSearchAi.sql
+          if git diff --quiet -- database/CustSearchAi.sql;then echo 'Phase 15 canonical already persisted.';exit 0;fi
+          git config user.name "github-actions[bot]";git config user.email "41898282+github-actions[bot]@users.noreply.github.com";git add database/CustSearchAi.sql;git commit -m "phase15: persist V1.14 canonical SQL";git push origin HEAD:phase15-reports-exports
+
