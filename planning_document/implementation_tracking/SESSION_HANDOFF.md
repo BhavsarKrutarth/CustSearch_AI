@@ -2,9 +2,9 @@
 
 - Last Updated: 2026-08-26 03:30 +05:30
 - Current Branch: `audit/all-phases-database-smoke`
-- Current Commit: `4fcb4c63eab0749950960213e33b9c4569260561` plus uncommitted Phase 17 checkpoint
+- Phase 17 Checkpoint Commit: `fdc1e84d3e1150cbb44ff4660f215ad35c411d27`
 - Current Phase: Phase 17
-- Current Task: final diff/build/SQL review, commit and push checkpoint
+- Current Task: push the committed checkpoint and configure external Phase 17 validation environments
 - Last Completed Phase: Phase 15 universally; Phase 16 locally passed with environment blockers
 
 ## Completed This Session
@@ -43,12 +43,12 @@
 
 ## Exact Next Step
 
-1. Run `git diff --check`, final Release build/tests and live smoke verifier; review secrets; commit and push.
+1. Configure an IIS/HTTPS/WebSocket test site using `deployment/iis`, then execute the deployment runbook.
 
 ## Commands To Run Next
 
-1. `git diff --check; git status --short`
-2. `git diff --cached --stat` after staging the reviewed checkpoint.
+1. `git status --short; git log -2 --oneline`
+2. Follow `docs/IIS_ANGULAR_SIGNALR_DEPLOYMENT.md` on the deployment test host.
 
 ## Important Context For Next AI Session
 

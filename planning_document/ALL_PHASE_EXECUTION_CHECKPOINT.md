@@ -18,7 +18,8 @@
 - Database records inserted: deterministic Phase 1–16 smoke graph for tenants `10019`/`10020`, stores `11`/`12`, users `10034`–`10037`, customers `5`/`6`, retail invoice `3`, camera `3`; no biometric template or Phase 18 incident
 - Files changed: canonical SQL/build/verifier; readiness checks/tests; export stream sharing; disposable SQLite test configurations; Phase 16 report; this checkpoint
 - Detected drift: live database contains a later Phase 18 foundation that is absent from the selected Phase 16 source branch; never downgrade or recreate the live database
-- Next exact action: review the complete diff, rerun final SQL verifier/build gates, then commit and push the evidence-backed Phase 17 checkpoint
+- Phase 17 audit checkpoint: `fdc1e84d3e1150cbb44ff4660f215ad35c411d27`
+- Next exact action: push the dedicated audit branch, then configure and execute IIS/HTTPS/WebSocket deployment smoke
 - Recommended next setup: keep PRs #10/#18/#19 open and unmerged; use the dedicated audit branch and close external SQL Server 2022/Redis topology blockers before declaring Phase 16 universally verified
 
 ## Verified repository facts
