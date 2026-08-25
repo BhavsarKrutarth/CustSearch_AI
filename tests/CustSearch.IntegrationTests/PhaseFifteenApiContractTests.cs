@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using CustSearch.API.AlertsRealtime;
 using CustSearch.API.Controllers;
+using CustSearch.API.Security;
 using CustSearch.Application.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
