@@ -52,6 +52,8 @@ public interface IAlertConnectionMetrics
 {
     long ActiveConnections(long tenantId);
     long Reconnects(long tenantId);
+    long TotalActiveConnections();
+    long TotalReconnects();
     void Connected(string connectionId,long tenantId);
     void Disconnected(string connectionId);
     void Reconnected(string connectionId,long tenantId);

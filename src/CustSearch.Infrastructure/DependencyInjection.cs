@@ -5,6 +5,7 @@ using CustSearch.Application.HouseholdsVisits;
 using CustSearch.Application.Integrations;
 using CustSearch.Application.CamerasTracking;
 using CustSearch.Application.Recognition;
+using CustSearch.Application.ReportsExports;
 using CustSearch.Application.PlatformBilling;
 using CustSearch.Application.PlatformTenancy;
 using CustSearch.Application.PreferencesVoice;
@@ -19,6 +20,9 @@ using CustSearch.Infrastructure.HouseholdsVisits;
 using CustSearch.Infrastructure.Integrations;
 using CustSearch.Infrastructure.CamerasTracking;
 using CustSearch.Infrastructure.Recognition;
+using CustSearch.Infrastructure.ReportsExports;
+using CustSearch.Application.Operations;
+using CustSearch.Infrastructure.Operations;
 using CustSearch.Infrastructure.Persistence;
 using CustSearch.Infrastructure.PlatformBilling;
 using CustSearch.Infrastructure.PlatformTenancy;
@@ -51,6 +55,8 @@ public static class DependencyInjection
         services.AddScoped<IIntegrationManagementService,IntegrationManagementService>();services.AddScoped<IInboundIntegrationService,InboundIntegrationService>();services.AddScoped<IIntegrationOutboxProcessor,IntegrationOutboxProcessor>();
         services.AddScoped<ICameraTrackingService,CameraTrackingService>();
         services.AddScoped<IRecognitionService,RecognitionService>();services.AddSingleton<IRecognitionTemplateProtector,AesGcmRecognitionTemplateProtector>();
+        services.AddScoped<IReportsExportsRepository,ReportsExportsRepository>();services.AddScoped<IReportsExportsService,ReportsExportsService>();services.AddSingleton<IReportArtifactStore,ReportArtifactStore>();services.AddScoped<IReportExportProcessor,ReportExportProcessor>();services.AddScoped<IReportExportMaintenance,ReportExportMaintenance>();
+        services.AddScoped<IOperationalPlatformRepository,OperationalPlatformRepository>();services.AddScoped<IOperationalPlatformService,OperationalPlatformService>();services.AddScoped<IOperationalRetentionMaintenance,OperationalRetentionMaintenance>();
         return services;
     }
 }

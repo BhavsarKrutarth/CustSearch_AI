@@ -12,10 +12,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
-    command: 'npm --prefix ../../src/CustSearch.Admin start -- --host 127.0.0.1 --port 4200',
-    url: 'http://127.0.0.1:4200/login',
-    reuseExistingServer: false,
-    timeout: 120_000,
-  },
+  webServer: [
+    {command:'node signalr-playwright-server.mjs',url:'http://127.0.0.1:4317/health',reuseExistingServer:false,timeout:30_000},
+    {command:'npm --prefix ../../src/CustSearch.Admin start -- --host 127.0.0.1 --port 4200 --proxy-config ../../tests/CustSearch.Admin.E2E/proxy.playwright.json',url:'http://127.0.0.1:4200/login',reuseExistingServer:false,timeout:120_000},
+  ],
 });

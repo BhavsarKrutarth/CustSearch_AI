@@ -1,0 +1,69 @@
+{
+  "info": {
+    "_postman_id": "2cfec0b4-84e1-4bf1-9f89-custsearchai17",
+    "name": "CustSearch AI Admin API",
+    "description": "Secret-free Phase 17 smoke collection. Tenant endpoints never accept TenantId; use separately authorized platform and tenant sessions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:7277" },
+    { "key": "accessToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/health/live" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('200 live', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "SQL readiness",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/health/ready" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('200 ready', () => pm.response.to.have.status(200));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tenantCode\": {{tenantCodeJson}},\n  \"userName\": \"{{userName}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('login succeeds', () => pm.response.to.have.status(200));", "const body = pm.response.json();", "pm.collectionVariables.set('accessToken', body.accessToken);"] } }]
+        },
+        {
+          "name": "Current session",
+          "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": "{{baseUrl}}/api/auth/me" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('authenticated', () => pm.response.to.have.status(200));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "Platform operations",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+      "item": [
+        { "name": "System health", "request": { "method": "GET", "url": "{{baseUrl}}/api/platform/operations/health" } },
+        { "name": "Settings", "request": { "method": "GET", "url": "{{baseUrl}}/api/platform/operations/settings" } },
+        { "name": "Audit page", "request": { "method": "GET", "url": "{{baseUrl}}/api/platform/operations/audit?pageNumber=1&pageSize=50" } },
+        { "name": "Report catalog", "request": { "method": "GET", "url": "{{baseUrl}}/api/platform/reports/catalog" } }
+      ]
+    },
+    {
+      "name": "Tenant operations",
+      "description": "Use a tenant token. These requests intentionally contain StoreId only and never TenantId.",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+      "item": [
+        { "name": "Effective settings", "request": { "method": "GET", "url": "{{baseUrl}}/api/tenant/operations/settings?effective=true" } },
+        { "name": "Audit page", "request": { "method": "GET", "url": "{{baseUrl}}/api/tenant/operations/audit?pageNumber=1&pageSize=50" } },
+        { "name": "Report catalog", "request": { "method": "GET", "url": "{{baseUrl}}/api/tenant/reports/catalog" } }
+      ]
+    }
+  ]
+}

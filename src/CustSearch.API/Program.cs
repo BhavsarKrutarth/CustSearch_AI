@@ -5,15 +5,20 @@ using CustSearch.API.AlertsRealtime;
 using CustSearch.API.Integrations;
 using CustSearch.API.CamerasTracking;
 using CustSearch.API.Recognition;
+using CustSearch.API.ReportsExports;
+using CustSearch.API.Operations;
+using CustSearch.API.OpenApi;
 using CustSearch.Application.AlertsRealtime;
 using CustSearch.Application.Integrations;
 using CustSearch.Application.CamerasTracking;
 using CustSearch.Application.Recognition;
+using CustSearch.Application.ReportsExports;
 using CustSearch.Application.Authentication;
 using CustSearch.Application.Authorization;
 using CustSearch.Infrastructure;
 using CustSearch.Infrastructure.Security;
 using CustSearch.Infrastructure.Persistence;
+using CustSearch.Infrastructure.ReportsExports;
 using CustSearch.Integrations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -21,7 +26,9 @@ using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Globalization;
 using System.Security.Claims;
@@ -89,7 +96,8 @@ try
                     // Normal JWT validation and database-backed session revalidation still run afterwards.
                     var accessToken = context.Request.Query["access_token"];
                     if (!Microsoft.Extensions.Primitives.StringValues.IsNullOrEmpty(accessToken)
-                        && context.HttpContext.Request.Path.StartsWithSegments("/hubs/alerts"))
+                        && (context.HttpContext.Request.Path.StartsWithSegments("/hubs/alerts")
+                            || context.HttpContext.Request.Path.StartsWithSegments("/hubs/reports")))
                     {
                         context.Token = accessToken.ToString();
                     }
@@ -177,19 +185,30 @@ try
     builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
     builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
     builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ApiAuthorizationResultHandler>();
-    builder.Services.AddSignalR(options=>{options.EnableDetailedErrors=false;options.MaximumReceiveMessageSize=32*1024;});
+    builder.Services.AddSingleton<IValidateOptions<OperationalRedisOptions>,OperationalRedisOptionsValidator>();
+    builder.Services.AddOptions<OperationalRedisOptions>().Bind(builder.Configuration.GetSection(OperationalRedisOptions.SectionName)).ValidateOnStart();
+    var redisOptions=builder.Configuration.GetSection(OperationalRedisOptions.SectionName).Get<OperationalRedisOptions>()??new();
+    if(redisOptions.Enabled)builder.Services.AddStackExchangeRedisCache(options=>{options.Configuration=redisOptions.ConnectionString;options.InstanceName=redisOptions.InstanceName;});else builder.Services.AddDistributedMemoryCache();
+    var signalR=builder.Services.AddSignalR(options=>{options.EnableDetailedErrors=false;options.MaximumReceiveMessageSize=32*1024;});
+    if(redisOptions.SignalRBackplaneEnabled)signalR.AddStackExchangeRedis(redisOptions.ConnectionString,options=>options.Configuration.AbortOnConnectFail=false);
     builder.Services.AddSingleton<IAlertConnectionMetrics,AlertConnectionMetrics>();
     builder.Services.AddSingleton<INotificationChannelAdapter,SignalRNotificationChannelAdapter>();
     builder.Services.AddScoped<AlertExceptionFilter>();
     builder.Services.AddScoped<IntegrationExceptionFilter>();
     builder.Services.AddScoped<CameraTrackingExceptionFilter>();
     builder.Services.AddScoped<RecognitionExceptionFilter>();
+    builder.Services.AddScoped<ReportExportExceptionFilter>();
+    builder.Services.AddScoped<OperationalExceptionFilter>();
+    builder.Services.AddSingleton<IReportExportRealtimePublisher,SignalRReportExportPublisher>();
+    builder.Services.AddScoped<IReportExportEventDispatcher,ReportExportEventDispatcher>();
+    builder.Services.AddOptions<ReportExportOptions>().Bind(builder.Configuration.GetSection(ReportExportOptions.SectionName)).Validate(x=>x.RetentionHours is>=1 and<=168,"ReportExports:RetentionHours must be between 1 and 168.").Validate(x=>x.LeaseSeconds is>=30 and<=3600,"ReportExports:LeaseSeconds must be between 30 and 3600.").ValidateOnStart();
     builder.Services.AddOptions<IntegrationSecurityOptions>().Bind(builder.Configuration.GetSection(IntegrationSecurityOptions.SectionName)).Validate(x=>x.AllowedClockSkewSeconds is>=30 and<=900,"IntegrationSecurity:AllowedClockSkewSeconds must be between 30 and 900.").Validate(x=>x.MaximumInboundBodyBytes is>=1024 and<=1048576,"IntegrationSecurity:MaximumInboundBodyBytes must be between 1024 and 1048576.").ValidateOnStart();
     builder.Services.AddOptions<AlertsRealtimeOptions>().Bind(builder.Configuration.GetSection(AlertsRealtimeOptions.SectionName)).Validate(x=>x.PollIntervalSeconds is>=1 and<=60,"AlertsRealtime:PollIntervalSeconds must be between 1 and 60.").Validate(x=>x.BatchSize is>=1 and<=200,"AlertsRealtime:BatchSize must be between 1 and 200.").ValidateOnStart();
     builder.Services.AddOptions<CctvSecurityOptions>().Bind(builder.Configuration.GetSection(CctvSecurityOptions.SectionName)).Validate(x=>x.AllowedClockSkewSeconds is>=30 and<=900,"CctvSecurity:AllowedClockSkewSeconds must be between 30 and 900.").Validate(x=>x.MaximumBodyBytes is>=1024 and<=1048576,"CctvSecurity:MaximumBodyBytes must be between 1024 and 1048576.").ValidateOnStart();
     builder.Services.AddOptions<RecognitionSecurityOptions>().Bind(builder.Configuration.GetSection(RecognitionSecurityOptions.SectionName)).Validate(x=>x.MinimumConfidence is>=0 and<=1&&x.MinimumQuality is>=0 and<=1&&x.AmbiguityDelta is>=0 and<=1,"Recognition thresholds must be between 0 and 1.").Validate(x=>x.RetentionDaysAfterWithdrawal is>=0 and<=3650,"Recognition retention must be between 0 and 3650 days.").Validate(x=>x.HasValidEncryptionConfiguration(),"Enabled recognition requires a secret-supplied 256-bit Base64 encryption key and an opaque key reference.").ValidateOnStart();
     if(builder.Environment.IsProduction()&&builder.Configuration.GetValue<bool>("CctvRuntime:DemoMode"))throw new InvalidOperationException("CCTV Demo Mode cannot be enabled in Production.");
     builder.Services.AddHostedService<NotificationOutboxHostedService>();
+    builder.Services.AddHostedService<ReportExportEventHostedService>();
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -208,9 +227,14 @@ try
     builder.Services.AddControllers(options =>
         options.Filters.Add<PlatformManagementExceptionFilter>());
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
-    builder.Services.AddHealthChecks()
-        .AddDbContextCheck<CustSearchDbContext>("sql-server", tags: ["ready"]);
+    builder.Services.AddSwaggerGen(options=>
+    {
+        options.SwaggerDoc("v1",new OpenApiInfo{Title="CustSearch AI Admin API",Version="v1",Description="Multi-tenant administrative API. Tenant and store scope are derived from the authenticated server session."});
+        options.AddSecurityDefinition("Bearer",new OpenApiSecurityScheme{Name="Authorization",In=ParameterLocation.Header,Type=SecuritySchemeType.Http,Scheme="bearer",BearerFormat="JWT",Description="Short-lived CustSearch access token. Refresh tokens remain in the secure cookie flow."});
+        options.OperationFilter<BearerSecurityOperationFilter>();
+    });
+    var healthChecks=builder.Services.AddHealthChecks().AddDbContextCheck<CustSearchDbContext>("sql-server",tags:["ready"]);
+    if(redisOptions.Enabled)healthChecks.AddCheck<RedisDistributedCacheHealthCheck>("redis",failureStatus:HealthStatus.Degraded,tags:["operational"]);
 
     var app = builder.Build();
 
@@ -236,6 +260,7 @@ try
     app.UseAuthorization();
     app.MapControllers();
     app.MapHub<AlertHub>("/hubs/alerts");
+    app.MapHub<ReportExportHub>("/hubs/reports");
     app.MapHealthChecks("/health/live", new HealthCheckOptions
     {
         Predicate = _ => false,
