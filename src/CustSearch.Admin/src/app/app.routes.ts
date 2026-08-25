@@ -61,6 +61,7 @@ export const routes:Routes=[
     {path:':tenantId',title:'Tenant details | CustSearch AI',loadComponent:()=>import('./features/platform-tenants/tenant-detail-page').then(m=>m.TenantDetailPage)},
   ]},
   {path:'admin/subscription-plans',title:'Subscription plans | CustSearch AI',canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.subscriptionPlansView])],loadComponent:()=>import('./features/platform-tenants/subscription-plans-page').then(m=>m.SubscriptionPlansPage)},
+  {path:'admin/operations',title:'Operational platform | CustSearch AI',canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformOperationsView])],loadComponent:()=>import('./features/operations/operations-dashboard-page').then(m=>m.OperationsDashboardPage)},
 
   // Exact Phase 9 platform-admin billing routes requested by the plan.
   {path:'platform-admin/billing/plans',title:'Platform billing plans | CustSearch AI',data:{mode:'plans'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformBillingPlansView])],loadComponent:platformBillingPage},

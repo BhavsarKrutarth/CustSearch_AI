@@ -6,16 +6,19 @@ using CustSearch.API.Integrations;
 using CustSearch.API.CamerasTracking;
 using CustSearch.API.Recognition;
 using CustSearch.API.ReportsExports;
+using CustSearch.API.Operations;
 using CustSearch.Application.AlertsRealtime;
 using CustSearch.Application.Integrations;
 using CustSearch.Application.CamerasTracking;
 using CustSearch.Application.Recognition;
 using CustSearch.Application.ReportsExports;
+using CustSearch.Application.Operations;
 using CustSearch.Application.Authentication;
 using CustSearch.Application.Authorization;
 using CustSearch.Infrastructure;
 using CustSearch.Infrastructure.Security;
 using CustSearch.Infrastructure.Persistence;
+using CustSearch.Infrastructure.Operations;
 using CustSearch.Integrations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -179,7 +182,10 @@ try
     builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
     builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
     builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ApiAuthorizationResultHandler>();
-    builder.Services.AddSignalR(options=>{options.EnableDetailedErrors=false;options.MaximumReceiveMessageSize=32*1024;});
+    builder.Services.AddOptions<OperationalPlatformOptions>().Bind(builder.Configuration.GetSection(OperationalPlatformOptions.SectionName)).Validate(x=>x.IsValid(),"OperationalPlatform settings are invalid.").ValidateOnStart();
+    var operationalOptions=builder.Configuration.GetSection(OperationalPlatformOptions.SectionName).Get<OperationalPlatformOptions>()??new();
+    var signalR=builder.Services.AddSignalR(options=>{options.EnableDetailedErrors=false;options.MaximumReceiveMessageSize=32*1024;});
+    if(operationalOptions.RedisEnabled){var redis=builder.Configuration.GetConnectionString("Redis");if(string.IsNullOrWhiteSpace(redis))throw new InvalidOperationException("Redis is enabled but secret-supplied ConnectionStrings:Redis is missing.");signalR.AddStackExchangeRedis(redis);}
     builder.Services.AddSingleton<IAlertConnectionMetrics,AlertConnectionMetrics>();
     builder.Services.AddSingleton<INotificationChannelAdapter,SignalRNotificationChannelAdapter>();
     builder.Services.AddScoped<AlertExceptionFilter>();
@@ -187,6 +193,7 @@ try
     builder.Services.AddScoped<CameraTrackingExceptionFilter>();
     builder.Services.AddScoped<RecognitionExceptionFilter>();
     builder.Services.AddScoped<ReportExportExceptionFilter>();
+    builder.Services.AddScoped<OperationalExceptionFilter>();
     builder.Services.AddOptions<IntegrationSecurityOptions>().Bind(builder.Configuration.GetSection(IntegrationSecurityOptions.SectionName)).Validate(x=>x.AllowedClockSkewSeconds is>=30 and<=900,"IntegrationSecurity:AllowedClockSkewSeconds must be between 30 and 900.").Validate(x=>x.MaximumInboundBodyBytes is>=1024 and<=1048576,"IntegrationSecurity:MaximumInboundBodyBytes must be between 1024 and 1048576.").ValidateOnStart();
     builder.Services.AddOptions<AlertsRealtimeOptions>().Bind(builder.Configuration.GetSection(AlertsRealtimeOptions.SectionName)).Validate(x=>x.PollIntervalSeconds is>=1 and<=60,"AlertsRealtime:PollIntervalSeconds must be between 1 and 60.").Validate(x=>x.BatchSize is>=1 and<=200,"AlertsRealtime:BatchSize must be between 1 and 200.").ValidateOnStart();
     builder.Services.AddOptions<CctvSecurityOptions>().Bind(builder.Configuration.GetSection(CctvSecurityOptions.SectionName)).Validate(x=>x.AllowedClockSkewSeconds is>=30 and<=900,"CctvSecurity:AllowedClockSkewSeconds must be between 30 and 900.").Validate(x=>x.MaximumBodyBytes is>=1024 and<=1048576,"CctvSecurity:MaximumBodyBytes must be between 1024 and 1048576.").ValidateOnStart();
@@ -214,7 +221,10 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
     builder.Services.AddHealthChecks()
-        .AddDbContextCheck<CustSearchDbContext>("sql-server", tags: ["ready"]);
+        .AddDbContextCheck<CustSearchDbContext>("sql-server", tags: ["ready"])
+        .AddCheck<RedisReadinessHealthCheck>("redis",tags:["ready"])
+        .AddCheck<WorkerReadinessHealthCheck>("worker",tags:["ready"])
+        .AddCheck<SignalRReadinessHealthCheck>("signalr",tags:["ready"]);
 
     var app = builder.Build();
 

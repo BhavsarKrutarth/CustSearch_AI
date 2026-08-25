@@ -29,5 +29,6 @@ export const ADMIN_NAVIGATION:Record<'customer'|'platform',readonly AdminNavigat
     {label:'Platform Billing',route:null,permission:PERMISSIONS.platformBillingView},
     {label:'Subscriptions',route:'/admin/subscription-plans',permission:PERMISSIONS.subscriptionPlansView},
     {label:'Reports',route:null,permission:PERMISSIONS.platformReportsView},
+    {label:'Operations',route:'/admin/operations',permission:PERMISSIONS.platformOperationsView},
   ],
 };

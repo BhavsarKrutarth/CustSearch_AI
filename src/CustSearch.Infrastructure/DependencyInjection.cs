@@ -6,6 +6,7 @@ using CustSearch.Application.Integrations;
 using CustSearch.Application.CamerasTracking;
 using CustSearch.Application.Recognition;
 using CustSearch.Application.ReportsExports;
+using CustSearch.Application.Operations;
 using CustSearch.Application.PlatformBilling;
 using CustSearch.Application.PlatformTenancy;
 using CustSearch.Application.PreferencesVoice;
@@ -21,6 +22,7 @@ using CustSearch.Infrastructure.Integrations;
 using CustSearch.Infrastructure.CamerasTracking;
 using CustSearch.Infrastructure.Recognition;
 using CustSearch.Infrastructure.ReportsExports;
+using CustSearch.Infrastructure.Operations;
 using CustSearch.Infrastructure.Persistence;
 using CustSearch.Infrastructure.PlatformBilling;
 using CustSearch.Infrastructure.PlatformTenancy;
@@ -54,6 +56,7 @@ public static class DependencyInjection
         services.AddScoped<ICameraTrackingService,CameraTrackingService>();
         services.AddScoped<IRecognitionService,RecognitionService>();services.AddSingleton<IRecognitionTemplateProtector,AesGcmRecognitionTemplateProtector>();
         services.AddScoped<IReportQueryRepository,DapperReportQueryRepository>();services.AddScoped<IReportsExportsService,ReportsExportsService>();services.AddScoped<IExportJobProcessor,ExportJobProcessor>();services.AddSingleton<IExportFileStore,LocalExportFileStore>();services.AddSingleton<IExportDownloadTokenService,ExportDownloadTokenService>();
+        services.AddScoped<IOperationalPlatformService,OperationalPlatformService>();services.AddScoped<IWorkerRuntimeGate,WorkerRuntimeGate>();services.AddScoped<IRetentionProcessor,OperationalRetentionProcessor>();
         return services;
     }
 }

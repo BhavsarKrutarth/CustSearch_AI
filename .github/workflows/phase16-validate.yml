@@ -1,0 +1,136 @@
+name: Phase 16 Validate
+
+on:
+  push:
+    branches: [phase16-operations]
+  pull_request:
+    branches: [phase15-reports-exports]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      SA_PASSWORD: 'CustSearch_Phase16_2026!Sql'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with: {dotnet-version: 8.0.424}
+      - name: Setup Node for pinned Angular 21
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: src/CustSearch.Admin/package-lock.json
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+
+      - name: Prepare validated Phase 15 baseline and prospective Phase 16 canonical
+        shell: bash
+        run: |
+          git show origin/phase15-reports-exports:database/CustSearchAi.sql > /tmp/CustSearchAi.phase15-base.raw
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/CustSearchAi.phase15-base.raw').read_bytes();enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8');base=raw.decode(enc)
+          if "VersionNumber=N'V1.14.0'" not in base: raise SystemExit('The tested Phase 15 branch must contain canonical V1.14.0 before Phase 16.')
+          upgrade=Path('database/09_Upgrade/V1.15.0_Phase16_Operations.sql').read_text(encoding='utf-8-sig')
+          branch_raw=Path('database/CustSearchAi.sql').read_bytes();branch_enc='utf-16' if branch_raw.startswith(b'\xff\xfe') else ('utf-8-sig' if branch_raw.startswith(b'\xef\xbb\xbf') else 'utf-8');branch=branch_raw.decode(branch_enc)
+          final=branch if "VersionNumber=N'V1.15.0'" in branch else base.rstrip()+"\n\n-- ============================================================\n-- PHASE 16 - OPERATIONAL PLATFORM\n-- VERSION: V1.15.0\n-- ============================================================\n"+upgrade.strip()+"\n"
+          Path('/tmp/CustSearchAi.phase15-base.sql').write_text(base,encoding='utf-8');Path('/tmp/CustSearchAi.phase16-final.sql').write_text(final,encoding='utf-8')
+          PY
+
+      - name: Restore and build .NET Release
+        run: dotnet restore CustSearch_AI.sln && dotnet build CustSearch_AI.sln --configuration Release --no-restore
+      - name: Test .NET through Phase 16
+        run: dotnet test CustSearch_AI.sln --configuration Release --no-build --logger "trx;LogFileName=phase16-tests.trx"
+      - name: Install Angular dependencies reproducibly
+        working-directory: src/CustSearch.Admin
+        run: npm ci --no-audit --no-fund
+      - name: Lint, test and build Angular through Phase 16
+        working-directory: src/CustSearch.Admin
+        run: npm run lint && npm run test:ci && npm run build:production
+      - name: Prepare Playwright
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Run full Playwright regression through Phase 16
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm test
+      - name: Ruff and pytest through Phase 16
+        run: |
+          python -m pip install --disable-pip-version-check -r src/CustSearch.AI/requirements-dev.txt
+          ruff check src/CustSearch.AI tests/CustSearch.AI.Tests
+          PYTHONPATH=src/CustSearch.AI python -m pytest -q tests/CustSearch.AI.Tests
+
+      - name: Validate Phase 16 operational safety and structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          files=[Path('database/09_Upgrade/V1.15.0_Phase16_Operations.sql').read_text(),Path('database/run-phase16.sql').read_text()]
+          required=['dbo.OperationalSettings','dbo.OperationalSecretReferences','dbo.WorkerControls','dbo.WorkerLeases','dbo.WorkerHeartbeats','dbo.RetentionPolicies','dbo.RetentionRuns','dbo.OperationalRetention_Run','TR_AuditLogs_ImmutableUpdate','PlatformOperations.View','PlatformOperations.Manage',"VersionNumber=N'V1.15.0'"]
+          for sql in files:
+              missing=[x for x in required if x not in sql]
+              if missing: raise SystemExit(f'Missing Phase 16 SQL markers: {missing}')
+              executable=re.sub(r'--[^\r\n]*','',re.sub(r'/\*.*?\*/','',sql,flags=re.S)).lower()
+              if ':r ' in executable or 'powershell' in executable: raise SystemExit('Phase 16 SQL must remain standalone T-SQL.')
+              if re.search(r'\b(drop\s+database|truncate\s+table)\b',executable): raise SystemExit('Phase 16 SQL contains a dangerous reset operation.')
+          domain=Path('src/CustSearch.Domain/Entities/PhaseSixteenOperationsEntities.cs').read_text()
+          service=Path('src/CustSearch.Infrastructure/Operations/OperationalPlatformService.cs').read_text()
+          context=Path('src/CustSearch.Infrastructure/Persistence/CustSearchDbContext.cs').read_text()
+          api=Path('src/CustSearch.API/Program.cs').read_text()
+          controller=Path('src/CustSearch.API/Controllers/OperationalPlatformController.cs').read_text()
+          angular=Path('src/CustSearch.Admin/src/app/features/operations/operations-dashboard-page.ts').read_text()
+          workers=''.join(Path(x).read_text() for x in ['src/CustSearch.API/AlertsRealtime/NotificationOutboxHostedService.cs','src/CustSearch.Worker/IntegrationOutboxHostedService.cs','src/CustSearch.Worker/ExportJobsHostedService.cs','src/CustSearch.Worker/OperationalHostedServices.cs'])
+          if any(x not in service for x in ['IsolationLevel.Serializable','WorkerControls','WorkerLeases','RetryDeadLetterAsync','Mask(','OperationalRetention_Run']): raise SystemExit('Worker coordination, retry, masking or retention boundary is incomplete.')
+          if any(x not in context for x in ['ValidateAuditWrites','EntityState.Modified','prohibited sensitive field']): raise SystemExit('Immutable safe-audit enforcement is incomplete.')
+          if any(x not in api for x in ['AddStackExchangeRedis','ConnectionStrings:Redis','RedisReadinessHealthCheck','WorkerReadinessHealthCheck','SignalRReadinessHealthCheck']): raise SystemExit('Redis/backplane or readiness setup is incomplete.')
+          if workers.count('IWorkerRuntimeGate')<4 or 'CancellationToken' not in workers: raise SystemExit('Background jobs are not lease/pause/graceful-shutdown controlled.')
+          if 'AuthorizationPolicyNames.PlatformScope' not in controller or 'PlatformOperations.Manage' not in controller: raise SystemExit('Operational controls are not platform permission protected.')
+          if 'maskedReference' not in angular or 'Secret values are never returned' not in angular: raise SystemExit('Angular secret masking boundary is incomplete.')
+          if any(x in (domain+service+controller).lower() for x in ['delete all','reset all']): raise SystemExit('Dangerous bulk operational control detected.')
+          PY
+
+      - name: Start SQL Server 2022
+        run: |
+          docker run -d --name phase16-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" -p 14346:1433 mcr.microsoft.com/mssql/server:2022-latest
+          for i in {1..60}; do if docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1;then break;fi;if [ "$i" = 60 ];then docker logs phase16-sql;exit 1;fi;sleep 2;done
+      - name: Validate V1.15.0 upgrade twice
+        run: |
+          docker cp /tmp/CustSearchAi.phase15-base.sql phase16-sql:/tmp/base.sql
+          docker cp database/09_Upgrade/V1.15.0_Phase16_Operations.sql phase16-sql:/tmp/phase16.sql
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase16.sql
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/phase16.sql
+      - name: Validate standalone runner twice and verifier
+        run: |
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;DROP DATABASE [CustSearch_AI];"
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/base.sql
+          docker cp database/run-phase16.sql phase16-sql:/tmp/run.sql
+          docker cp database/verify-phase16.sql phase16-sql:/tmp/verify.sql
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run.sql
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/run.sql
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -i /tmp/verify.sql
+      - name: Validate prospective canonical fresh install
+        run: |
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "ALTER DATABASE [CustSearch_AI] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;DROP DATABASE [CustSearch_AI];"
+          docker cp /tmp/CustSearchAi.phase16-final.sql phase16-sql:/tmp/final.sql
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/final.sql
+          docker exec phase16-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF(SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.15.0')<>1 THROW 55220,'Canonical V1.15.0 invalid',1;IF OBJECT_ID(N'dbo.OperationalSettings',N'U') IS NULL OR OBJECT_ID(N'dbo.WorkerLeases',N'U') IS NULL OR OBJECT_ID(N'dbo.OperationalRetention_Run',N'P') IS NULL THROW 55221,'Canonical Phase 16 objects missing',1;DBCC CHECKCONSTRAINTS WITH ALL_CONSTRAINTS;"
+      - name: Stop SQL Server
+        if: always()
+        run: docker rm -f phase16-sql >/dev/null 2>&1 || true
+      - name: Persist tested Phase 16 canonical SQL
+        if: github.event_name == 'push'
+        run: |
+          cp /tmp/CustSearchAi.phase16-final.sql database/CustSearchAi.sql
+          if git diff --quiet -- database/CustSearchAi.sql;then echo 'Phase 16 canonical already persisted.';exit 0;fi
+          git config user.name "github-actions[bot]";git config user.email "41898282+github-actions[bot]@users.noreply.github.com";git add database/CustSearchAi.sql;git commit -m "phase16: persist V1.15 canonical SQL";git push origin HEAD:phase16-operations

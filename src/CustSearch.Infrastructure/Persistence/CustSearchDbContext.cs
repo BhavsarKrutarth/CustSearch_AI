@@ -1,5 +1,6 @@
 using CustSearch.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace CustSearch.Infrastructure.Persistence;
 
@@ -35,5 +36,13 @@ public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> op
     // Phase 15 Reports & Async Exports — durable authorized jobs; report rows are queried through Dapper stored procedures.
     public DbSet<ExportJob> ExportJobs=>Set<ExportJob>();
 
+    // Phase 16 Operational Platform — hierarchy settings, separate secret references, controls, leases and auditable retention.
+    public DbSet<OperationalSetting> OperationalSettings=>Set<OperationalSetting>(); public DbSet<OperationalSecretReference> OperationalSecretReferences=>Set<OperationalSecretReference>(); public DbSet<WorkerControl> WorkerControls=>Set<WorkerControl>(); public DbSet<WorkerLease> WorkerLeases=>Set<WorkerLease>(); public DbSet<WorkerHeartbeat> WorkerHeartbeats=>Set<WorkerHeartbeat>(); public DbSet<RetentionPolicy> RetentionPolicies=>Set<RetentionPolicy>(); public DbSet<RetentionRun> RetentionRuns=>Set<RetentionRun>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder){ArgumentNullException.ThrowIfNull(modelBuilder);modelBuilder.ApplyConfigurationsFromAssembly(typeof(CustSearchDbContext).Assembly);base.OnModelCreating(modelBuilder);}
+    public override int SaveChanges(bool acceptAllChangesOnSuccess){ValidateAuditWrites();return base.SaveChanges(acceptAllChangesOnSuccess);}
+    public override Task<int>SaveChangesAsync(bool acceptAllChangesOnSuccess,CancellationToken cancellationToken=default){ValidateAuditWrites();return base.SaveChangesAsync(acceptAllChangesOnSuccess,cancellationToken);}
+    private void ValidateAuditWrites(){foreach(var entry in ChangeTracker.Entries<AuditLog>()){if(entry.State is EntityState.Modified or EntityState.Deleted)throw new InvalidOperationException("Audit entries are immutable; retention must use the audited retention procedure.");if(entry.State==EntityState.Added&&(Unsafe(entry.Entity.BeforeJson)||Unsafe(entry.Entity.AfterJson)))throw new InvalidOperationException("Audit metadata contains a prohibited sensitive field.");}}
+    private static bool Unsafe(string?json){if(string.IsNullOrWhiteSpace(json))return false;try{using var document=JsonDocument.Parse(json,new JsonDocumentOptions{MaxDepth=16});return Unsafe(document.RootElement);}catch(JsonException){throw new InvalidOperationException("Audit metadata must be valid JSON.");}}
+    private static bool Unsafe(JsonElement element){if(element.ValueKind==JsonValueKind.Object){foreach(var property in element.EnumerateObject()){if(property.Name.Equals("password",StringComparison.OrdinalIgnoreCase)||property.Name.Equals("secretValue",StringComparison.OrdinalIgnoreCase)||property.Name.Equals("signingKey",StringComparison.OrdinalIgnoreCase)||property.Name.Equals("accessToken",StringComparison.OrdinalIgnoreCase)||property.Name.Equals("refreshToken",StringComparison.OrdinalIgnoreCase)||property.Name.Equals("biometricTemplate",StringComparison.OrdinalIgnoreCase)||property.Name.Equals("rawFrame",StringComparison.OrdinalIgnoreCase))return true;if(Unsafe(property.Value))return true;}}else if(element.ValueKind==JsonValueKind.Array){foreach(var item in element.EnumerateArray())if(Unsafe(item))return true;}return false;}
 }
