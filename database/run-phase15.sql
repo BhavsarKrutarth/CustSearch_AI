@@ -15,7 +15,7 @@ BEGIN
   CreatedUtc DATETIME2(7) NOT NULL,StartedUtc DATETIME2(7) NULL,CompletedUtc DATETIME2(7) NULL,ExpiresUtc DATETIME2(7) NOT NULL,
   Error NVARCHAR(2000) NULL,FilePath NVARCHAR(1000) NULL,FileName NVARCHAR(260) NULL,ContentType NVARCHAR(150) NULL,
   AttemptCount INT NOT NULL,LeaseId UNIQUEIDENTIFIER NULL,LeaseExpiresUtc DATETIME2(7) NULL,RowVersion ROWVERSION NOT NULL,
-  CONSTRAINT FK_ExportJobs_Users FOREIGN KEY(RequestedByUserId) REFERENCES dbo.UserAccounts(Id),
+  CONSTRAINT FK_ExportJobs_Users FOREIGN KEY(RequestedByUserId) REFERENCES dbo.Users(Id),
   CONSTRAINT FK_ExportJobs_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
   CONSTRAINT FK_ExportJobs_Alerts FOREIGN KEY(AlertId) REFERENCES dbo.Alerts(Id),
   CONSTRAINT CK_ExportJobs_Scope CHECK((TenantId IS NULL AND ReportType=20) OR (TenantId IS NOT NULL AND ReportType BETWEEN 1 AND 10)),
@@ -82,4 +82,3 @@ GO
 IF(SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.14.0')<>1 THROW 54990,'V1.14.0 DatabaseVersions row must exist exactly once.',1;
 IF OBJECT_ID(N'dbo.ExportJobs',N'U') IS NULL OR OBJECT_ID(N'dbo.Report_TenantOperationalSummary',N'P') IS NULL OR OBJECT_ID(N'dbo.Report_PlatformTenantSummary',N'P') IS NULL THROW 54991,'Phase 15 database objects are incomplete.',1;
 GO
-
