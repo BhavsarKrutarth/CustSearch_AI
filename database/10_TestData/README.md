@@ -11,9 +11,10 @@ $env:CUSTSEARCH_SMOKE_PASSWORD = '<local-strong-password>'
 sqlcmd -S 'KRUTARTH-BHAVSA' -d 'CustSearch_AI' -E -C -b -i database/10_TestData/AllPhases_SmokeData_Verify.sql
 ```
 
-Reusable logins are `smoke.platform@custsearch.local`, `smoke.tenantadmin@custsearch.local`, and
-`smoke.staff@custsearch.local`; their password is only the local environment value supplied to the
-runner. A rerun rotates only the deterministic smoke accounts to the newly supplied value.
+Reusable usernames are `smoke.platform`, `smoke.tenantadmin`, and `smoke.staff`; their password is
+only the local environment value supplied to the runner. The API login contract uses `UserName`, not
+email: tenant users must also send `SMOKE-TENANT-001`, while the platform user leaves `TenantCode`
+empty. A rerun rotates only the deterministic smoke accounts to the newly supplied value.
 The isolation login is `smoke.tenantbadmin@custsearch.local` (username `smoke.tenantbadmin`) and is
 rotated to the same local smoke password.
 

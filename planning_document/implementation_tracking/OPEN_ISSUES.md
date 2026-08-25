@@ -10,8 +10,8 @@
 ## High
 
 - Phase 17 IIS/HTTPS/WebSocket deployment has not been executed. Blocking Phase 17 completion.
-- Redis multi-node SignalR/backplane behavior has no configured validation topology. Blocking universal
-  Phase 16/17 completion.
+- Production Redis topology, authentication/TLS and sustained failover/load behavior remain deployment
+  concerns; local two-API-node cross-node SignalR delivery is verified and no longer blocks Phase 16.
 
 ## Medium
 

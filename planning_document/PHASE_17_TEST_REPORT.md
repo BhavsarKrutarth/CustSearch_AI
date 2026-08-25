@@ -34,11 +34,12 @@ received 200 for its own customer. `DBCC CHECKCONSTRAINTS` returned no violation
 ## Blocked gates
 
 - SQL Server 2022 validation: the reachable local engine identifies as version 17, compatibility 160.
-- Redis multi-node/backplane validation: no Redis topology is configured.
+- Redis multi-node/backplane validation: PASS locally with Memurai 4.1.2, two ready API nodes and
+  event `2` delivered from node B to a client connected to node A.
 - IIS/HTTPS/WebSocket deployed smoke: no IIS site/certificate is configured.
 - Physical RTSP/production ONNX calibration: Demo Mode is the validated fallback.
 - Phase 18: live V1.16 SQL/verifier were found on divergent AIMain commit `055b052`; selected-chain
   application/worker/UI/Python implementation remains absent.
 
-These are recorded as `BLOCKED`, not passed. Phase 18 must not be declared implemented from live
-database objects alone.
+The remaining environment gates are recorded as `BLOCKED`, not passed. Phase 18 must not be declared
+implemented from live database objects alone.

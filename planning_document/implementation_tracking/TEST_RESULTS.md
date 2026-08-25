@@ -14,7 +14,8 @@ Observed run: `CUSTSEARCH_SMOKE_20260825_001`
 | 2/17 | Real auth | login/me/refresh/logout | expected statuses | PASS | refresh defect fixed/retested |
 | 6/17 | Tenant isolation | cross-tenant denied | 404/404; own 200 | PASS | tenant and staff probes |
 | 16 | SQL Server 2022 | execute on SQL 2022 | local engine is v17 | BLOCKED | exact environment absent |
-| 11/16 | Redis multi-node | prove backplane behavior | topology absent | BLOCKED | external setup required |
+| 16 | SQL 2022 version gate | reject non-v16 before schema work | local v17 rejected with exact reason | PASS | wrapper syntax and fail-fast path executed |
+| 11/16 | Redis multi-node | prove backplane behavior | nodes ready 200; event 2 crossed B to A | PASS | Memurai 4.1.2 / Redis protocol 7.2.5 |
 | 17 | IIS/WebSocket | deployed smoke | site absent | BLOCKED | external setup required |
 | 16/17 | Manual API/Worker startup | no connection env required | both running; live/ready 200; heartbeat fresh | PASS | committed Windows-auth local settings |
 | 17 | Angular to API | dev proxy reaches API/SQL auth | UI 200; invalid login 401 through proxy | PASS | actual processes |

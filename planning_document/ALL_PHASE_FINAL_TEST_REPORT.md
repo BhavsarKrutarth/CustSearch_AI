@@ -6,8 +6,8 @@ Status: **INTERIM — do not use as an all-phases completion certificate**
 
 ## Executive summary
 
-Phases 1-15 are implemented and verified. Phase 16 passes all reachable local, live SQL and automated
-gates but remains environment-blocked for SQL Server 2022 and Redis multi-node evidence. Phase 17
+Phases 1-15 are implemented and verified. Phase 16 passes local, live SQL, automated and Redis
+multi-node gates but remains environment-blocked for exact SQL Server 2022 evidence. Phase 17
 passes local regression and now has reviewed deployment templates, but an actual IIS/HTTPS/WebSocket
 deployment has not been executed. Phase 18 SQL provenance was recovered on divergent AIMain commit
 `055b052`, but selected-chain integration and every executable application flow remain blocked.
@@ -15,7 +15,7 @@ deployment has not been executed. Phase 18 SQL provenance was recovered on diver
 | Phase | Code | Database | Tests | Documentation | Status |
 |---:|---|---|---|---|---|
 | 1-15 | implemented | verified | current regression green | available | COMPLETE |
-| 16 | implemented | V1.15 verified | local green; external gates absent | updated | BLOCKED |
+| 16 | implemented | V1.15 verified | local + Redis green; SQL 2022 absent | updated | BLOCKED |
 | 17 | partial hardening | no new schema | local green; IIS absent | updated | IN PROGRESS |
 | 18 | absent in selected chain | V1.16 live; SQL source on divergent AIMain | absent | plan only | BLOCKED |
 

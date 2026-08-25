@@ -52,7 +52,8 @@ fails if either appears for the smoke tenant.
 ## Blocked smoke areas
 
 - SQL Server 2022-specific environment execution: local engine is version 17.
-- Redis multi-node/SignalR backplane behavior: no Redis topology configured.
+- Redis multi-node/SignalR backplane: PASS on 2026-08-26 using Memurai 4.1.2 / Redis protocol 7.2.5;
+  both API nodes returned ready 200 and event `2` crossed from node B to a node-A SignalR client.
 - Physical RTSP/ONNX calibration: Demo Mode only.
 - IIS deployment/WebSocket smoke: no deployed IIS site configured.
 - Phase 18 flows: V1.16 SQL provenance was found on divergent `origin/AIMainBranch` commit `055b052`,

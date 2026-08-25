@@ -33,8 +33,8 @@ of the Phase 16 canonical source and must not be downgraded/recreated.
 ## 4. Restore/build/test
 
 Use the commands in the root README. A test is successful only when its process exits zero and the
-reported pass/fail counts are observed. SQL Server 2022 and Redis multi-node checks require separate
-approved environments on this workstation.
+reported pass/fail counts are observed. Redis multi-node delivery is locally verified with two API
+nodes; exact SQL Server 2022 execution still requires an administrator-provisioned instance.
 
 ## 5. Start services
 

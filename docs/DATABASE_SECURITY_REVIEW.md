@@ -20,9 +20,9 @@ Observed run: `CUSTSEARCH_SMOKE_20260825_001`.
 |---|---|---|---|
 | Critical | Phase 18 live schema has no matching application chain on this branch. | Live `V1.16.0`; repeat-safe SQL/verifier recovered at `origin/AIMainBranch` commit `055b052`, but no application flow exists in the selected chain. | Integrate the divergent branch deliberately, verify source/live equivalence, then implement the reviewed flow. Never downgrade live DB. |
 | High | Phase 18 APIs, service authorization, evidence access, ingestion replay controls and tests are absent in selected source. | No Security controller/service/Admin routes/Python events in branch. | Implement only after Phase 17 and source/schema reconciliation. |
-| High | Production reverse-proxy/HSTS/AllowedHosts/IIS evidence is incomplete. | `AllowedHosts` remains wildcard; no deployment smoke evidence. | Phase 17 must add environment-specific hardening and IIS validation. |
+| High | Production reverse-proxy/HSTS/AllowedHosts/IIS evidence is incomplete. | Source allowlists hosts and adds production HSTS, but no deployed IIS smoke evidence exists. | Execute environment-specific IIS/HTTPS/WebSocket validation. |
 | Medium | SQL Server 2022-specific validation cannot be executed locally. | Local engine `17.0.1000.7`; Docker unavailable. | Execute current scripts on an approved SQL Server 2022 environment. |
-| Medium | Redis multi-node/SignalR backplane behavior is not environment-tested. | Redis disabled locally; fail-closed readiness tests pass. | Validate approved Redis topology and cross-node reconnect/delivery. |
+| Medium | Production Redis authentication/TLS, failover and load behavior are not environment-tested. | Local two-node cross-node delivery and fail-closed readiness pass. | Validate the approved production Redis topology under failover/load. |
 | Medium | Canonical SQL contains historical machine identity in old seed ledger rows. | `AppliedBy` values in canonical data. | Replace machine identity with portable bootstrap metadata in a separately validated canonical cleanup; avoid broad unrelated rewrite. |
 | Low | Several old phase planning files report stale progress. | Phase 5–10 files conflict with later tracker/test evidence. | Reconcile documentation without changing evidence history. |
 

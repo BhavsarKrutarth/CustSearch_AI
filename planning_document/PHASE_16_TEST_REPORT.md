@@ -1,6 +1,6 @@
 # Phase 16 — Operational Platform Test Report
 
-**Result:** LOCAL PASS — SQL Server 2022 environment validation blocked
+**Result:** LOCAL + REDIS MULTI-NODE PASS — SQL Server 2022 environment validation blocked
 
 **Validated branch:** `audit/all-phases-database-smoke`
 
@@ -29,7 +29,7 @@ report does not claim that blocked platform check passed.
 | V1.15 upgrade/runner/verifier/canonical | PASS | Live runner executed twice; verifier and `DBCC CHECKCONSTRAINTS` passed; isolated canonical database passed and was dropped. |
 | Full Phase 5–16 regression | PASS | .NET unit 104/104; .NET integration 225/225; Angular 78/78; Playwright 49/49; Python 7/7. |
 | SQL Server 2022-specific validation | BLOCKED | Local engine is version 17, not SQL Server 2022; Docker command is unavailable. |
-| Redis multi-node/backplane validation | BLOCKED | No Redis multi-node environment is configured; fail-closed readiness behavior is covered locally. |
+| Redis multi-node/backplane validation | PASS | Memurai 4.1.2 (Redis-compatible 7.2.5) on `127.0.0.1:6380`; both API nodes ready 200; node-B alert delivered to node-A SignalR client as event 2. |
 
 ## Repairs made during validation
 
@@ -64,13 +64,16 @@ report does not claim that blocked platform check passed.
   an actual SQL Server 2022 instance, then rerun:
 
 ```powershell
-./database/run-phase16.ps1 -ServerInstance '<SQL2022_INSTANCE>' -DatabaseName 'CustSearch_AI_Phase16_Verify'
-./database/verify-phase16-canonical.ps1 -ServerInstance '<SQL2022_INSTANCE>'
+./database/verify-phase16-sqlserver2022.ps1 -ServerInstance '<SQL2022_INSTANCE>'
 ```
 
-- To close the Redis topology blocker, configure the approved Redis/backplane environment, set
-  `OperationalPlatform:RedisEnabled=true`, and exercise readiness, reconnect, and multi-node
-  SignalR delivery. Secrets must be supplied through environment/secret storage, never Git.
+The SQL-2022-only wrapper fails before schema work when the server major version is not exactly `16`;
+it then delegates to the isolated canonical verifier, which cleans up its uniquely named test database.
+
+- Redis topology validation was closed on 2026-08-26 with a locally extracted, non-service Memurai
+  process. Both APIs used the same backplane, but only node B dispatched database events; the client
+  connected to node A received the matching event, proving cross-node delivery. The temporary server
+  was stopped after the test and no credential was committed.
 
 ## 2026-08-26 connected startup follow-up
 
@@ -78,5 +81,5 @@ The first portable Redis/two-API-node attempt reached SQL and exposed two real b
 legacy `WorkerHeartbeats` shape lacked current columns, and EF automatic retry rejected service-owned
 transactions. Both were repaired without deleting data. Phase 16/15 repeat-safe scripts and verifiers
 passed, API/Worker manual startup then returned live/ready HTTP 200 with a fresh ready heartbeat, and
-104 unit plus 225 integration tests passed. Cross-node Redis event delivery must now be rerun; it is
-still `BLOCKED`, not yet passed.
+104 unit plus 225 integration tests passed. The follow-up Redis test passed with node A and node B
+ready, a tenant-authorized alert created on node B, and matching SignalR event `2` received on node A.

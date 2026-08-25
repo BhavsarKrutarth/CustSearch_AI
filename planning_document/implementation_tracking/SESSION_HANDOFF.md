@@ -1,10 +1,10 @@
 # Session Handoff
 
-- Last Updated: 2026-08-26 04:00 +05:30
+- Last Updated: 2026-08-26 04:11 +05:30
 - Current Branch: `audit/all-phases-database-smoke`
 - Phase 17 Checkpoint Commit: `fdc1e84d3e1150cbb44ff4660f215ad35c411d27`
 - Current Phase: Phase 17
-- Current Task: rerun Redis two-API-node SignalR backplane test after live startup repairs
+- Current Task: obtain/admin-provision an isolated SQL Server 2022 instance and run the Phase 16 verifier
 - Last Completed Phase: Phase 15 universally; Phase 16 locally passed with environment blockers
 
 ## Completed This Session
@@ -17,6 +17,7 @@
 6. Ran full .NET, Angular, Playwright and Python regression plus dependency audits.
 7. Added local API/Worker SQL settings and proved API, Worker, Angular proxy and Python startup.
 8. Reconciled legacy heartbeat/export schema drift and removed unsafe EF transaction replay.
+9. Proved Redis multi-node SignalR delivery with two ready API nodes and event 2 crossing B to A.
 
 ## Database Changes
 
@@ -29,6 +30,7 @@
 1. 104 unit, 225 integration, 78 Angular, 49 Playwright and 7 Python tests.
 2. Live SQL seed rerun/verifier/DBCC and real auth/cross-tenant probes.
 3. Manual API/Worker live/ready 200, Worker heartbeat, Angular-to-API proxy and Python health.
+4. Memurai 4.1.2 PONG, both Redis-enabled APIs ready 200, cross-node SignalR alert PASS.
 
 ## Tests Failed
 
@@ -37,7 +39,7 @@
 
 ## Known Blockers
 
-1. SQL Server 2022, Redis multi-node and IIS deployment environments are not configured.
+1. Exact SQL Server 2022 and IIS deployment environments are not configured.
 2. Phase 18 V1.16 SQL is on divergent AIMain commit `055b052`; selected-chain application code is missing.
 
 ## Files Currently Being Worked On
@@ -47,11 +49,11 @@
 
 ## Exact Next Step
 
-1. Rerun `src/CustSearch.Admin/scripts/redis-backplane-smoke.mjs` against two API nodes and portable Redis.
+1. On an administrator-provisioned SQL Server 2022 instance, run the repeat-safe Phase 16 SQL and canonical validation commands.
 
 ## Commands To Run Next
 
-1. `git status --short; git log -2 --oneline`
+1. `./database/verify-phase16-sqlserver2022.ps1 -ServerInstance '<SQL2022_INSTANCE>'`
 2. Follow `docs/IIS_ANGULAR_SIGNALR_DEPLOYMENT.md` on the deployment test host.
 
 ## Important Context For Next AI Session

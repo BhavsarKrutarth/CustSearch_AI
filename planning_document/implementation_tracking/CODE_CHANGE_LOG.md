@@ -14,3 +14,5 @@
 | 16 | Infrastructure/Worker DI | removed unsafe implicit EF transaction replay; added fail-closed background identity/metrics | real Worker startup failed before processing | 329 tests + live startup PASS |
 | 17 | Angular/Python local routes | verified Angular API proxy; documented/defaulted Python protected .NET event URL | complete local service graph | Angular proxy 401; Python health 200 |
 | 17 | `docs/PROJECT_WISE_MANUAL_RUN_GUIDE.md` | added terminal-by-terminal API/Worker/Angular/Python commands and checks | enable repeatable manual sub-project startup | commands matched observed local startup |
+| 16 | Redis backplane smoke script | added executable node-B to node-A SignalR delivery proof | validate actual scale-out behavior | two nodes ready 200; event 2 PASS |
+| 16 | SQL Server 2022 verifier | added exact-major-version gate and isolated canonical delegation | prevent SQL 2025/compatibility mode from being misreported as SQL 2022 | local v17 rejected as expected |

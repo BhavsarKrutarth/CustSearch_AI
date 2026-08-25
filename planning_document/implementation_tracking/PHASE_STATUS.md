@@ -13,8 +13,9 @@ Detailed per-requirement status is maintained in `../ALL_PHASE_IMPLEMENTATION_MA
 
 - Planning file: `../phase_implementation/PHASE_16_OPERATIONS.md`
 - Status: BLOCKED
-- Completed: schema V1.15, API/Admin/Worker operations, leases, health, retention, masking, local tests.
-- Pending: actual SQL Server 2022 and Redis multi-node execution.
+- Completed: schema V1.15, API/Admin/Worker operations, leases, health, retention, masking, local tests,
+  and actual two-API-node Redis backplane delivery.
+- Pending: exact SQL Server 2022 execution.
 - Next exact task: execute the documented external environment gates.
 
 ## Phase 17

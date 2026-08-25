@@ -160,17 +160,32 @@ $env:OperationalPlatform__RedisEndpoint = "redis://127.0.0.1:6379"
 Do not enable Redis unless the endpoint is running; `/health/ready` intentionally fails closed when an
 enabled dependency is unavailable.
 
+For a repeatable two-node SignalR proof, run API node A with the alert dispatcher disabled and node B
+with it enabled, obtain a Tenant Admin access token using username `smoke.tenantadmin` (not its email)
+and tenant code `SMOKE-TENANT-001`, then run:
+
+```powershell
+Set-Location "D:\Project\AdminCore\CustSearch_AI\CustSearch_AI\src\CustSearch.Admin"
+$env:CUSTSEARCH_SIGNALR_TOKEN = "<tenant-admin-access-token>"
+$env:CUSTSEARCH_SIGNALR_NODE_A = "http://127.0.0.1:5081"
+$env:CUSTSEARCH_SIGNALR_NODE_B = "http://127.0.0.1:5082"
+node .\scripts\redis-backplane-smoke.mjs
+```
+
+Expected output contains `"result":"PASS"`. This test creates a deterministic-keyed alert on node B
+and waits for the matching cross-node `AlertEvent` on node A.
+
 ## 6. Recommended startup and shutdown order
 
 Startup:
 
 ```text
 1. SQL Server
-2. ASP.NET API
-3. Worker
-4. Angular Admin
-5. Python AI
-6. Redis only when scale-out testing is required (start it before API)
+2. Redis only when scale-out testing is required
+3. ASP.NET API
+4. Worker
+5. Angular Admin
+6. Python AI
 ```
 
 Shutdown: press `Ctrl+C` in Python, Angular, Worker and API terminals. SQL Server can remain running.
@@ -188,3 +203,14 @@ Shutdown: press `Ctrl+C` in Python, Angular, Worker and API terminals. SQL Serve
 
 Do not run EF migrations or `EnsureCreated()` against `CustSearch_AI`; schema changes use the versioned
 scripts under `database/09_Upgrade`.
+
+For the Phase 16 certification gate, an administrator-provisioned SQL Server 2022 instance can be
+checked without touching the existing database:
+
+```powershell
+Set-Location "D:\Project\AdminCore\CustSearch_AI\CustSearch_AI"
+.\database\verify-phase16-sqlserver2022.ps1 -ServerInstance "<SQL2022_INSTANCE>"
+```
+
+The command rejects SQL Server versions other than major version 16 and uses a uniquely named,
+isolated validation database that the verifier removes after completion.
