@@ -2,7 +2,9 @@ using CustSearch.API.Middleware;
 using CustSearch.API.Security;
 using CustSearch.API.PlatformTenancy;
 using CustSearch.API.AlertsRealtime;
+using CustSearch.API.Integrations;
 using CustSearch.Application.AlertsRealtime;
+using CustSearch.Application.Integrations;
 using CustSearch.Application.Authentication;
 using CustSearch.Application.Authorization;
 using CustSearch.Infrastructure;
@@ -175,6 +177,8 @@ try
     builder.Services.AddSingleton<IAlertConnectionMetrics,AlertConnectionMetrics>();
     builder.Services.AddSingleton<INotificationChannelAdapter,SignalRNotificationChannelAdapter>();
     builder.Services.AddScoped<AlertExceptionFilter>();
+    builder.Services.AddScoped<IntegrationExceptionFilter>();
+    builder.Services.AddOptions<IntegrationSecurityOptions>().Bind(builder.Configuration.GetSection(IntegrationSecurityOptions.SectionName)).Validate(x=>x.AllowedClockSkewSeconds is>=30 and<=900,"IntegrationSecurity:AllowedClockSkewSeconds must be between 30 and 900.").Validate(x=>x.MaximumInboundBodyBytes is>=1024 and<=1048576,"IntegrationSecurity:MaximumInboundBodyBytes must be between 1024 and 1048576.").ValidateOnStart();
     builder.Services.AddOptions<AlertsRealtimeOptions>().Bind(builder.Configuration.GetSection(AlertsRealtimeOptions.SectionName)).Validate(x=>x.PollIntervalSeconds is>=1 and<=60,"AlertsRealtime:PollIntervalSeconds must be between 1 and 60.").Validate(x=>x.BatchSize is>=1 and<=200,"AlertsRealtime:BatchSize must be between 1 and 200.").ValidateOnStart();
     builder.Services.AddHostedService<NotificationOutboxHostedService>();
     builder.Services.AddRateLimiter(options =>
@@ -189,6 +193,7 @@ try
                 QueueLimit = 0,
                 AutoReplenishment = true,
             }));
+        options.AddPolicy("integration-inbound",httpContext=>RateLimitPartition.GetFixedWindowLimiter(httpContext.Request.RouteValues["integrationId"]?.ToString()??httpContext.Connection.RemoteIpAddress?.ToString()??"unknown",_=>new FixedWindowRateLimiterOptions{PermitLimit=30,Window=TimeSpan.FromMinutes(1),QueueLimit=0,AutoReplenishment=true}));
     });
     builder.Services.AddControllers(options =>
         options.Filters.Add<PlatformManagementExceptionFilter>());

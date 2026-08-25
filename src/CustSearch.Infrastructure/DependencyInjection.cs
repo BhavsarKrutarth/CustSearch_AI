@@ -2,6 +2,7 @@ using CustSearch.Application.Authentication;
 using CustSearch.Application.Abstractions.Data;
 using CustSearch.Application.AlertsRealtime;
 using CustSearch.Application.HouseholdsVisits;
+using CustSearch.Application.Integrations;
 using CustSearch.Application.PlatformBilling;
 using CustSearch.Application.PlatformTenancy;
 using CustSearch.Application.PreferencesVoice;
@@ -13,6 +14,7 @@ using CustSearch.Domain.Entities;
 using CustSearch.Infrastructure.Data;
 using CustSearch.Infrastructure.AlertsRealtime;
 using CustSearch.Infrastructure.HouseholdsVisits;
+using CustSearch.Infrastructure.Integrations;
 using CustSearch.Infrastructure.Persistence;
 using CustSearch.Infrastructure.PlatformBilling;
 using CustSearch.Infrastructure.PlatformTenancy;
@@ -42,6 +44,7 @@ public static class DependencyInjection
         services.AddScoped<IShopperCustomerRepository,ShopperCustomerRepository>();services.AddScoped<IShopperCustomerService,ShopperCustomerService>();services.AddScoped<IHouseholdsVisitsRepository,HouseholdsVisitsRepository>();services.AddScoped<IHouseholdsVisitsService,HouseholdsVisitsService>();
         services.AddScoped<IRetailBillingRepository,RetailBillingRepository>();services.AddScoped<IRetailBillingService,RetailBillingService>();services.AddScoped<IPreferencesVoiceService,PreferencesVoiceService>();
         services.AddSingleton<AlertDeduplicationCoordinator>();services.AddScoped<IAlertsRealtimeService,AlertsRealtimeService>();services.AddScoped<INotificationOutboxProcessor,NotificationOutboxProcessor>();
+        services.AddScoped<IIntegrationManagementService,IntegrationManagementService>();services.AddScoped<IInboundIntegrationService,InboundIntegrationService>();services.AddScoped<IIntegrationOutboxProcessor,IntegrationOutboxProcessor>();
         return services;
     }
 }
