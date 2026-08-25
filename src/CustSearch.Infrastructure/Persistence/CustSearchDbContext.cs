@@ -29,5 +29,8 @@ public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> op
     // Phase 13 Cameras & Tracking — configuration references, versioned zones and anonymous-first operational tracks.
     public DbSet<Camera> Cameras=>Set<Camera>(); public DbSet<CameraZoneConfiguration> CameraZoneConfigurations=>Set<CameraZoneConfiguration>(); public DbSet<PersonTrackSession> PersonTrackSessions=>Set<PersonTrackSession>(); public DbSet<CameraTrackHandoff> CameraTrackHandoffs=>Set<CameraTrackHandoff>(); public DbSet<CameraOperationalEvent> CameraOperationalEvents=>Set<CameraOperationalEvent>();
 
+    // Phase 14 Consent-Based Recognition — purpose consent, encrypted derived templates and human-reviewed candidates.
+    public DbSet<CustomerRecognitionConsent> CustomerRecognitionConsents=>Set<CustomerRecognitionConsent>(); public DbSet<BiometricTemplate> BiometricTemplates=>Set<BiometricTemplate>(); public DbSet<RecognitionCandidate> RecognitionCandidates=>Set<RecognitionCandidate>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder){ArgumentNullException.ThrowIfNull(modelBuilder);modelBuilder.ApplyConfigurationsFromAssembly(typeof(CustSearchDbContext).Assembly);base.OnModelCreating(modelBuilder);}
 }
