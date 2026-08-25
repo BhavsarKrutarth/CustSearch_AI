@@ -4,6 +4,10 @@ using Microsoft.Extensions.Options;
 
 namespace CustSearch.Worker;
 
+/// <summary>
+/// Acquires the shared retention lease before processing bounded policies, allowing safe multi-host
+/// deployment and graceful cancellation without overlapping destructive retention batches.
+/// </summary>
 public sealed partial class OperationalRetentionHostedService(IServiceScopeFactory scopes,IOptions<OperationalPlatformOptions>options,ILogger<OperationalRetentionHostedService>logger):BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken){var settings=options.Value;var delay=TimeSpan.FromMinutes(settings.RetentionPollMinutes);while(!stoppingToken.IsCancellationRequested){try{await using var scope=scopes.CreateAsyncScope();var gate=scope.ServiceProvider.GetRequiredService<IWorkerRuntimeGate>();var lease=await gate.TryAcquireAsync("retention",Environment.MachineName,TimeSpan.FromSeconds(settings.LeaseSeconds),stoppingToken).ConfigureAwait(false);if(lease is not null){try{var result=await scope.ServiceProvider.GetRequiredService<IRetentionProcessor>().RunDueAsync(settings.RetentionBatchSize,stoppingToken).ConfigureAwait(false);LogResult(logger,result.Policies,result.Deleted,result.Failed);}finally{await gate.ReleaseAsync(lease,stoppingToken).ConfigureAwait(false);}}}catch(OperationCanceledException)when(stoppingToken.IsCancellationRequested){break;}catch(Exception exception){LogFailure(logger,exception);}await Task.Delay(delay,stoppingToken).ConfigureAwait(false);}}
@@ -11,6 +15,10 @@ public sealed partial class OperationalRetentionHostedService(IServiceScopeFacto
     [LoggerMessage(EventId=1602,Level=LogLevel.Error,Message="Retention worker cycle failed")]private static partial void LogFailure(ILogger logger,Exception exception);
 }
 
+/// <summary>
+/// Publishes readiness heartbeats for operational monitoring; failures are reported but do not
+/// expose connection strings, secrets or tenant payloads in structured logs.
+/// </summary>
 public sealed partial class OperationalHeartbeatHostedService(IServiceScopeFactory scopes,IOptions<OperationalPlatformOptions>options,ILogger<OperationalHeartbeatHostedService>logger):BackgroundService
 {
     private readonly string instanceId=$"{Environment.MachineName}:{Environment.ProcessId}";

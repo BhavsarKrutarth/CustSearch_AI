@@ -127,11 +127,28 @@ public sealed class AuthenticationService(
 
         try
         {
-            return await RefreshCoreAsync(
-                refreshToken,
-                ipAddress,
-                correlationId,
-                cancellationToken).ConfigureAwait(false);
+            if (useLocalProviderGate)
+            {
+                return await RefreshCoreAsync(
+                    refreshToken,
+                    ipAddress,
+                    correlationId,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            // SQL Server retry-on-failure rejects a user transaction unless the entire rotation
+            // runs inside its execution strategy. A retry starts with a clean tracker; the atomic
+            // conditional consume still prevents two callers from rotating the same token.
+            var strategy = dbContext.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                dbContext.ChangeTracker.Clear();
+                return await RefreshCoreAsync(
+                    refreshToken,
+                    ipAddress,
+                    correlationId,
+                    cancellationToken).ConfigureAwait(false);
+            }).ConfigureAwait(false);
         }
         finally
         {

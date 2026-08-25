@@ -12,6 +12,10 @@ using Microsoft.Extensions.Options;
 namespace CustSearch.Infrastructure.Recognition;
 
 /// <summary>Enforces consent, tenant/store isolation, encrypted enrollment, retention and human review.</summary>
+/// <summary>
+/// Manages consent-gated enrollment and human review of recognition candidates. It never performs
+/// cross-tenant matching and withdrawal prevents continued use of protected biometric templates.
+/// </summary>
 public sealed class RecognitionService(CustSearchDbContext db,ICurrentUserContext currentUser,IRecognitionTemplateProtector protector,TimeProvider clock,IOptions<RecognitionSecurityOptions>options):IRecognitionService
 {
     private static readonly JsonSerializerOptions AuditJson=new(JsonSerializerDefaults.Web);private readonly RecognitionSecurityOptions security=options.Value;

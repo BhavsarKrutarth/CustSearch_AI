@@ -121,6 +121,10 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+        builder.UseSetting(
+            "ConnectionStrings:CustSearchDatabase",
+            "Server=127.0.0.1,1;Database=TestHostOnly;Integrated Security=True;" +
+            "Encrypt=True;TrustServerCertificate=True;Connect Timeout=1");
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IAuthenticationService>();

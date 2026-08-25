@@ -363,6 +363,10 @@ public sealed class RealAuthApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Development");
         // Apply before the minimal-host entry point reads configuration during startup.
         builder.UseSetting("AuthRateLimiting:PermitLimit", "1000");
+        builder.UseSetting(
+            "ConnectionStrings:CustSearchDatabase",
+            "Server=127.0.0.1,1;Database=TestHostOnly;Integrated Security=True;" +
+            "Encrypt=True;TrustServerCertificate=True;Connect Timeout=1");
         builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
             new Dictionary<string, string?>
             {

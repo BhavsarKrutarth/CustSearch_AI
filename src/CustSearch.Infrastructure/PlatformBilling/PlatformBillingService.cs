@@ -12,6 +12,10 @@ namespace CustSearch.Infrastructure.PlatformBilling;
 /// Phase 9 subscription billing service. This service intentionally has no dependency on Phase 8 retail billing types.
 /// Tenant-facing reads derive TenantId exclusively from the authenticated server context.
 /// </summary>
+/// <summary>
+/// Owns CustSearch-to-tenant subscription invoices and payments. This platform financial boundary
+/// is deliberately separate from tenant retail invoices and enforces platform or current-tenant access.
+/// </summary>
 public sealed class PlatformBillingService(
     CustSearchDbContext db,
     ICurrentUserContext currentUser,

@@ -18,6 +18,10 @@ public sealed class OperationalPlatformOptions
     public bool IsValid()=>LeaseSeconds is>=15 and<=600&&RetentionBatchSize is>=1 and<=5000&&RetentionPollMinutes is>=1 and<=1440&&HeartbeatSeconds is>=10 and<=300&&(!RedisEnabled||Uri.TryCreate(RedisEndpoint,UriKind.Absolute,out _))&&(!AiServiceEnabled||Uri.TryCreate(AiServiceHealthUrl,UriKind.Absolute,out var ai)&&ai.Scheme==Uri.UriSchemeHttps);
 }
 
+/// <summary>
+/// Provides platform-admin-only health, settings, worker control, retry and retention operations.
+/// Tenant/store scopes are validated against authoritative records and secret references are masked.
+/// </summary>
 public sealed class OperationalPlatformService(CustSearchDbContext db,ICurrentUserContext currentUser,TimeProvider clock,IOptions<OperationalPlatformOptions>options):IOperationalPlatformService
 {
     private static readonly string[]WorkerTypes=["notifications","integrations","exports","retention","cctv-operations"];
@@ -41,6 +45,10 @@ public sealed class OperationalPlatformService(CustSearchDbContext db,ICurrentUs
     private static OperationalException NotFound()=>new("Operational resource was not found.",OperationalFailureKind.NotFound);
 }
 
+/// <summary>
+/// Coordinates database-backed worker leases and heartbeats so multiple processes cannot claim the
+/// same batch concurrently; a pause control is checked before a lease is granted.
+/// </summary>
 public sealed class WorkerRuntimeGate(CustSearchDbContext db,TimeProvider clock):IWorkerRuntimeGate
 {
     public async Task<WorkerLeaseHandle?>TryAcquireAsync(string workerType,string ownerId,TimeSpan duration,CancellationToken ct=default){ArgumentException.ThrowIfNullOrWhiteSpace(workerType);ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);if(duration<TimeSpan.FromSeconds(5)||duration>TimeSpan.FromMinutes(10))throw new ArgumentOutOfRangeException(nameof(duration));var now=clock.GetUtcNow().UtcDateTime;await using var transaction=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable,ct);if(await db.WorkerControls.AsNoTracking().AnyAsync(x=>x.WorkerType==workerType&&x.IsPaused,ct)){await transaction.CommitAsync(ct);return null;}var lease=await db.WorkerLeases.SingleOrDefaultAsync(x=>x.WorkerType==workerType,ct);var id=Guid.NewGuid();if(lease is null){lease=WorkerLease.Acquire(workerType,id,ownerId,now,now+duration);db.WorkerLeases.Add(lease);}else{if(lease.ExpiresUtc>now){await transaction.CommitAsync(ct);return null;}lease.Reassign(id,ownerId,now,now+duration);}await db.SaveChangesAsync(ct);await transaction.CommitAsync(ct);return new(workerType,id,ownerId,now+duration);}
@@ -48,6 +56,10 @@ public sealed class WorkerRuntimeGate(CustSearchDbContext db,TimeProvider clock)
     public async Task HeartbeatAsync(string instanceId,string workerType,bool ready,string?errorMessage,CancellationToken ct=default){var now=clock.GetUtcNow().UtcDateTime;var heartbeat=await db.WorkerHeartbeats.SingleOrDefaultAsync(x=>x.InstanceId==instanceId&&x.WorkerType==workerType,ct);if(heartbeat is null){heartbeat=WorkerHeartbeat.Start(instanceId,workerType,now);db.WorkerHeartbeats.Add(heartbeat);}heartbeat.Beat(ready,errorMessage,now);await db.SaveChangesAsync(ct);}
 }
 
+/// <summary>
+/// Executes bounded, audited retention batches through the versioned stored procedure. A failed
+/// policy is recorded without hiding failures from the operational health surface.
+/// </summary>
 public sealed class OperationalRetentionProcessor(CustSearchDbContext db,IDbConnectionFactory connections,TimeProvider clock):IRetentionProcessor
 {
     public async Task<RetentionBatchResult>RunDueAsync(int batchSize,CancellationToken ct=default){ArgumentOutOfRangeException.ThrowIfLessThan(batchSize,1);ArgumentOutOfRangeException.ThrowIfGreaterThan(batchSize,5000);var policies=await db.RetentionPolicies.Where(x=>x.Enabled).OrderBy(x=>x.Id).ToListAsync(ct);var deleted=0;var failed=0;foreach(var policy in policies){var now=clock.GetUtcNow().UtcDateTime;var run=RetentionRun.Start(policy.Id,Guid.NewGuid(),now);db.RetentionRuns.Add(run);await db.SaveChangesAsync(ct);try{await using var connection=await connections.OpenConnectionAsync(ct);var command=new CommandDefinition("dbo.OperationalRetention_Run",new{PolicyId=policy.Id,BatchSize=batchSize,UtcNow=now},commandType:CommandType.StoredProcedure,cancellationToken:ct);var count=await connection.ExecuteScalarAsync<int>(command);run.Complete(count,clock.GetUtcNow().UtcDateTime);deleted+=count;}catch(Exception exception)when(exception is not OperationCanceledException){run.Fail(exception.Message,clock.GetUtcNow().UtcDateTime);failed++;}await db.SaveChangesAsync(ct);}return new(policies.Count,deleted,failed);}

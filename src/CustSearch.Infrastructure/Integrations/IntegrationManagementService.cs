@@ -12,6 +12,10 @@ using Microsoft.EntityFrameworkCore;
 namespace CustSearch.Infrastructure.Integrations;
 
 /// <summary>Tenant-safe management boundary that returns only masked secret-reference metadata.</summary>
+/// <summary>
+/// Manages tenant integration configuration without returning secret values. Every integration is
+/// constrained to the authenticated tenant and audited when configuration changes.
+/// </summary>
 public sealed class IntegrationManagementService(CustSearchDbContext db,ICurrentUserContext currentUser,TimeProvider clock):IIntegrationManagementService
 {
     private static readonly JsonSerializerOptions JsonOptions=new(JsonSerializerDefaults.Web);

@@ -15,6 +15,10 @@ using Microsoft.Extensions.Options;
 namespace CustSearch.Infrastructure.CamerasTracking;
 
 /// <summary>Tenant/store authorization boundary and authenticated normalized CCTV event processor.</summary>
+/// <summary>
+/// Manages tenant/store cameras and anonymous tracking events. Internal ingestion authenticates the
+/// CCTV service, validates camera ownership and deduplicates receipts before changing trusted state.
+/// </summary>
 public sealed class CameraTrackingService(CustSearchDbContext db,ICurrentUserContext currentUser,ICctvServiceSecretResolver secrets,TimeProvider clock,IOptions<CctvSecurityOptions> options):ICameraTrackingService
 {
     private static readonly JsonSerializerOptions JsonOptions=new(JsonSerializerDefaults.Web){UnmappedMemberHandling=JsonUnmappedMemberHandling.Disallow};

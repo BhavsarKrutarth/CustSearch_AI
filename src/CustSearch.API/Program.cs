@@ -24,11 +24,13 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System.Globalization;
+using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -47,6 +49,31 @@ try
 
     var connectionString = builder.Configuration.GetConnectionString("CustSearchDatabase")
         ?? throw new InvalidOperationException("ConnectionStrings:CustSearchDatabase is required.");
+
+    // Forwarded client addresses affect audit/rate-limit decisions, so proxy headers are trusted
+    // only when deployment explicitly enables them and allowlists the immediate reverse proxy.
+    var reverseProxyEnabled = builder.Configuration.GetValue<bool>("ReverseProxy:Enabled");
+    var knownProxyValues = builder.Configuration.GetSection("ReverseProxy:KnownProxies").Get<string[]>() ?? [];
+    var knownProxies = knownProxyValues.Select(value =>
+        IPAddress.TryParse(value, out var address)
+            ? address
+            : throw new InvalidOperationException($"ReverseProxy:KnownProxies contains invalid IP '{value}'."))
+        .ToArray();
+    if (reverseProxyEnabled && knownProxies.Length == 0)
+    {
+        throw new InvalidOperationException("Enabled reverse proxy handling requires at least one known proxy IP.");
+    }
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = 1;
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+        foreach (var knownProxy in knownProxies)
+        {
+            options.KnownProxies.Add(knownProxy);
+        }
+    });
 
     // Controls brute-force protection without hard-coding an environment-specific request budget.
     var authRateLimitPermitCount = builder.Configuration.GetValue<int>("AuthRateLimiting:PermitLimit");
@@ -227,6 +254,16 @@ try
         .AddCheck<SignalRReadinessHealthCheck>("signalr",tags:["ready"]);
 
     var app = builder.Build();
+
+    if (reverseProxyEnabled)
+    {
+        app.UseForwardedHeaders();
+    }
+
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseHsts();
+    }
 
     app.UseMiddleware<CorrelationIdMiddleware>();
     app.UseSerilogRequestLogging(options =>

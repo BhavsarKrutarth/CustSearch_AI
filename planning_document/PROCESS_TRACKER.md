@@ -101,8 +101,8 @@ Individual implementation files for all 18 phases are indexed in `phase_implemen
 | 13 — Cameras, Python CCTV & Tracking | Cameras/zones, Python FastAPI/OpenCV/ONNX, person/customer/staff sessions, dwell/zone/proximity evidence, visit parties; Demo Mode | Python lint/tests, API integration tests, demo E2E without physical camera, optional approved RTSP smoke test | Completed |
 | 14 — Consent-Based Recognition | Consent-gated enrollment/recognition and review workflow | Consent/withdrawal/data-minimization/security tests; recognition review E2E | In Progress |
 | 15 — Reports & Async Exports | Platform/tenant, staff, conversion, dwell, voice, family and billing reports; async CSV/Excel/PDF exports and progress events | Accuracy/authorization/isolation tests; worker/export/WebSocket E2E | Not Started |
-| 16 — Operational Platform | Audit, worker hardening, Redis/backplane readiness, settings, health, retention | Worker/retry/cache/health/retention tests; operational smoke tests | Not Started |
-| 17 — Full Quality & Deployment | Full .NET/Python/Angular/Playwright suites, Swagger, Postman, docs, IIS SPA rewrite/WebSockets, deployment hardening | Every command in final validation matrix passes; deployment smoke evidence; no unresolved critical/high findings | Not Started |
+| 16 — Operational Platform | Audit, worker hardening, Redis/backplane readiness, settings, health, retention | Worker/retry/cache/health/retention tests; operational smoke tests | Local Pass / Environment Blocked |
+| 17 — Full Quality & Deployment | Full .NET/Python/Angular/Playwright suites, Swagger, Postman, docs, IIS SPA rewrite/WebSockets, deployment hardening | Every command in final validation matrix passes; deployment smoke evidence; no unresolved critical/high findings | In Progress |
 
 ## Per-Phase Validation Matrix
 
@@ -161,6 +161,8 @@ Also validate, as applicable:
 | 2026-08-25 | 15 — Reports & Async Exports | In Progress | Phase 14 final head b73704a2 and all Phase 6–14 workflows re-verified green; Phase 15 branch created from that exact head | Complete reports/exports implementation and Phase 5–15 validation |
 | 2026-08-25 | 15 — Reports & Async Exports | Completed | Phase 15 Validate run 32807216952: Release build 0 warnings/errors, 97 unit, 213 integration/API, 76 Angular, 42 Playwright and 7 Python tests green; V1.14 upgrade/runner/verifier/fresh canonical green | Create Phase 16 branch from the exact tested Phase 15 head; keep draft PR 18 unmerged |
 | 2026-08-25 | 16 — Operational Platform | In Progress | Branch created from exact final-green Phase 15 head baeee4d0; audit, worker coordination, settings, health, retention and controls implementation started | Complete Phase 5–16 validation |
+| 2026-08-25 | 16 — Operational Platform | Local Pass / Environment Blocked | Audit run `CUSTSEARCH_SMOKE_20260825_001`: local suites, live runner/verifier/constraints, isolated canonical install and real-SQL auth/refresh smoke green after retry-strategy repair | Execute SQL Server 2022 and Redis multi-node gates; continue Phase 17 |
+| 2026-08-25 | 17 — Full Quality & Deployment | In Progress | Current README/setup/catalogs/smoke data, project comments and proxy/HSTS hardening added; two-tenant SQL/API smoke proves cross-tenant denial | Complete full regression and IIS deployment smoke |
 
 ## Phase 1 Completion Evidence
 

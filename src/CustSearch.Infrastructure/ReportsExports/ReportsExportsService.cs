@@ -13,6 +13,10 @@ using Microsoft.Extensions.Options;
 
 namespace CustSearch.Infrastructure.ReportsExports;
 
+/// <summary>
+/// Orchestrates bounded tenant/platform reports and asynchronous exports. Tenant/store filters come
+/// from the authenticated context and generated downloads remain requester-bound and short-lived.
+/// </summary>
 public sealed class ReportsExportsService(CustSearchDbContext db,ICurrentUserContext currentUser,IReportQueryRepository queries,IExportFileStore files,IExportDownloadTokenService tokens,TimeProvider clock,IOptions<ReportsExportsOptions>options):IReportsExportsService
 {
     private static readonly JsonSerializerOptions JsonOptions=new(JsonSerializerDefaults.Web);private readonly ReportsExportsOptions settings=options.Value;

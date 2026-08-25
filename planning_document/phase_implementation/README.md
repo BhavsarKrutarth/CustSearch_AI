@@ -10,19 +10,19 @@ There are 19 sequential phases, numbered 0 through 18. Each phase has its own fi
 | 3 | `PHASE_03_AUTHORIZATION_SHELLS.md` | Completed |
 | 4 | `PHASE_04_PLATFORM_TENANTS.md` | Completed |
 | 5 | `PHASE_05_TENANT_USERS_STORES_STAFF.md` | Completed |
-| 6 | `PHASE_06_SHOPPER_CUSTOMERS.md` | In Progress |
-| 7 | `PHASE_07_HOUSEHOLDS_VISITS.md` | Not Started |
-| 8 | `PHASE_08_PRODUCTS_RETAIL_BILLING.md` | Not Started |
-| 9 | `PHASE_09_PLATFORM_BILLING.md` | Not Started |
-| 10 | `PHASE_10_PREFERENCES_VOICE.md` | Not Started |
-| 11 | `PHASE_11_ALERTS_REALTIME.md` | Not Started |
-| 12 | `PHASE_12_INTEGRATIONS.md` | Not Started |
-| 13 | `PHASE_13_CCTV_TRACKING.md` | Not Started |
-| 14 | `PHASE_14_CONSENT_RECOGNITION.md` | Not Started |
-| 15 | `PHASE_15_REPORTS_EXPORTS.md` | Not Started |
-| 16 | `PHASE_16_OPERATIONS.md` | Not Started |
-| 17 | `PHASE_17_QUALITY_DEPLOYMENT.md` | Not Started |
-| 18 | `PHASE_18_RETAIL_SECURITY_THEFT_DETECTION.md` | Not Started |
+| 6 | `PHASE_06_SHOPPER_CUSTOMERS.md` | Completed |
+| 7 | `PHASE_07_HOUSEHOLDS_VISITS.md` | Completed |
+| 8 | `PHASE_08_PRODUCTS_RETAIL_BILLING.md` | Completed |
+| 9 | `PHASE_09_PLATFORM_BILLING.md` | Completed |
+| 10 | `PHASE_10_PREFERENCES_VOICE.md` | Completed |
+| 11 | `PHASE_11_ALERTS_REALTIME.md` | Completed |
+| 12 | `PHASE_12_INTEGRATIONS.md` | Completed |
+| 13 | `PHASE_13_CCTV_TRACKING.md` | Completed |
+| 14 | `PHASE_14_CONSENT_RECOGNITION.md` | Completed |
+| 15 | `PHASE_15_REPORTS_EXPORTS.md` | Completed |
+| 16 | `PHASE_16_OPERATIONS.md` | Local Pass / Environment Blocked |
+| 17 | `PHASE_17_QUALITY_DEPLOYMENT.md` | In Progress |
+| 18 | `PHASE_18_RETAIL_SECURITY_THEFT_DETECTION.md` | Blocked by Phase 17 and source/schema drift |
 
 Phase 18 details the retail-security / suspected unpaid-product-exit workflow and should be read together with `../CustSearch_AI_SECURITY_THEFT_SHOPLIFTING_ADDENDUM.md`.
 

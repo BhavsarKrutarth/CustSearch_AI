@@ -11,6 +11,10 @@ using Microsoft.EntityFrameworkCore;
 namespace CustSearch.Infrastructure.AlertsRealtime;
 
 /// <summary>Implements server-scoped alert lifecycle, atomic outbox creation and durable reconnect recovery.</summary>
+/// <summary>
+/// Persists tenant/store alerts and authoritative recovery events before SignalR delivery. Clients
+/// may reconnect and deduplicate notifications, but UI state never replaces the SQL recovery cursor.
+/// </summary>
 public sealed class AlertsRealtimeService(CustSearchDbContext db,ICurrentUserContext currentUser,TimeProvider clock,AlertDeduplicationCoordinator deduplication,IAlertConnectionMetrics connectionMetrics):IAlertsRealtimeService
 {
     private static readonly JsonSerializerOptions JsonOptions=new(JsonSerializerDefaults.Web);

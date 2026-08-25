@@ -12,6 +12,10 @@ using Microsoft.EntityFrameworkCore;
 namespace CustSearch.Infrastructure.RetailBilling;
 
 /// <summary>Phase 8 write/business service. TenantId and authorized StoreIds only come from authenticated server context.</summary>
+/// <summary>
+/// Applies factual retail invoice, payment, participant and spend-attribution rules inside the
+/// authenticated tenant/store boundary. Co-visits never create family or purchase attribution.
+/// </summary>
 public sealed class RetailBillingService(CustSearchDbContext db,IRetailBillingRepository repository,ICurrentUserContext currentUser,TimeProvider timeProvider):IRetailBillingService
 {
     public async Task<PagedResult<ProductListItem>> SearchProductsAsync(ProductSearchQuery query,CancellationToken cancellationToken=default)

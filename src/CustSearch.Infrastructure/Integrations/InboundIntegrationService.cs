@@ -12,6 +12,10 @@ using Microsoft.Extensions.Options;
 namespace CustSearch.Infrastructure.Integrations;
 
 /// <summary>Authenticates exact raw webhook bytes and persists one idempotent receipt per provider event.</summary>
+/// <summary>
+/// Validates signed inbound integration requests, timestamps, payload limits and idempotency keys
+/// before persisting tenant-owned receipts; credentials and raw secrets are never written to logs.
+/// </summary>
 public sealed class InboundIntegrationService(CustSearchDbContext db,IIntegrationSecretResolver secrets,TimeProvider clock,IOptions<IntegrationSecurityOptions> options):IInboundIntegrationService
 {
     public async Task<InboundIntegrationAcknowledgement>ReceiveAsync(InboundIntegrationRequest request,CancellationToken cancellationToken=default)
