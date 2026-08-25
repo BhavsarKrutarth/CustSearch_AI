@@ -8,9 +8,75 @@ using Microsoft.Extensions.Options;
 
 namespace CustSearch.API.Operations;
 
-public sealed class RedisReadinessHealthCheck(IOptions<OperationalPlatformOptions>options):IHealthCheck
+/// <summary>
+/// Treats Redis as an optional scale-out dependency. When Redis is enabled, readiness fails
+/// closed if the configured endpoint cannot be reached; SQL remains the authoritative store.
+/// </summary>
+public sealed class RedisReadinessHealthCheck(IOptions<OperationalPlatformOptions> options) : IHealthCheck
 {
-    public async Task<HealthCheckResult>CheckHealthAsync(HealthCheckContext context,CancellationToken cancellationToken=default){var settings=options.Value;if(!settings.RedisEnabled)return HealthCheckResult.Healthy("Redis scale-out is disabled; SQL remains authoritative.");if(!Uri.TryCreate(settings.RedisEndpoint,UriKind.Absolute,out var endpoint))return HealthCheckResult.Unhealthy("Redis endpoint is invalid.");try{using var client=new TcpClient();using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);timeout.CancelAfter(TimeSpan.FromSeconds(2));await client.ConnectAsync(endpoint.Host,endpoint.Port>0?endpoint.Port:6379,timeout.Token);return HealthCheckResult.Healthy("Redis endpoint is reachable.");}catch(Exception exception)when(exception is SocketException or OperationCanceledException){return HealthCheckResult.Unhealthy("Redis endpoint is unavailable.",exception);}}
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = options.Value;
+        if (!settings.RedisEnabled)
+        {
+            return HealthCheckResult.Healthy("Redis scale-out is disabled; SQL remains authoritative.");
+        }
+
+        if (!Uri.TryCreate(settings.RedisEndpoint, UriKind.Absolute, out var endpoint))
+        {
+            return HealthCheckResult.Unhealthy("Redis endpoint is invalid.");
+        }
+
+        try
+        {
+            using var client = new TcpClient();
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(2));
+            await client.ConnectAsync(endpoint.Host, endpoint.Port > 0 ? endpoint.Port : 6379, timeout.Token);
+            return HealthCheckResult.Healthy("Redis endpoint is reachable.");
+        }
+        catch (Exception exception) when (exception is SocketException or OperationCanceledException)
+        {
+            return HealthCheckResult.Unhealthy("Redis endpoint is unavailable.", exception);
+        }
+    }
 }
-public sealed class WorkerReadinessHealthCheck(CustSearchDbContext db,TimeProvider clock):IHealthCheck{public async Task<HealthCheckResult>CheckHealthAsync(HealthCheckContext context,CancellationToken cancellationToken=default){var cutoff=clock.GetUtcNow().UtcDateTime.AddMinutes(-5);var failed=await db.WorkerHeartbeats.AsNoTracking().AnyAsync(x=>x.LastHeartbeatUtc>=cutoff&&!x.IsReady,cancellationToken);return failed?HealthCheckResult.Unhealthy("A current worker heartbeat is not ready."):HealthCheckResult.Healthy("Worker heartbeat state is ready or externally hosted.");}}
-public sealed class SignalRReadinessHealthCheck(IAlertConnectionMetrics metrics):IHealthCheck{public Task<HealthCheckResult>CheckHealthAsync(HealthCheckContext context,CancellationToken cancellationToken=default){_ = metrics;_ = cancellationToken;return Task.FromResult(HealthCheckResult.Healthy("SignalR services and authoritative recovery are registered."));}}
+
+/// <summary>
+/// Reports a current worker's explicit not-ready heartbeat without requiring every worker type
+/// to run in the API process. Stale or externally hosted workers are monitored separately.
+/// </summary>
+public sealed class WorkerReadinessHealthCheck(CustSearchDbContext db, TimeProvider clock) : IHealthCheck
+{
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var cutoff = clock.GetUtcNow().UtcDateTime.AddMinutes(-5);
+        var failed = await db.WorkerHeartbeats
+            .AsNoTracking()
+            .AnyAsync(x => x.LastHeartbeatUtc >= cutoff && !x.IsReady, cancellationToken);
+        return failed
+            ? HealthCheckResult.Unhealthy("A current worker heartbeat is not ready.")
+            : HealthCheckResult.Healthy("Worker heartbeat state is ready or externally hosted.");
+    }
+}
+
+/// <summary>
+/// Confirms the authenticated SignalR infrastructure is registered. Clients recover missed
+/// messages from authoritative REST/SQL state, so an in-memory connection count is not durable state.
+/// </summary>
+public sealed class SignalRReadinessHealthCheck(IAlertConnectionMetrics metrics) : IHealthCheck
+{
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
+    {
+        _ = metrics;
+        _ = cancellationToken;
+        return Task.FromResult(HealthCheckResult.Healthy(
+            "SignalR services and authoritative recovery are registered."));
+    }
+}
