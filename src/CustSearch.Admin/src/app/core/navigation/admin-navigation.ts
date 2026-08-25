@@ -18,6 +18,7 @@ export const ADMIN_NAVIGATION:Record<'customer'|'platform',readonly AdminNavigat
     {label:'Alerts',route:'/customer-admin/alerts',permission:PERMISSIONS.alertsView},
     {label:'Integrations',route:'/customer-admin/integrations',permission:PERMISSIONS.integrationsView},
     {label:'Camera operations',route:'/customer-admin/cameras',permission:PERMISSIONS.camerasView},
+    {label:'Recognition review',route:'/customer-admin/recognition',permission:PERMISSIONS.recognitionView},
   ],
   platform:[
     {label:'Dashboard',route:'/admin/dashboard',permission:PERMISSIONS.tenantsOperationalSummary},

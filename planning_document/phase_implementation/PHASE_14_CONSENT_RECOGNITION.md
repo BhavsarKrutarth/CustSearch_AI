@@ -1,6 +1,6 @@
 # Phase 14 — Consent-Based Recognition
 
-Status: Not Started
+Status: In Progress
 
 ## Scope
 
@@ -8,4 +8,4 @@ Consent-gated enrollment/recognition, withdrawal, data minimization and review w
 
 ## Done Summary
 
-Pending approval, implementation and validation.
+Implementation is active on `phase14-consent-recognition`, created from the exact fully green Phase 13 head. Completion remains blocked on full Phase 5–14 regression, privacy/security gates and tested V1.13.0 canonical SQL.
