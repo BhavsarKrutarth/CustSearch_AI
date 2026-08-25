@@ -1,0 +1,132 @@
+name: Phase 8 Validate
+
+on:
+  push:
+    branches: [phase8-products-retail-billing]
+  pull_request:
+    branches: [AIMainBranch]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SA_PASSWORD: 'CustSearch_Phase8_Regression_2026!'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.424
+
+      - name: Setup Node for pinned Angular 21
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: src/CustSearch.Admin/package-lock.json
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Phase 8 upgrade repeat-safety was proven when Phase 8 completed.
+      # This workflow is now a regression gate for later phases and must not
+      # assume AIMainBranch is still the pre-Phase-8 V1.6 baseline.
+      - name: Verify Phase 8 canonical baseline is present
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('database/CustSearchAi.sql').read_bytes()
+          enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          text=raw.decode(enc)
+          required=[
+            "VersionNumber=N'V1.7.0'",
+            "dbo.RetailInvoices",
+            "dbo.RetailInvoiceItems",
+            "dbo.RetailInvoicePayments",
+            "dbo.RetailInvoiceItemAttributions",
+            "dbo.RetailInvoice_Search",
+            "dbo.CustomerPurchaseHistory_Get",
+          ]
+          missing=[x for x in required if x not in text]
+          if missing:
+              raise SystemExit(f'Phase 8 canonical regression baseline incomplete: {missing}')
+          Path('/tmp/CustSearchAi.current.sql').write_text(text,encoding='utf-8')
+          PY
+
+      - name: Restore .NET
+        run: dotnet restore CustSearch_AI.sln
+
+      - name: Build .NET Release
+        run: dotnet build CustSearch_AI.sln --configuration Release --no-restore
+
+      - name: Test .NET regression
+        run: dotnet test CustSearch_AI.sln --configuration Release --no-build
+
+      - name: Install Angular dependencies reproducibly
+        working-directory: src/CustSearch.Admin
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint Angular
+        working-directory: src/CustSearch.Admin
+        run: npm run lint
+
+      - name: Test Angular regression
+        working-directory: src/CustSearch.Admin
+        run: npm run test:ci
+
+      - name: Build Angular production
+        working-directory: src/CustSearch.Admin
+        run: npm run build:production
+
+      - name: Prepare Playwright
+        working-directory: tests/CustSearch.Admin.E2E
+        run: |
+          if [ ! -f package-lock.json ]; then npm install --package-lock-only --ignore-scripts --no-audit --no-fund; fi
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Run full Playwright regression
+        working-directory: tests/CustSearch.Admin.E2E
+        run: npm test
+
+      - name: Validate Python baseline
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check -r src/CustSearch.AI/requirements-dev.txt
+          ruff check src/CustSearch.AI tests/CustSearch.AI.Tests
+          PYTHONPATH=src/CustSearch.AI python -m pytest -q tests/CustSearch.AI.Tests
+
+      - name: Validate Phase 8 SQL structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          upgrade=Path('database/09_Upgrade/V1.7.0_Phase8_ProductsRetailBilling.sql').read_text(encoding='utf-8-sig')
+          runner=Path('database/run-phase8.sql').read_text(encoding='utf-8-sig')
+          required=['dbo.Products','dbo.RetailInvoices','dbo.RetailInvoiceItems','dbo.RetailInvoicePayments','dbo.RetailInvoiceParticipants','dbo.RetailInvoiceItemAttributions','dbo.RetailInvoice_Search','dbo.RetailInvoice_GetDetail',"VersionNumber=N'V1.7.0'",'@AllowedStoreIdsCsv']
+          missing=[x for x in required if x not in upgrade or x not in runner]
+          if missing: raise SystemExit(f'Phase 8 SQL regression elements missing: {missing}')
+          PY
+
+      - name: Fresh-install current canonical on SQL Server 2022
+        shell: bash
+        run: |
+          docker run -d --name phase8-regression-sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" mcr.microsoft.com/mssql/server:2022-latest
+          for i in {1..60}; do
+            if docker exec phase8-regression-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then break; fi
+            if [ "$i" = 60 ]; then docker logs phase8-regression-sql; exit 1; fi
+            sleep 2
+          done
+          docker cp /tmp/CustSearchAi.current.sql phase8-regression-sql:/tmp/current.sql
+          docker exec phase8-regression-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -i /tmp/current.sql
+          docker exec phase8-regression-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -d CustSearch_AI -Q "IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0')<>1 THROW 51720,'Canonical V1.7.0 invalid',1; IF OBJECT_ID(N'dbo.RetailInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.RetailInvoiceItemAttributions',N'U') IS NULL OR OBJECT_ID(N'dbo.RetailInvoice_Search',N'P') IS NULL THROW 51721,'Phase 8 canonical objects missing',1;"

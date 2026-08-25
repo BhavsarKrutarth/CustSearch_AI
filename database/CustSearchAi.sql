@@ -1,4 +1,4 @@
-﻿USE [master]
+USE [master]
 GO
 /* CustSearch AI portable bootstrap: SQL Server 2022+, no machine-specific MDF/LDF paths. */
 IF DB_ID(N'CustSearch_AI') IS NULL
@@ -2247,4 +2247,2847 @@ GO
 IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.6.0')
     INSERT dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy)
     VALUES(N'V1.6.0',N'Phase 7 verified households, co-visit parties and factual customer visits',SYSUTCDATETIME(),SUSER_SNAME());
+GO
+
+-- ============================================================
+-- PHASE 8 - PRODUCTS & RETAIL BILLING
+-- VERSION: V1.7.0
+-- ============================================================
+/* CustSearch AI — Phase 8 / V1.7.0 — Products & Retail Billing */
+USE [CustSearch_AI];
+GO
+SET XACT_ABORT ON;
+SET NOCOUNT ON;
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+GO
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.6.0')
+    THROW 51300,'Phase 7 V1.6.0 must be installed before Phase 8.',1;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ProductCategories') AND name=N'UX_ProductCategories_Tenant_Id')
+    CREATE UNIQUE INDEX UX_ProductCategories_Tenant_Id ON dbo.ProductCategories(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CustomerVisits') AND name=N'UX_CustomerVisits_Tenant_Store_Id')
+    CREATE UNIQUE INDEX UX_CustomerVisits_Tenant_Store_Id ON dbo.CustomerVisits(TenantId,StoreId,Id);
+GO
+
+-- 8A Product catalog
+IF OBJECT_ID(N'dbo.Products',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.Products(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Products PRIMARY KEY,
+  TenantId BIGINT NOT NULL, ProductCode NVARCHAR(50) NOT NULL, Barcode NVARCHAR(100) NULL,
+  Name NVARCHAR(200) NOT NULL, Description NVARCHAR(1000) NULL, CategoryId BIGINT NOT NULL,
+  Brand NVARCHAR(150) NULL, UnitName NVARCHAR(50) NOT NULL, SalePrice DECIMAL(18,2) NOT NULL,
+  CostPrice DECIMAL(18,2) NULL, TaxPercent DECIMAL(9,4) NULL, IsActive BIT NOT NULL CONSTRAINT DF_Products_Active DEFAULT(1),
+  CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_Products_Created DEFAULT(SYSUTCDATETIME()), UpdatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_Products_Updated DEFAULT(SYSUTCDATETIME()),
+  CONSTRAINT FK_Products_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+  CONSTRAINT FK_Products_Categories_TenantCategory FOREIGN KEY(TenantId,CategoryId) REFERENCES dbo.ProductCategories(TenantId,Id),
+  CONSTRAINT CK_Products_Prices CHECK(SalePrice>=0 AND (CostPrice IS NULL OR CostPrice>=0)),
+  CONSTRAINT CK_Products_Tax CHECK(TaxPercent IS NULL OR TaxPercent BETWEEN 0 AND 100));
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Products') AND name=N'UX_Products_Tenant_Code') CREATE UNIQUE INDEX UX_Products_Tenant_Code ON dbo.Products(TenantId,ProductCode);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Products') AND name=N'UX_Products_Tenant_Id') CREATE UNIQUE INDEX UX_Products_Tenant_Id ON dbo.Products(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Products') AND name=N'UX_Products_Tenant_Barcode') CREATE UNIQUE INDEX UX_Products_Tenant_Barcode ON dbo.Products(TenantId,Barcode) WHERE Barcode IS NOT NULL;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Products') AND name=N'IX_Products_Tenant_Category_Active') CREATE INDEX IX_Products_Tenant_Category_Active ON dbo.Products(TenantId,CategoryId,IsActive) INCLUDE(ProductCode,Name,SalePrice,TaxPercent);
+GO
+IF OBJECT_ID(N'dbo.ProductStoreAvailabilities',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.ProductStoreAvailabilities(
+  TenantId BIGINT NOT NULL, ProductId BIGINT NOT NULL, StoreId BIGINT NOT NULL, IsActive BIT NOT NULL CONSTRAINT DF_ProductStores_Active DEFAULT(1),
+  CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_ProductStores_Created DEFAULT(SYSUTCDATETIME()), UpdatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_ProductStores_Updated DEFAULT(SYSUTCDATETIME()),
+  CONSTRAINT PK_ProductStoreAvailabilities PRIMARY KEY(ProductId,StoreId),
+  CONSTRAINT FK_ProductStores_Products_TenantProduct FOREIGN KEY(TenantId,ProductId) REFERENCES dbo.Products(TenantId,Id) ON DELETE CASCADE,
+  CONSTRAINT FK_ProductStores_Stores_TenantStore FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id));
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ProductStoreAvailabilities') AND name=N'IX_ProductStores_Tenant_Store_Active') CREATE INDEX IX_ProductStores_Tenant_Store_Active ON dbo.ProductStoreAvailabilities(TenantId,StoreId,IsActive,ProductId);
+GO
+
+-- 8B Invoice headers
+IF OBJECT_ID(N'dbo.RetailInvoices',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.RetailInvoices(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RetailInvoices PRIMARY KEY,
+  TenantId BIGINT NOT NULL, StoreId BIGINT NOT NULL, InvoiceNumber NVARCHAR(50) NOT NULL,
+  CustomerId BIGINT NULL, HouseholdId BIGINT NULL, CustomerVisitId BIGINT NULL, VisitPartyId BIGINT NULL,
+  InvoiceUtc DATETIME2(7) NOT NULL, Subtotal DECIMAL(18,2) NOT NULL CONSTRAINT DF_RetailInvoices_Subtotal DEFAULT(0),
+  DiscountAmount DECIMAL(18,2) NOT NULL CONSTRAINT DF_RetailInvoices_Discount DEFAULT(0), TaxAmount DECIMAL(18,2) NOT NULL CONSTRAINT DF_RetailInvoices_Tax DEFAULT(0),
+  GrandTotal DECIMAL(18,2) NOT NULL CONSTRAINT DF_RetailInvoices_Total DEFAULT(0), PaidAmount DECIMAL(18,2) NOT NULL CONSTRAINT DF_RetailInvoices_Paid DEFAULT(0), BalanceAmount DECIMAL(18,2) NOT NULL CONSTRAINT DF_RetailInvoices_Balance DEFAULT(0),
+  Status TINYINT NOT NULL CONSTRAINT DF_RetailInvoices_Status DEFAULT(1), Notes NVARCHAR(1000) NULL, CreatedByUserId BIGINT NOT NULL,
+  CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_RetailInvoices_Created DEFAULT(SYSUTCDATETIME()), UpdatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_RetailInvoices_Updated DEFAULT(SYSUTCDATETIME()),
+  CancelledUtc DATETIME2(7) NULL, CancelledByUserId BIGINT NULL, CancellationReason NVARCHAR(500) NULL, RowVersion ROWVERSION NOT NULL,
+  CONSTRAINT FK_RetailInvoices_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+  CONSTRAINT FK_RetailInvoices_Stores_TenantStore FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),
+  CONSTRAINT FK_RetailInvoices_Customers_TenantCustomer FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),
+  CONSTRAINT FK_RetailInvoices_Households_TenantHousehold FOREIGN KEY(TenantId,HouseholdId) REFERENCES dbo.Households(TenantId,Id),
+  CONSTRAINT FK_RetailInvoices_Visits_TenantStoreVisit FOREIGN KEY(TenantId,StoreId,CustomerVisitId) REFERENCES dbo.CustomerVisits(TenantId,StoreId,Id),
+  CONSTRAINT FK_RetailInvoices_Parties_TenantStoreParty FOREIGN KEY(TenantId,StoreId,VisitPartyId) REFERENCES dbo.VisitParties(TenantId,StoreId,Id),
+  CONSTRAINT FK_RetailInvoices_Users_Created FOREIGN KEY(CreatedByUserId) REFERENCES dbo.Users(Id),
+  CONSTRAINT FK_RetailInvoices_Users_Cancelled FOREIGN KEY(CancelledByUserId) REFERENCES dbo.Users(Id),
+  CONSTRAINT CK_RetailInvoices_Status CHECK(Status BETWEEN 1 AND 5),
+  CONSTRAINT CK_RetailInvoices_Amounts CHECK(Subtotal>=0 AND DiscountAmount>=0 AND TaxAmount>=0 AND GrandTotal>=0 AND PaidAmount>=0 AND BalanceAmount>=0 AND DiscountAmount<=Subtotal AND GrandTotal=Subtotal-DiscountAmount+TaxAmount AND PaidAmount<=GrandTotal AND BalanceAmount=GrandTotal-PaidAmount),
+  CONSTRAINT CK_RetailInvoices_Cancel CHECK((Status=5 AND CancelledUtc IS NOT NULL AND CancelledByUserId IS NOT NULL AND CancellationReason IS NOT NULL) OR (Status<>5 AND CancelledUtc IS NULL AND CancelledByUserId IS NULL)));
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoices') AND name=N'UX_RetailInvoices_Tenant_Store_Number') CREATE UNIQUE INDEX UX_RetailInvoices_Tenant_Store_Number ON dbo.RetailInvoices(TenantId,StoreId,InvoiceNumber);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoices') AND name=N'UX_RetailInvoices_Tenant_Id') CREATE UNIQUE INDEX UX_RetailInvoices_Tenant_Id ON dbo.RetailInvoices(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoices') AND name=N'UX_RetailInvoices_Tenant_Store_Id') CREATE UNIQUE INDEX UX_RetailInvoices_Tenant_Store_Id ON dbo.RetailInvoices(TenantId,StoreId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoices') AND name=N'IX_RetailInvoices_Tenant_Store_Date') CREATE INDEX IX_RetailInvoices_Tenant_Store_Date ON dbo.RetailInvoices(TenantId,StoreId,InvoiceUtc DESC) INCLUDE(InvoiceNumber,CustomerId,GrandTotal,PaidAmount,BalanceAmount,Status);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoices') AND name=N'IX_RetailInvoices_Tenant_Customer_Date') CREATE INDEX IX_RetailInvoices_Tenant_Customer_Date ON dbo.RetailInvoices(TenantId,CustomerId,InvoiceUtc DESC) WHERE CustomerId IS NOT NULL;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoices') AND name=N'IX_RetailInvoices_Tenant_Status_Date') CREATE INDEX IX_RetailInvoices_Tenant_Status_Date ON dbo.RetailInvoices(TenantId,Status,InvoiceUtc DESC);
+GO
+
+-- 8C Immutable invoice item snapshots
+IF OBJECT_ID(N'dbo.RetailInvoiceItems',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.RetailInvoiceItems(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RetailInvoiceItems PRIMARY KEY, TenantId BIGINT NOT NULL, InvoiceId BIGINT NOT NULL,
+  ProductId BIGINT NULL, CategoryId BIGINT NULL, ProductCodeSnapshot NVARCHAR(50) NOT NULL, ProductNameSnapshot NVARCHAR(200) NOT NULL, CategoryNameSnapshot NVARCHAR(150) NULL,
+  Quantity DECIMAL(18,4) NOT NULL, UnitPrice DECIMAL(18,2) NOT NULL, DiscountAmount DECIMAL(18,2) NOT NULL, TaxPercent DECIMAL(9,4) NOT NULL,
+  TaxAmount DECIMAL(18,2) NOT NULL, LineSubtotal DECIMAL(18,2) NOT NULL, LineTotal DECIMAL(18,2) NOT NULL, CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_RetailItems_Created DEFAULT(SYSUTCDATETIME()),
+  CONSTRAINT FK_RetailItems_Invoices_TenantInvoice FOREIGN KEY(TenantId,InvoiceId) REFERENCES dbo.RetailInvoices(TenantId,Id) ON DELETE CASCADE,
+  CONSTRAINT FK_RetailItems_Products_TenantProduct FOREIGN KEY(TenantId,ProductId) REFERENCES dbo.Products(TenantId,Id),
+  CONSTRAINT FK_RetailItems_Categories_TenantCategory FOREIGN KEY(TenantId,CategoryId) REFERENCES dbo.ProductCategories(TenantId,Id),
+  CONSTRAINT CK_RetailItems_Qty CHECK(Quantity>0), CONSTRAINT CK_RetailItems_Amounts CHECK(UnitPrice>=0 AND DiscountAmount>=0 AND TaxPercent BETWEEN 0 AND 100 AND TaxAmount>=0 AND LineSubtotal>=0 AND LineTotal>=0 AND DiscountAmount<=LineSubtotal AND LineTotal=LineSubtotal-DiscountAmount+TaxAmount));
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoiceItems') AND name=N'UX_RetailItems_Tenant_Invoice_Id') CREATE UNIQUE INDEX UX_RetailItems_Tenant_Invoice_Id ON dbo.RetailInvoiceItems(TenantId,InvoiceId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoiceItems') AND name=N'IX_RetailItems_Tenant_Product') CREATE INDEX IX_RetailItems_Tenant_Product ON dbo.RetailInvoiceItems(TenantId,ProductId) INCLUDE(InvoiceId,Quantity,LineTotal);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoiceItems') AND name=N'IX_RetailItems_Tenant_Category') CREATE INDEX IX_RetailItems_Tenant_Category ON dbo.RetailInvoiceItems(TenantId,CategoryId) INCLUDE(InvoiceId,LineTotal);
+GO
+
+-- 8D Payments
+IF OBJECT_ID(N'dbo.RetailInvoicePayments',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.RetailInvoicePayments(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RetailInvoicePayments PRIMARY KEY, TenantId BIGINT NOT NULL, StoreId BIGINT NOT NULL, InvoiceId BIGINT NOT NULL,
+  PaymentReference NVARCHAR(100) NOT NULL, PaymentMethod TINYINT NOT NULL, Amount DECIMAL(18,2) NOT NULL, PaymentUtc DATETIME2(7) NOT NULL, Status TINYINT NOT NULL,
+  ExternalTransactionId NVARCHAR(150) NULL, Notes NVARCHAR(500) NULL, ReceivedByUserId BIGINT NOT NULL, CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_RetailPayments_Created DEFAULT(SYSUTCDATETIME()),
+  CONSTRAINT FK_RetailPayments_Invoices_TenantStoreInvoice FOREIGN KEY(TenantId,StoreId,InvoiceId) REFERENCES dbo.RetailInvoices(TenantId,StoreId,Id),
+  CONSTRAINT FK_RetailPayments_Users FOREIGN KEY(ReceivedByUserId) REFERENCES dbo.Users(Id),
+  CONSTRAINT CK_RetailPayments_Method CHECK(PaymentMethod BETWEEN 1 AND 5), CONSTRAINT CK_RetailPayments_Status CHECK(Status BETWEEN 1 AND 4), CONSTRAINT CK_RetailPayments_Amount CHECK(Amount>0));
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoicePayments') AND name=N'UX_RetailPayments_Tenant_Reference') CREATE UNIQUE INDEX UX_RetailPayments_Tenant_Reference ON dbo.RetailInvoicePayments(TenantId,PaymentReference);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoicePayments') AND name=N'IX_RetailPayments_Tenant_Store_Date') CREATE INDEX IX_RetailPayments_Tenant_Store_Date ON dbo.RetailInvoicePayments(TenantId,StoreId,PaymentUtc DESC) INCLUDE(InvoiceId,PaymentMethod,Amount,Status);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoicePayments') AND name=N'IX_RetailPayments_Tenant_Invoice_Status') CREATE INDEX IX_RetailPayments_Tenant_Invoice_Status ON dbo.RetailInvoicePayments(TenantId,InvoiceId,Status) INCLUDE(Amount);
+GO
+
+-- 8E Explicit participants
+IF OBJECT_ID(N'dbo.RetailInvoiceParticipants',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.RetailInvoiceParticipants(
+  TenantId BIGINT NOT NULL, InvoiceId BIGINT NOT NULL, CustomerId BIGINT NOT NULL, ParticipationType TINYINT NOT NULL, IsPayer BIT NOT NULL,
+  CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_RetailParticipants_Created DEFAULT(SYSUTCDATETIME()),
+  CONSTRAINT PK_RetailInvoiceParticipants PRIMARY KEY(InvoiceId,CustomerId),
+  CONSTRAINT FK_RetailParticipants_Invoices_TenantInvoice FOREIGN KEY(TenantId,InvoiceId) REFERENCES dbo.RetailInvoices(TenantId,Id) ON DELETE CASCADE,
+  CONSTRAINT FK_RetailParticipants_Customers_TenantCustomer FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),
+  CONSTRAINT CK_RetailParticipants_Type CHECK(ParticipationType BETWEEN 1 AND 4),
+  CONSTRAINT CK_RetailParticipants_Payer CHECK((ParticipationType=1 AND IsPayer=1) OR (ParticipationType<>1 AND IsPayer=0)));
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoiceParticipants') AND name=N'UX_RetailParticipants_OnePayer') CREATE UNIQUE INDEX UX_RetailParticipants_OnePayer ON dbo.RetailInvoiceParticipants(InvoiceId) WHERE IsPayer=1;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoiceParticipants') AND name=N'IX_RetailParticipants_Tenant_Customer') CREATE INDEX IX_RetailParticipants_Tenant_Customer ON dbo.RetailInvoiceParticipants(TenantId,CustomerId,InvoiceId);
+GO
+
+-- 8F Explicit auditable spend attribution; no cascade paths and no inferred identity source.
+IF OBJECT_ID(N'dbo.RetailInvoiceItemAttributions',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.RetailInvoiceItemAttributions(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RetailInvoiceItemAttributions PRIMARY KEY, TenantId BIGINT NOT NULL, InvoiceId BIGINT NOT NULL, InvoiceItemId BIGINT NOT NULL, CustomerId BIGINT NOT NULL,
+  AttributionType TINYINT NOT NULL, QuantityAttributed DECIMAL(18,4) NULL, AmountAttributed DECIMAL(18,2) NOT NULL, Source TINYINT NOT NULL, CreatedByUserId BIGINT NOT NULL,
+  CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_RetailAttributions_Created DEFAULT(SYSUTCDATETIME()),
+  CONSTRAINT FK_RetailAttributions_Invoices_TenantInvoice FOREIGN KEY(TenantId,InvoiceId) REFERENCES dbo.RetailInvoices(TenantId,Id),
+  CONSTRAINT FK_RetailAttributions_Items_TenantInvoiceItem FOREIGN KEY(TenantId,InvoiceId,InvoiceItemId) REFERENCES dbo.RetailInvoiceItems(TenantId,InvoiceId,Id),
+  CONSTRAINT FK_RetailAttributions_Customers_TenantCustomer FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),
+  CONSTRAINT FK_RetailAttributions_Users FOREIGN KEY(CreatedByUserId) REFERENCES dbo.Users(Id),
+  CONSTRAINT CK_RetailAttributions_Type CHECK(AttributionType BETWEEN 1 AND 3), CONSTRAINT CK_RetailAttributions_Source CHECK(Source BETWEEN 1 AND 4),
+  CONSTRAINT CK_RetailAttributions_Amount CHECK(AmountAttributed>0), CONSTRAINT CK_RetailAttributions_Qty CHECK(QuantityAttributed IS NULL OR QuantityAttributed>0));
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoiceItemAttributions') AND name=N'UX_RetailAttributions_Item_Customer') CREATE UNIQUE INDEX UX_RetailAttributions_Item_Customer ON dbo.RetailInvoiceItemAttributions(TenantId,InvoiceItemId,CustomerId);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RetailInvoiceItemAttributions') AND name=N'IX_RetailAttributions_Tenant_Customer') CREATE INDEX IX_RetailAttributions_Tenant_Customer ON dbo.RetailInvoiceItemAttributions(TenantId,CustomerId,InvoiceId) INCLUDE(AmountAttributed);
+GO
+
+-- 8H Search and report procedures
+CREATE OR ALTER PROCEDURE dbo.Product_Search @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@StoreId BIGINT=NULL,@CategoryId BIGINT=NULL,@Search NVARCHAR(200)=NULL,@ActiveOnly BIT=0,@PageNumber INT=1,@PageSize INT=25
+AS
+BEGIN
+ SET NOCOUNT ON;IF @PageNumber<1 SET @PageNumber=1;IF @PageSize<1 SET @PageSize=25;IF @PageSize>100 SET @PageSize=100;
+ ;WITH F AS(SELECT p.Id,p.ProductCode,p.Barcode,p.Name,p.CategoryId,c.Name CategoryName,p.Brand,p.UnitName,p.SalePrice,p.TaxPercent,p.IsActive FROM dbo.Products p JOIN dbo.ProductCategories c ON c.TenantId=p.TenantId AND c.Id=p.CategoryId
+ WHERE p.TenantId=@TenantId AND (@ActiveOnly=0 OR p.IsActive=1) AND (@CategoryId IS NULL OR p.CategoryId=@CategoryId)
+ AND (@Search IS NULL OR p.ProductCode LIKE N'%'+@Search+N'%' OR p.Barcode LIKE N'%'+@Search+N'%' OR p.Name LIKE N'%'+@Search+N'%' OR p.Brand LIKE N'%'+@Search+N'%')
+ AND (@StoreId IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.ProductStoreAvailabilities a WHERE a.TenantId=@TenantId AND a.ProductId=p.Id AND a.IsActive=1) OR EXISTS(SELECT 1 FROM dbo.ProductStoreAvailabilities a WHERE a.TenantId=@TenantId AND a.ProductId=p.Id AND a.StoreId=@StoreId AND a.IsActive=1))
+ AND (@AllowedStoreIdsCsv IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.ProductStoreAvailabilities a WHERE a.TenantId=@TenantId AND a.ProductId=p.Id AND a.IsActive=1) OR EXISTS(SELECT 1 FROM dbo.ProductStoreAvailabilities a JOIN STRING_SPLIT(@AllowedStoreIdsCsv,N',') s ON TRY_CONVERT(BIGINT,s.value)=a.StoreId WHERE a.TenantId=@TenantId AND a.ProductId=p.Id AND a.IsActive=1)))
+ SELECT *,COUNT_BIG(*) OVER() TotalCount FROM F ORDER BY Name,Id OFFSET (@PageNumber-1)*@PageSize ROWS FETCH NEXT @PageSize ROWS ONLY;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.RetailInvoice_Search @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@StoreId BIGINT=NULL,@CustomerId BIGINT=NULL,@Status TINYINT=NULL,@Search NVARCHAR(200)=NULL,@FromUtc DATETIME2(7)=NULL,@ToUtc DATETIME2(7)=NULL,@PageNumber INT=1,@PageSize INT=25
+AS
+BEGIN
+ SET NOCOUNT ON;IF @PageNumber<1 SET @PageNumber=1;IF @PageSize<1 SET @PageSize=25;IF @PageSize>100 SET @PageSize=100;
+ ;WITH F AS(SELECT i.Id,i.InvoiceNumber,i.StoreId,i.CustomerId,c.CustomerCode,CASE WHEN c.Id IS NULL THEN NULL ELSE CONCAT(c.FirstName,CASE WHEN c.LastName IS NULL THEN N'' ELSE N' '+c.LastName END) END CustomerName,i.InvoiceUtc,i.GrandTotal,i.PaidAmount,i.BalanceAmount,i.Status FROM dbo.RetailInvoices i LEFT JOIN dbo.Customers c ON c.TenantId=i.TenantId AND c.Id=i.CustomerId
+ WHERE i.TenantId=@TenantId AND (@StoreId IS NULL OR i.StoreId=@StoreId) AND (@CustomerId IS NULL OR i.CustomerId=@CustomerId) AND (@Status IS NULL OR i.Status=@Status) AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc)
+ AND (@Search IS NULL OR i.InvoiceNumber LIKE N'%'+@Search+N'%' OR c.CustomerCode LIKE N'%'+@Search+N'%' OR c.FirstName LIKE N'%'+@Search+N'%' OR c.LastName LIKE N'%'+@Search+N'%')
+ AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL)))
+ SELECT *,COUNT_BIG(*) OVER() TotalCount FROM F ORDER BY InvoiceUtc DESC,Id DESC OFFSET (@PageNumber-1)*@PageSize ROWS FETCH NEXT @PageSize ROWS ONLY;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.RetailInvoice_GetDetail @TenantId BIGINT,@InvoiceId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL
+AS
+BEGIN
+ SET NOCOUNT ON;
+ SELECT i.* FROM dbo.RetailInvoices i WHERE i.TenantId=@TenantId AND i.Id=@InvoiceId AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL));
+ SELECT x.* FROM dbo.RetailInvoiceItems x JOIN dbo.RetailInvoices i ON i.TenantId=x.TenantId AND i.Id=x.InvoiceId WHERE x.TenantId=@TenantId AND x.InvoiceId=@InvoiceId AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL)) ORDER BY x.Id;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.CustomerPurchaseHistory_Get @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@CustomerId BIGINT,@RecentCount INT=10
+AS
+BEGIN
+ SET NOCOUNT ON;IF @RecentCount<1 SET @RecentCount=10;IF @RecentCount>100 SET @RecentCount=100;
+ DECLARE @Visible TABLE(Id BIGINT PRIMARY KEY,StoreId BIGINT,InvoiceUtc DATETIME2(7),InvoiceNumber NVARCHAR(50),Status TINYINT,GrandTotal DECIMAL(18,2));
+ INSERT @Visible(Id,StoreId,InvoiceUtc,InvoiceNumber,Status,GrandTotal)
+ SELECT DISTINCT i.Id,i.StoreId,i.InvoiceUtc,i.InvoiceNumber,i.Status,i.GrandTotal FROM dbo.RetailInvoices i
+ LEFT JOIN dbo.RetailInvoiceParticipants p ON p.TenantId=i.TenantId AND p.InvoiceId=i.Id AND p.CustomerId=@CustomerId
+ LEFT JOIN dbo.RetailInvoiceItemAttributions a ON a.TenantId=i.TenantId AND a.InvoiceId=i.Id AND a.CustomerId=@CustomerId
+ WHERE i.TenantId=@TenantId AND i.Status IN(2,3,4) AND (i.CustomerId=@CustomerId OR p.CustomerId IS NOT NULL OR a.CustomerId IS NOT NULL)
+ AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL));
+ SELECT @CustomerId CustomerId,COUNT_BIG(*) InvoiceCount,
+  COALESCE((SELECT SUM(i.GrandTotal) FROM dbo.RetailInvoiceParticipants p JOIN dbo.RetailInvoices i ON i.TenantId=p.TenantId AND i.Id=p.InvoiceId WHERE p.TenantId=@TenantId AND p.CustomerId=@CustomerId AND p.IsPayer=1 AND i.Status IN(2,3,4) AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))),0) PayerSpend,
+  COALESCE((SELECT SUM(a.AmountAttributed) FROM dbo.RetailInvoiceItemAttributions a JOIN dbo.RetailInvoices i ON i.TenantId=a.TenantId AND i.Id=a.InvoiceId WHERE a.TenantId=@TenantId AND a.CustomerId=@CustomerId AND i.Status IN(2,3,4) AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))),0) ExplicitAttributedSpend,
+  MAX(InvoiceUtc) LastPurchaseUtc,(SELECT TOP(1) StoreId FROM @Visible ORDER BY InvoiceUtc DESC,Id DESC) LastPurchaseStoreId FROM @Visible;
+ SELECT TOP(@RecentCount) v.Id InvoiceId,v.InvoiceNumber,v.StoreId,v.InvoiceUtc,v.Status,v.GrandTotal,
+  CASE WHEN EXISTS(SELECT 1 FROM dbo.RetailInvoiceParticipants p WHERE p.TenantId=@TenantId AND p.InvoiceId=v.Id AND p.CustomerId=@CustomerId AND p.IsPayer=1) THEN v.GrandTotal ELSE CAST(0 AS DECIMAL(18,2)) END PayerAmount,
+  COALESCE((SELECT SUM(a.AmountAttributed) FROM dbo.RetailInvoiceItemAttributions a WHERE a.TenantId=@TenantId AND a.InvoiceId=v.Id AND a.CustomerId=@CustomerId),0) AttributedAmount
+ FROM @Visible v ORDER BY v.InvoiceUtc DESC,v.Id DESC;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.HouseholdPurchaseSummary_Get @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@HouseholdId BIGINT
+AS
+BEGIN
+ SET NOCOUNT ON;
+ DECLARE @H TABLE(InvoiceId BIGINT PRIMARY KEY,InvoiceUtc DATETIME2(7));
+ INSERT @H SELECT DISTINCT i.Id,i.InvoiceUtc FROM dbo.RetailInvoiceItemAttributions a JOIN dbo.HouseholdMembers m ON m.TenantId=a.TenantId AND m.CustomerId=a.CustomerId AND m.HouseholdId=@HouseholdId AND m.IsActive=1 AND m.IsVerified=1 JOIN dbo.RetailInvoices i ON i.TenantId=a.TenantId AND i.Id=a.InvoiceId WHERE a.TenantId=@TenantId AND i.Status IN(2,3,4) AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL));
+ SELECT @HouseholdId HouseholdId,(SELECT COUNT_BIG(*) FROM @H) InvoiceCount,
+  COALESCE((SELECT SUM(a.AmountAttributed) FROM dbo.RetailInvoiceItemAttributions a JOIN dbo.HouseholdMembers m ON m.TenantId=a.TenantId AND m.CustomerId=a.CustomerId AND m.HouseholdId=@HouseholdId AND m.IsActive=1 AND m.IsVerified=1 JOIN dbo.RetailInvoices i ON i.TenantId=a.TenantId AND i.Id=a.InvoiceId WHERE a.TenantId=@TenantId AND i.Status IN(2,3,4) AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))),0) VerifiedMemberAttributedSpend,(SELECT MAX(InvoiceUtc) FROM @H) LastPurchaseUtc;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.RetailSalesSummary_Get @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@StoreId BIGINT=NULL,@FromUtc DATETIME2(7)=NULL,@ToUtc DATETIME2(7)=NULL
+AS
+BEGIN SET NOCOUNT ON;SELECT COALESCE(SUM(Subtotal),0) GrossSales,COALESCE(SUM(DiscountAmount),0) Discounts,COALESCE(SUM(TaxAmount),0) Tax,COALESCE(SUM(GrandTotal),0) NetSales,COALESCE(SUM(PaidAmount),0) PaidAmount,COALESCE(SUM(BalanceAmount),0) OutstandingAmount,COUNT_BIG(*) InvoiceCount FROM dbo.RetailInvoices i WHERE i.TenantId=@TenantId AND i.Status IN(2,3,4) AND (@StoreId IS NULL OR i.StoreId=@StoreId) AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc) AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL));END;
+GO
+CREATE OR ALTER PROCEDURE dbo.RetailSalesByProduct_Get @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@StoreId BIGINT=NULL,@FromUtc DATETIME2(7)=NULL,@ToUtc DATETIME2(7)=NULL,@Top INT=20
+AS
+BEGIN SET NOCOUNT ON;IF @Top<1 SET @Top=20;IF @Top>100 SET @Top=100;SELECT TOP(@Top) COALESCE(x.ProductId,0) Id,x.ProductCodeSnapshot Code,x.ProductNameSnapshot Name,SUM(x.LineTotal) NetSales,CONVERT(BIGINT,COUNT(DISTINCT i.Id)) InvoiceCount FROM dbo.RetailInvoiceItems x JOIN dbo.RetailInvoices i ON i.TenantId=x.TenantId AND i.Id=x.InvoiceId WHERE i.TenantId=@TenantId AND i.Status IN(2,3,4) AND (@StoreId IS NULL OR i.StoreId=@StoreId) AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc) AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL)) GROUP BY x.ProductId,x.ProductCodeSnapshot,x.ProductNameSnapshot ORDER BY NetSales DESC,Name;END;
+GO
+CREATE OR ALTER PROCEDURE dbo.RetailSalesByCategory_Get @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@StoreId BIGINT=NULL,@FromUtc DATETIME2(7)=NULL,@ToUtc DATETIME2(7)=NULL,@Top INT=20
+AS
+BEGIN SET NOCOUNT ON;IF @Top<1 SET @Top=20;IF @Top>100 SET @Top=100;SELECT TOP(@Top) COALESCE(x.CategoryId,0) Id,COALESCE(c.CategoryCode,N'UNCATEGORIZED') Code,COALESCE(x.CategoryNameSnapshot,N'Uncategorized') Name,SUM(x.LineTotal) NetSales,CONVERT(BIGINT,COUNT(DISTINCT i.Id)) InvoiceCount FROM dbo.RetailInvoiceItems x JOIN dbo.RetailInvoices i ON i.TenantId=x.TenantId AND i.Id=x.InvoiceId LEFT JOIN dbo.ProductCategories c ON c.TenantId=x.TenantId AND c.Id=x.CategoryId WHERE i.TenantId=@TenantId AND i.Status IN(2,3,4) AND (@StoreId IS NULL OR i.StoreId=@StoreId) AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc) AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL)) GROUP BY x.CategoryId,c.CategoryCode,x.CategoryNameSnapshot ORDER BY NetSales DESC,Name;END;
+GO
+CREATE OR ALTER PROCEDURE dbo.RetailPaymentSummary_Get @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@StoreId BIGINT=NULL,@FromUtc DATETIME2(7)=NULL,@ToUtc DATETIME2(7)=NULL
+AS
+BEGIN SET NOCOUNT ON;SELECT PaymentMethod,SUM(Amount) Amount,COUNT_BIG(*) PaymentCount FROM dbo.RetailInvoicePayments p WHERE p.TenantId=@TenantId AND p.Status=2 AND (@StoreId IS NULL OR p.StoreId=@StoreId) AND (@FromUtc IS NULL OR p.PaymentUtc>=@FromUtc) AND (@ToUtc IS NULL OR p.PaymentUtc<@ToUtc) AND (@AllowedStoreIdsCsv IS NULL OR p.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL)) GROUP BY PaymentMethod ORDER BY PaymentMethod;END;
+GO
+
+DECLARE @P TABLE(Name NVARCHAR(150));
+INSERT @P VALUES(N'Products.View'),(N'Products.Create'),(N'Products.Edit'),(N'Products.ManageStores'),(N'RetailInvoices.View'),(N'RetailInvoices.Create'),(N'RetailInvoices.Edit'),(N'RetailInvoices.Finalize'),(N'RetailInvoices.Cancel'),(N'RetailPayments.View'),(N'RetailPayments.Create'),(N'RetailSpendAttribution.View'),(N'RetailSpendAttribution.Manage'),(N'RetailReports.View');
+INSERT dbo.Permissions(Scope,Name,Description,IsActive,CreatedUtc) SELECT 2,p.Name,N'Allows '+p.Name+N' operations.',1,SYSUTCDATETIME() FROM @P p WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Scope=2 AND x.Name=p.Name);
+GO
+INSERT dbo.RolePermissions(RoleId,PermissionId) SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1 WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName IN(N'TENANTADMIN',N'TENANTOWNER',N'SHOPOWNER') AND p.Name IN(N'Products.View',N'Products.Create',N'Products.Edit',N'Products.ManageStores',N'RetailInvoices.View',N'RetailInvoices.Create',N'RetailInvoices.Edit',N'RetailInvoices.Finalize',N'RetailInvoices.Cancel',N'RetailPayments.View',N'RetailPayments.Create',N'RetailSpendAttribution.View',N'RetailSpendAttribution.Manage',N'RetailReports.View') AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+GO
+INSERT dbo.RolePermissions(RoleId,PermissionId) SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1 WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName=N'STOREMANAGER' AND p.Name IN(N'Products.View',N'Products.Create',N'Products.Edit',N'Products.ManageStores',N'RetailInvoices.View',N'RetailInvoices.Create',N'RetailInvoices.Edit',N'RetailInvoices.Finalize',N'RetailPayments.View',N'RetailPayments.Create',N'RetailSpendAttribution.View',N'RetailSpendAttribution.Manage',N'RetailReports.View') AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+GO
+INSERT dbo.RolePermissions(RoleId,PermissionId) SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1 WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName IN(N'SALESSTAFF',N'CRMSTAFF') AND p.Name IN(N'Products.View',N'RetailInvoices.View',N'RetailInvoices.Create',N'RetailInvoices.Edit',N'RetailInvoices.Finalize',N'RetailPayments.View',N'RetailPayments.Create',N'RetailSpendAttribution.View') AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+GO
+IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0') INSERT dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy) VALUES(N'V1.7.0',N'Phase 8 products, retail billing, participants, spend attribution and tenant retail reports',SYSUTCDATETIME(),SUSER_SNAME());
+GO
+
+-- ============================================================
+-- PHASE 9 - PLATFORM BILLING
+-- VERSION: V1.8.0
+-- ============================================================
+/*
+ CustSearch AI — Phase 9 production database upgrade
+ Version: V1.8.0
+ Rules: SQL Server 2022, idempotent/repeat-safe, no EF migrations.
+
+ Phase 9 is Platform Billing (tenant/shop owner pays CustSearch).
+ It is intentionally separate from Phase 8 Retail Billing (shop-customer purchases).
+ This upgrade extends the existing plan/subscription foundation and creates only
+ PlatformInvoices / PlatformInvoiceItems / PlatformPayments plus read procedures.
+*/
+USE [CustSearch_AI];
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+
+IF DB_NAME() <> N'CustSearch_AI'
+    THROW 51800, 'Run Phase 9 against the CustSearch_AI database.', 1;
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.7.0')
+    THROW 51801, 'Phase 9 requires validated V1.7.0 Phase 8 baseline.', 1;
+IF OBJECT_ID(N'dbo.SubscriptionPlans',N'U') IS NULL OR OBJECT_ID(N'dbo.Tenants',N'U') IS NULL OR OBJECT_ID(N'dbo.TenantSubscriptions',N'U') IS NULL
+    THROW 51802, 'Platform tenancy/subscription baseline is incomplete.', 1;
+IF OBJECT_ID(N'dbo.Permissions',N'U') IS NULL OR OBJECT_ID(N'dbo.Roles',N'U') IS NULL OR OBJECT_ID(N'dbo.RolePermissions',N'U') IS NULL
+    THROW 51803, 'Authorization baseline is incomplete.', 1;
+
+BEGIN TRANSACTION;
+BEGIN TRY
+    /* =========================================================
+       9A — Subscription plan catalog extension
+       ========================================================= */
+    IF COL_LENGTH('dbo.SubscriptionPlans','Description') IS NULL
+        ALTER TABLE dbo.SubscriptionPlans ADD Description NVARCHAR(1000) NOT NULL CONSTRAINT DF_SubscriptionPlans_Description DEFAULT(N'');
+    IF COL_LENGTH('dbo.SubscriptionPlans','Currency') IS NULL
+        ALTER TABLE dbo.SubscriptionPlans ADD Currency CHAR(3) NOT NULL CONSTRAINT DF_SubscriptionPlans_Currency DEFAULT('USD');
+    IF COL_LENGTH('dbo.SubscriptionPlans','TrialDays') IS NULL
+        ALTER TABLE dbo.SubscriptionPlans ADD TrialDays INT NOT NULL CONSTRAINT DF_SubscriptionPlans_TrialDays DEFAULT(0);
+    IF COL_LENGTH('dbo.SubscriptionPlans','MaxStaff') IS NULL
+    BEGIN
+        ALTER TABLE dbo.SubscriptionPlans ADD MaxStaff INT NULL;
+        EXEC sys.sp_executesql N'UPDATE dbo.SubscriptionPlans SET MaxStaff=MaxUsers WHERE MaxStaff IS NULL;';
+        EXEC sys.sp_executesql N'ALTER TABLE dbo.SubscriptionPlans ALTER COLUMN MaxStaff INT NOT NULL;';
+    END;
+    IF COL_LENGTH('dbo.SubscriptionPlans','FeatureLimitsJson') IS NULL
+        ALTER TABLE dbo.SubscriptionPlans ADD FeatureLimitsJson NVARCHAR(4000) NULL;
+    IF COL_LENGTH('dbo.SubscriptionPlans','DisplayOrder') IS NULL
+        ALTER TABLE dbo.SubscriptionPlans ADD DisplayOrder INT NOT NULL CONSTRAINT DF_SubscriptionPlans_DisplayOrder DEFAULT(0);
+
+    IF OBJECT_ID(N'dbo.CK_SubscriptionPlans_Limits',N'C') IS NOT NULL
+        ALTER TABLE dbo.SubscriptionPlans DROP CONSTRAINT CK_SubscriptionPlans_Limits;
+    EXEC sys.sp_executesql N'ALTER TABLE dbo.SubscriptionPlans WITH CHECK ADD CONSTRAINT CK_SubscriptionPlans_Limits CHECK(MaxStores>0 AND MaxUsers>0 AND MaxStaff>0 AND MaxCameras>0 AND (MaxMonthlyRecognitions IS NULL OR MaxMonthlyRecognitions>0) AND (MaxMonthlyApiCalls IS NULL OR MaxMonthlyApiCalls>0));';
+    IF OBJECT_ID(N'dbo.CK_SubscriptionPlans_TrialDisplay',N'C') IS NULL
+        EXEC sys.sp_executesql N'ALTER TABLE dbo.SubscriptionPlans WITH CHECK ADD CONSTRAINT CK_SubscriptionPlans_TrialDisplay CHECK(TrialDays>=0 AND DisplayOrder>=0);';
+    IF OBJECT_ID(N'dbo.CK_SubscriptionPlans_FeatureLimitsJson',N'C') IS NULL
+        EXEC sys.sp_executesql N'ALTER TABLE dbo.SubscriptionPlans WITH CHECK ADD CONSTRAINT CK_SubscriptionPlans_FeatureLimitsJson CHECK(FeatureLimitsJson IS NULL OR ISJSON(FeatureLimitsJson)=1);';
+    IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SubscriptionPlans') AND name=N'IX_SubscriptionPlans_Display')
+        EXEC sys.sp_executesql N'CREATE INDEX IX_SubscriptionPlans_Display ON dbo.SubscriptionPlans(IsActive,DisplayOrder,PlanName);';
+
+    /* =========================================================
+       9B — Effective tenant quotas and subscription lifecycle
+       ========================================================= */
+    IF COL_LENGTH('dbo.Tenants','MaxStaff') IS NULL
+    BEGIN
+        ALTER TABLE dbo.Tenants ADD MaxStaff INT NULL;
+        EXEC sys.sp_executesql N'UPDATE dbo.Tenants SET MaxStaff=MaxUsers WHERE MaxStaff IS NULL;';
+        EXEC sys.sp_executesql N'ALTER TABLE dbo.Tenants ALTER COLUMN MaxStaff INT NOT NULL;';
+    END;
+    IF OBJECT_ID(N'dbo.CK_Tenants_Quotas',N'C') IS NOT NULL
+        ALTER TABLE dbo.Tenants DROP CONSTRAINT CK_Tenants_Quotas;
+    EXEC sys.sp_executesql N'ALTER TABLE dbo.Tenants WITH CHECK ADD CONSTRAINT CK_Tenants_Quotas CHECK(MaxStores>0 AND MaxUsers>0 AND MaxStaff>0 AND MaxCameras>0);';
+
+    IF COL_LENGTH('dbo.TenantSubscriptions','TrialEndUtc') IS NULL
+        ALTER TABLE dbo.TenantSubscriptions ADD TrialEndUtc DATETIME2(7) NULL;
+    IF COL_LENGTH('dbo.TenantSubscriptions','CurrentPeriodStartUtc') IS NULL
+        ALTER TABLE dbo.TenantSubscriptions ADD CurrentPeriodStartUtc DATETIME2(7) NULL;
+    IF COL_LENGTH('dbo.TenantSubscriptions','CurrentPeriodEndUtc') IS NULL
+        ALTER TABLE dbo.TenantSubscriptions ADD CurrentPeriodEndUtc DATETIME2(7) NULL;
+    IF COL_LENGTH('dbo.TenantSubscriptions','CancelAtPeriodEnd') IS NULL
+        ALTER TABLE dbo.TenantSubscriptions ADD CancelAtPeriodEnd BIT NOT NULL CONSTRAINT DF_TenantSubscriptions_CancelAtPeriodEnd DEFAULT(0);
+    IF COL_LENGTH('dbo.TenantSubscriptions','CancelledUtc') IS NULL
+        ALTER TABLE dbo.TenantSubscriptions ADD CancelledUtc DATETIME2(7) NULL;
+    EXEC sys.sp_executesql N'UPDATE dbo.TenantSubscriptions SET CurrentPeriodStartUtc=COALESCE(CurrentPeriodStartUtc,StartsUtc),CurrentPeriodEndUtc=COALESCE(CurrentPeriodEndUtc,EndsUtc),CancelAtPeriodEnd=CASE WHEN AutoRenew=0 THEN 1 ELSE CancelAtPeriodEnd END;';
+    IF OBJECT_ID(N'dbo.CK_TenantSubscriptions_CurrentPeriod',N'C') IS NULL
+        EXEC sys.sp_executesql N'ALTER TABLE dbo.TenantSubscriptions WITH CHECK ADD CONSTRAINT CK_TenantSubscriptions_CurrentPeriod CHECK(CurrentPeriodEndUtc IS NULL OR (CurrentPeriodStartUtc IS NOT NULL AND CurrentPeriodEndUtc>CurrentPeriodStartUtc));';
+
+    /* =========================================================
+       9C — Platform invoices. Never use RetailInvoices here.
+       ========================================================= */
+    IF OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL
+    BEGIN
+        CREATE TABLE dbo.PlatformInvoices(
+            Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PlatformInvoices PRIMARY KEY,
+            TenantId BIGINT NOT NULL,
+            TenantSubscriptionId BIGINT NOT NULL,
+            InvoiceNumber NVARCHAR(60) NOT NULL,
+            Currency CHAR(3) NOT NULL,
+            InvoiceUtc DATETIME2(7) NOT NULL,
+            DueUtc DATETIME2(7) NOT NULL,
+            Status TINYINT NOT NULL,
+            Subtotal DECIMAL(19,4) NOT NULL,
+            DiscountAmount DECIMAL(19,4) NOT NULL,
+            TaxAmount DECIMAL(19,4) NOT NULL,
+            Total DECIMAL(19,4) NOT NULL,
+            PaidAmount DECIMAL(19,4) NOT NULL,
+            CreatedUtc DATETIME2(7) NOT NULL,
+            UpdatedUtc DATETIME2(7) NOT NULL,
+            RowVersion BINARY(16) NOT NULL,
+            CONSTRAINT FK_PlatformInvoices_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+            CONSTRAINT FK_PlatformInvoices_TenantSubscriptions FOREIGN KEY(TenantSubscriptionId) REFERENCES dbo.TenantSubscriptions(Id),
+            CONSTRAINT CK_PlatformInvoices_Status CHECK(Status BETWEEN 1 AND 5),
+            CONSTRAINT CK_PlatformInvoices_Amounts CHECK(Subtotal>=0 AND DiscountAmount>=0 AND TaxAmount>=0 AND Total>=0 AND PaidAmount>=0 AND PaidAmount<=Total),
+            CONSTRAINT CK_PlatformInvoices_Due CHECK(DueUtc>=InvoiceUtc)
+        );
+    END;
+    IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PlatformInvoices') AND name=N'UX_PlatformInvoices_Tenant_Number')
+        CREATE UNIQUE INDEX UX_PlatformInvoices_Tenant_Number ON dbo.PlatformInvoices(TenantId,InvoiceNumber);
+    IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PlatformInvoices') AND name=N'IX_PlatformInvoices_Tenant_Status_Date')
+        CREATE INDEX IX_PlatformInvoices_Tenant_Status_Date ON dbo.PlatformInvoices(TenantId,Status,InvoiceUtc DESC);
+
+    IF OBJECT_ID(N'dbo.PlatformInvoiceItems',N'U') IS NULL
+    BEGIN
+        CREATE TABLE dbo.PlatformInvoiceItems(
+            Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PlatformInvoiceItems PRIMARY KEY,
+            TenantId BIGINT NOT NULL,
+            PlatformInvoiceId BIGINT NOT NULL,
+            SubscriptionPlanId BIGINT NULL,
+            PlanName NVARCHAR(150) NOT NULL,
+            Description NVARCHAR(500) NULL,
+            Quantity DECIMAL(19,4) NOT NULL,
+            Rate DECIMAL(19,4) NOT NULL,
+            DiscountAmount DECIMAL(19,4) NOT NULL,
+            TaxAmount DECIMAL(19,4) NOT NULL,
+            Subtotal DECIMAL(19,4) NOT NULL,
+            Total DECIMAL(19,4) NOT NULL,
+            CreatedUtc DATETIME2(7) NOT NULL,
+            CONSTRAINT FK_PlatformInvoiceItems_PlatformInvoices FOREIGN KEY(PlatformInvoiceId) REFERENCES dbo.PlatformInvoices(Id) ON DELETE CASCADE,
+            CONSTRAINT CK_PlatformInvoiceItems_Amounts CHECK(Quantity>0 AND Rate>=0 AND DiscountAmount>=0 AND TaxAmount>=0 AND Subtotal>=0 AND Total>=0)
+        );
+    END;
+    IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PlatformInvoiceItems') AND name=N'IX_PlatformInvoiceItems_Tenant_Invoice')
+        CREATE INDEX IX_PlatformInvoiceItems_Tenant_Invoice ON dbo.PlatformInvoiceItems(TenantId,PlatformInvoiceId);
+
+    /* =========================================================
+       9D — Provider-neutral idempotent platform payments
+       ========================================================= */
+    IF OBJECT_ID(N'dbo.PlatformPayments',N'U') IS NULL
+    BEGIN
+        CREATE TABLE dbo.PlatformPayments(
+            Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PlatformPayments PRIMARY KEY,
+            TenantId BIGINT NOT NULL,
+            PlatformInvoiceId BIGINT NOT NULL,
+            PaymentMethod NVARCHAR(50) NOT NULL,
+            Amount DECIMAL(19,4) NOT NULL,
+            Currency CHAR(3) NOT NULL,
+            GatewayReference NVARCHAR(150) NULL,
+            TransactionReference NVARCHAR(150) NOT NULL,
+            PaymentUtc DATETIME2(7) NOT NULL,
+            Status TINYINT NOT NULL,
+            CreatedUtc DATETIME2(7) NOT NULL,
+            UpdatedUtc DATETIME2(7) NOT NULL,
+            CONSTRAINT FK_PlatformPayments_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+            CONSTRAINT FK_PlatformPayments_PlatformInvoices FOREIGN KEY(PlatformInvoiceId) REFERENCES dbo.PlatformInvoices(Id),
+            CONSTRAINT CK_PlatformPayments_Status CHECK(Status BETWEEN 1 AND 4),
+            CONSTRAINT CK_PlatformPayments_Amount CHECK(Amount>0)
+        );
+    END;
+    IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PlatformPayments') AND name=N'UX_PlatformPayments_Tenant_TransactionReference')
+        CREATE UNIQUE INDEX UX_PlatformPayments_Tenant_TransactionReference ON dbo.PlatformPayments(TenantId,TransactionReference);
+    IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PlatformPayments') AND name=N'IX_PlatformPayments_Tenant_Invoice_Status')
+        CREATE INDEX IX_PlatformPayments_Tenant_Invoice_Status ON dbo.PlatformPayments(TenantId,PlatformInvoiceId,Status);
+
+    /* =========================================================
+       9F — Platform-admin vs tenant read-only permission split.
+       Repair names left by an earlier failed Phase 9 attempt if present.
+       ========================================================= */
+    IF EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=2 AND Name=N'PlatformBilling.Subscriptions.View')
+       AND NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Name=N'TenantPlatformBilling.Subscriptions.View')
+        UPDATE dbo.Permissions SET Name=N'TenantPlatformBilling.Subscriptions.View',Description=N'View this tenant CustSearch platform subscription.' WHERE Scope=2 AND Name=N'PlatformBilling.Subscriptions.View';
+    IF EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=2 AND Name=N'PlatformBilling.Invoices.View')
+       AND NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Name=N'TenantPlatformBilling.Invoices.View')
+        UPDATE dbo.Permissions SET Name=N'TenantPlatformBilling.Invoices.View',Description=N'View this tenant CustSearch platform invoices.' WHERE Scope=2 AND Name=N'PlatformBilling.Invoices.View';
+    IF EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=2 AND Name=N'PlatformBilling.Payments.View')
+       AND NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Name=N'TenantPlatformBilling.Payments.View')
+        UPDATE dbo.Permissions SET Name=N'TenantPlatformBilling.Payments.View',Description=N'View this tenant CustSearch platform payments.' WHERE Scope=2 AND Name=N'PlatformBilling.Payments.View';
+
+    DECLARE @PlatformPermissions TABLE(Name NVARCHAR(150),Description NVARCHAR(300));
+    INSERT INTO @PlatformPermissions VALUES
+      (N'PlatformBilling.Plans.View',N'View CustSearch subscription plans.'),
+      (N'PlatformBilling.Plans.Manage',N'Manage CustSearch subscription plans.'),
+      (N'PlatformBilling.Subscriptions.View',N'View tenant platform subscriptions.'),
+      (N'PlatformBilling.Subscriptions.Manage',N'Manage tenant platform subscriptions, invoices and payment callbacks.'),
+      (N'PlatformBilling.Invoices.View',N'View CustSearch platform invoices.'),
+      (N'PlatformBilling.Payments.View',N'View CustSearch platform payments.');
+    INSERT INTO dbo.Permissions(Scope,Name,Description,IsActive,CreatedUtc)
+    SELECT 1,p.Name,p.Description,1,SYSUTCDATETIME() FROM @PlatformPermissions p
+    WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Name=p.Name);
+
+    DECLARE @TenantPermissions TABLE(Name NVARCHAR(150),Description NVARCHAR(300));
+    INSERT INTO @TenantPermissions VALUES
+      (N'TenantPlatformBilling.Subscriptions.View',N'View this tenant CustSearch platform subscription.'),
+      (N'TenantPlatformBilling.Invoices.View',N'View this tenant CustSearch platform invoices.'),
+      (N'TenantPlatformBilling.Payments.View',N'View this tenant CustSearch platform payments.');
+    INSERT INTO dbo.Permissions(Scope,Name,Description,IsActive,CreatedUtc)
+    SELECT 2,p.Name,p.Description,1,SYSUTCDATETIME() FROM @TenantPermissions p
+    WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Name=p.Name);
+
+    INSERT INTO dbo.RolePermissions(RoleId,PermissionId)
+    SELECT r.Id,p.Id
+    FROM dbo.Roles r
+    JOIN dbo.Permissions p ON p.Scope=1 AND p.IsActive=1 AND p.Name LIKE N'PlatformBilling.%'
+    WHERE r.Scope=1 AND r.IsActive=1 AND (
+      r.NormalizedName IN(N'PLATFORMSUPERADMIN',N'PLATFORMBILLINGADMIN') OR
+      (r.NormalizedName IN(N'PLATFORMOPERATIONSADMIN',N'PLATFORMAUDITOR') AND p.Name IN(N'PlatformBilling.Plans.View',N'PlatformBilling.Subscriptions.View',N'PlatformBilling.Invoices.View',N'PlatformBilling.Payments.View')))
+      AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+
+    INSERT INTO dbo.RolePermissions(RoleId,PermissionId)
+    SELECT r.Id,p.Id
+    FROM dbo.Roles r
+    JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1
+      AND p.Name IN(N'TenantPlatformBilling.Subscriptions.View',N'TenantPlatformBilling.Invoices.View',N'TenantPlatformBilling.Payments.View')
+    WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName IN(N'TENANTADMIN',N'TENANTOWNER',N'SHOPOWNER',N'AUDITOR')
+      AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+
+    /* =========================================================
+       9G — Read-only stored procedures for platform/tenant views.
+       Tenant API callers pass TenantId from trusted server context.
+       ========================================================= */
+    EXEC sys.sp_executesql N'
+CREATE OR ALTER PROCEDURE dbo.PlatformBilling_Plan_List
+    @IncludeInactive BIT=0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT Id,PlanCode,PlanName AS [Name],Description,MonthlyPrice,AnnualPrice,Currency,TrialDays,MaxStores,MaxUsers,MaxStaff,MaxCameras,MaxMonthlyRecognitions,MaxMonthlyApiCalls,FeatureLimitsJson,IsActive,DisplayOrder,CreatedUtc,UpdatedUtc
+    FROM dbo.SubscriptionPlans
+    WHERE @IncludeInactive=1 OR IsActive=1
+    ORDER BY DisplayOrder,PlanName,Id;
+END;';
+
+    EXEC sys.sp_executesql N'
+CREATE OR ALTER PROCEDURE dbo.PlatformBilling_Subscription_List
+    @TenantId BIGINT=NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ts.Id,ts.TenantId,t.TenantCode,t.DisplayName AS TenantName,ts.SubscriptionPlanId AS PlanId,sp.PlanCode,sp.PlanName,ts.BillingCycle,ts.Status,ts.StartsUtc AS StartUtc,ts.TrialEndUtc,ts.CurrentPeriodStartUtc,ts.CurrentPeriodEndUtc,ts.CancelAtPeriodEnd,ts.CancelledUtc,t.MaxStores,t.MaxUsers,t.MaxStaff,t.MaxCameras
+    FROM dbo.TenantSubscriptions ts
+    INNER JOIN dbo.Tenants t ON t.Id=ts.TenantId
+    INNER JOIN dbo.SubscriptionPlans sp ON sp.Id=ts.SubscriptionPlanId
+    WHERE @TenantId IS NULL OR ts.TenantId=@TenantId
+    ORDER BY ts.StartsUtc DESC,ts.Id DESC;
+END;';
+
+    EXEC sys.sp_executesql N'
+CREATE OR ALTER PROCEDURE dbo.PlatformBilling_Invoice_List
+    @TenantId BIGINT=NULL,
+    @PageNumber INT=1,
+    @PageSize INT=50
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @PageNumber<1 SET @PageNumber=1;
+    IF @PageSize<1 SET @PageSize=50;
+    IF @PageSize>200 SET @PageSize=200;
+    SELECT i.Id,i.TenantId,i.TenantSubscriptionId,i.InvoiceNumber,i.Currency,i.InvoiceUtc,i.DueUtc,i.Status,i.Subtotal,i.DiscountAmount,i.TaxAmount,i.Total,i.PaidAmount,i.CreatedUtc,i.UpdatedUtc,COUNT_BIG(1) OVER() AS TotalCount
+    FROM dbo.PlatformInvoices i
+    WHERE @TenantId IS NULL OR i.TenantId=@TenantId
+    ORDER BY i.InvoiceUtc DESC,i.Id DESC
+    OFFSET (@PageNumber-1)*@PageSize ROWS FETCH NEXT @PageSize ROWS ONLY;
+END;';
+
+    EXEC sys.sp_executesql N'
+CREATE OR ALTER PROCEDURE dbo.PlatformBilling_Invoice_Get
+    @PlatformInvoiceId BIGINT,
+    @TenantId BIGINT=NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT i.Id,i.TenantId,i.TenantSubscriptionId,i.InvoiceNumber,i.Currency,i.InvoiceUtc,i.DueUtc,i.Status,i.Subtotal,i.DiscountAmount,i.TaxAmount,i.Total,i.PaidAmount,i.CreatedUtc,i.UpdatedUtc
+    FROM dbo.PlatformInvoices i
+    WHERE i.Id=@PlatformInvoiceId AND (@TenantId IS NULL OR i.TenantId=@TenantId);
+    SELECT x.Id,x.TenantId,x.PlatformInvoiceId,x.SubscriptionPlanId,x.PlanName,x.Description,x.Quantity,x.Rate,x.DiscountAmount,x.TaxAmount,x.Subtotal,x.Total,x.CreatedUtc
+    FROM dbo.PlatformInvoiceItems x
+    INNER JOIN dbo.PlatformInvoices i ON i.Id=x.PlatformInvoiceId
+    WHERE x.PlatformInvoiceId=@PlatformInvoiceId AND (@TenantId IS NULL OR i.TenantId=@TenantId)
+    ORDER BY x.Id;
+END;';
+
+    EXEC sys.sp_executesql N'
+CREATE OR ALTER PROCEDURE dbo.PlatformBilling_Payment_List
+    @TenantId BIGINT=NULL,
+    @PlatformInvoiceId BIGINT=NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT p.Id,p.TenantId,p.PlatformInvoiceId,p.PaymentMethod,p.Amount,p.Currency,p.GatewayReference,p.TransactionReference,p.PaymentUtc,p.Status,p.CreatedUtc,p.UpdatedUtc
+    FROM dbo.PlatformPayments p
+    WHERE (@TenantId IS NULL OR p.TenantId=@TenantId) AND (@PlatformInvoiceId IS NULL OR p.PlatformInvoiceId=@PlatformInvoiceId)
+    ORDER BY p.PaymentUtc DESC,p.Id DESC;
+END;';
+
+    EXEC sys.sp_executesql N'
+CREATE OR ALTER PROCEDURE dbo.TenantPlatformBilling_Summary_Get
+    @TenantId BIGINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @TenantId<=0 THROW 51870,''TenantId must be positive.'',1;
+    SELECT TOP(1) t.Id AS TenantId,t.TenantCode,t.DisplayName AS TenantName,ts.Id AS TenantSubscriptionId,ts.SubscriptionPlanId AS PlanId,sp.PlanCode,sp.PlanName,ts.BillingCycle,ts.Status AS SubscriptionStatus,ts.StartsUtc AS StartUtc,ts.TrialEndUtc,ts.CurrentPeriodStartUtc,ts.CurrentPeriodEndUtc AS RenewalUtc,ts.CancelAtPeriodEnd,ts.CancelledUtc,t.MaxStores,t.MaxUsers,t.MaxStaff,t.MaxCameras,
+      (SELECT COUNT_BIG(1) FROM dbo.PlatformInvoices pi WHERE pi.TenantId=t.Id) AS InvoiceCount,
+      (SELECT TOP(1) pp.Status FROM dbo.PlatformPayments pp WHERE pp.TenantId=t.Id ORDER BY pp.PaymentUtc DESC,pp.Id DESC) AS LatestPaymentStatus
+    FROM dbo.Tenants t
+    LEFT JOIN dbo.TenantSubscriptions ts ON ts.Id=(SELECT TOP(1) ts2.Id FROM dbo.TenantSubscriptions ts2 WHERE ts2.TenantId=t.Id ORDER BY ts2.StartsUtc DESC,ts2.Id DESC)
+    LEFT JOIN dbo.SubscriptionPlans sp ON sp.Id=ts.SubscriptionPlanId
+    WHERE t.Id=@TenantId;
+END;';
+
+    /* Version row is written only after all Phase 9 objects compile. */
+    IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')
+        INSERT INTO dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy)
+        VALUES(N'V1.8.0',N'Phase 9 platform plans, authoritative tenant subscriptions, separate platform invoices/payments and billing read procedures',SYSUTCDATETIME(),SUSER_SNAME());
+
+    IF OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformInvoiceItems',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformPayments',N'U') IS NULL
+        THROW 51880,'Phase 9 platform billing tables are missing.',1;
+    IF OBJECT_ID(N'dbo.PlatformBilling_Plan_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Subscription_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Invoice_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Invoice_Get',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Payment_List',N'P') IS NULL OR OBJECT_ID(N'dbo.TenantPlatformBilling_Summary_Get',N'P') IS NULL
+        THROW 51881,'Phase 9 stored procedures are missing.',1;
+    IF NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=1 AND Name=N'PlatformBilling.Subscriptions.View') OR NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=2 AND Name=N'TenantPlatformBilling.Subscriptions.View')
+        THROW 51882,'Phase 9 platform/tenant permission separation is missing.',1;
+    IF EXISTS(SELECT 1 FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.PlatformInvoices') AND referenced_object_id=OBJECT_ID(N'dbo.RetailInvoices'))
+        THROW 51883,'PlatformInvoices must never reference RetailInvoices.',1;
+    IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1
+        THROW 51884,'V1.8.0 must exist exactly once.',1;
+
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF XACT_STATE()<>0 ROLLBACK TRANSACTION;
+    THROW;
+END CATCH;
+
+IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')<>1 THROW 51890,'V1.8.0 version row must exist exactly once.',1;
+IF OBJECT_ID(N'dbo.PlatformInvoices',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformInvoiceItems',N'U') IS NULL OR OBJECT_ID(N'dbo.PlatformPayments',N'U') IS NULL THROW 51891,'Phase 9 platform billing tables are missing.',1;
+IF COL_LENGTH('dbo.Tenants','MaxStaff') IS NULL OR COL_LENGTH('dbo.SubscriptionPlans','MaxStaff') IS NULL OR COL_LENGTH('dbo.TenantSubscriptions','CurrentPeriodEndUtc') IS NULL THROW 51892,'Phase 9 subscription/quota columns are missing.',1;
+IF OBJECT_ID(N'dbo.PlatformBilling_Plan_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Subscription_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Invoice_List',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Invoice_Get',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformBilling_Payment_List',N'P') IS NULL OR OBJECT_ID(N'dbo.TenantPlatformBilling_Summary_Get',N'P') IS NULL THROW 51893,'Phase 9 platform billing procedures are missing.',1;
+IF NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=1 AND Name=N'PlatformBilling.Subscriptions.View') OR NOT EXISTS(SELECT 1 FROM dbo.Permissions WHERE Scope=2 AND Name=N'TenantPlatformBilling.Subscriptions.View') THROW 51894,'Phase 9 platform/tenant billing permission separation is missing.',1;
+
+-- ============================================================
+-- PHASE 10 - PREFERENCES & STAFF VOICE TAGGING
+-- VERSION: V1.9.0
+-- ============================================================
+/*
+ CustSearch AI — Phase 10 production database upgrade
+ Version: V1.9.0
+ Scope: factual customer preference signals, derived scores, verified-household preference tags,
+        store/tenant category aliases, versioned recalculation weights and confirmation-controlled staff voice sessions.
+ Rules: SQL Server 2022, repeat-safe, no EF migrations, UTC timestamps.
+ Privacy: VisitParty/co-visit is NEVER used to create Household preference truth.
+ Voice: Phase 5 StoreVoiceCommandSettings + trigger aliases remain the trigger master; voice category text resolves only to existing ProductCategories/ProductCategoryAliases.
+*/
+USE [CustSearch_AI];
+GO
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+GO
+
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.8.0')
+    THROW 52000,'Phase 9 V1.8.0 must be installed before Phase 10.',1;
+GO
+
+-- ============================================================
+-- 10A — FACTUAL CUSTOMER PREFERENCE SIGNALS
+-- ============================================================
+IF OBJECT_ID(N'dbo.CustomerPreferenceSignals',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CustomerPreferenceSignals
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CustomerPreferenceSignals PRIMARY KEY,
+        TenantId BIGINT NOT NULL, StoreId BIGINT NULL, CustomerId BIGINT NOT NULL,
+        PreferenceType TINYINT NOT NULL, ReferenceId BIGINT NULL, Value NVARCHAR(200) NULL,
+        SignalScore DECIMAL(6,2) NULL, Source TINYINT NOT NULL, Confidence DECIMAL(6,2) NULL,
+        FirstObservedUtc DATETIME2(7) NOT NULL, LastObservedUtc DATETIME2(7) NOT NULL,
+        IsActive BIT NOT NULL CONSTRAINT DF_CustomerPreferenceSignals_IsActive DEFAULT(1),
+        CreatedByUserId BIGINT NULL, Reason NVARCHAR(500) NULL,
+        CreatedUtc DATETIME2(7) NOT NULL, UpdatedUtc DATETIME2(7) NOT NULL,
+        CONSTRAINT FK_CustomerPreferenceSignals_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+        CONSTRAINT FK_CustomerPreferenceSignals_Customers_TenantCustomer FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),
+        CONSTRAINT FK_CustomerPreferenceSignals_Stores_TenantStore FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),
+        CONSTRAINT FK_CustomerPreferenceSignals_Users FOREIGN KEY(CreatedByUserId) REFERENCES dbo.Users(Id),
+        CONSTRAINT CK_CustomerPreferenceSignals_Type CHECK(PreferenceType BETWEEN 1 AND 5),
+        CONSTRAINT CK_CustomerPreferenceSignals_Source CHECK(Source BETWEEN 1 AND 4),
+        CONSTRAINT CK_CustomerPreferenceSignals_Identity CHECK(ReferenceId IS NOT NULL OR NULLIF(LTRIM(RTRIM(Value)),N'') IS NOT NULL),
+        CONSTRAINT CK_CustomerPreferenceSignals_Score CHECK(SignalScore IS NULL OR SignalScore BETWEEN 0 AND 100),
+        CONSTRAINT CK_CustomerPreferenceSignals_Confidence CHECK(Confidence IS NULL OR Confidence BETWEEN 0 AND 100),
+        CONSTRAINT CK_CustomerPreferenceSignals_Period CHECK(LastObservedUtc>=FirstObservedUtc)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CustomerPreferenceSignals') AND name=N'UX_CustomerPreferenceSignals_Tenant_Id') CREATE UNIQUE INDEX UX_CustomerPreferenceSignals_Tenant_Id ON dbo.CustomerPreferenceSignals(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CustomerPreferenceSignals') AND name=N'IX_CustomerPreferenceSignals_Tenant_Customer_Active') CREATE INDEX IX_CustomerPreferenceSignals_Tenant_Customer_Active ON dbo.CustomerPreferenceSignals(TenantId,CustomerId,IsActive,LastObservedUtc DESC);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CustomerPreferenceSignals') AND name=N'IX_CustomerPreferenceSignals_Tenant_Store_Customer') CREATE INDEX IX_CustomerPreferenceSignals_Tenant_Store_Customer ON dbo.CustomerPreferenceSignals(TenantId,StoreId,CustomerId);
+GO
+
+-- ============================================================
+-- 10B — EXPLICIT HOUSEHOLD TAGS; only verified HouseholdMembers are aggregated by reads.
+-- ============================================================
+IF OBJECT_ID(N'dbo.HouseholdPreferenceTags',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.HouseholdPreferenceTags
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_HouseholdPreferenceTags PRIMARY KEY,
+        TenantId BIGINT NOT NULL, HouseholdId BIGINT NOT NULL, PreferenceType TINYINT NOT NULL,
+        ReferenceId BIGINT NULL, Value NVARCHAR(200) NOT NULL, Source TINYINT NOT NULL,
+        CreatedByUserId BIGINT NOT NULL, Reason NVARCHAR(500) NULL,
+        IsActive BIT NOT NULL CONSTRAINT DF_HouseholdPreferenceTags_IsActive DEFAULT(1),
+        CreatedUtc DATETIME2(7) NOT NULL, UpdatedUtc DATETIME2(7) NOT NULL,
+        CONSTRAINT FK_HouseholdPreferenceTags_Households_TenantHousehold FOREIGN KEY(TenantId,HouseholdId) REFERENCES dbo.Households(TenantId,Id),
+        CONSTRAINT FK_HouseholdPreferenceTags_Users FOREIGN KEY(CreatedByUserId) REFERENCES dbo.Users(Id),
+        CONSTRAINT CK_HouseholdPreferenceTags_Type CHECK(PreferenceType BETWEEN 1 AND 5),
+        CONSTRAINT CK_HouseholdPreferenceTags_Source CHECK(Source BETWEEN 1 AND 3),
+        CONSTRAINT CK_HouseholdPreferenceTags_Value CHECK(NULLIF(LTRIM(RTRIM(Value)),N'') IS NOT NULL)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.HouseholdPreferenceTags') AND name=N'IX_HouseholdPreferenceTags_Tenant_Household_Active') CREATE INDEX IX_HouseholdPreferenceTags_Tenant_Household_Active ON dbo.HouseholdPreferenceTags(TenantId,HouseholdId,IsActive,CreatedUtc DESC);
+GO
+
+-- ============================================================
+-- 10C/10D — CATEGORY VOICE ALIASES. They map speech to existing ProductCategories only.
+-- StoreId NULL means tenant-wide alias; duplicate phrases may map to multiple categories so ambiguity can be confirmed safely.
+-- ============================================================
+IF OBJECT_ID(N'dbo.ProductCategoryAliases',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProductCategoryAliases
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ProductCategoryAliases PRIMARY KEY,
+        TenantId BIGINT NOT NULL, StoreId BIGINT NULL, ProductCategoryId BIGINT NOT NULL,
+        AliasText NVARCHAR(150) NOT NULL, NormalizedAliasText NVARCHAR(150) NOT NULL,
+        LanguageCode NVARCHAR(20) NOT NULL, IsActive BIT NOT NULL CONSTRAINT DF_ProductCategoryAliases_IsActive DEFAULT(1),
+        CreatedByUserId BIGINT NOT NULL, CreatedUtc DATETIME2(7) NOT NULL, UpdatedUtc DATETIME2(7) NOT NULL,
+        CONSTRAINT FK_ProductCategoryAliases_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+        CONSTRAINT FK_ProductCategoryAliases_Stores_TenantStore FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),
+        CONSTRAINT FK_ProductCategoryAliases_Categories_TenantCategory FOREIGN KEY(TenantId,ProductCategoryId) REFERENCES dbo.ProductCategories(TenantId,Id),
+        CONSTRAINT FK_ProductCategoryAliases_Users FOREIGN KEY(CreatedByUserId) REFERENCES dbo.Users(Id),
+        CONSTRAINT CK_ProductCategoryAliases_Text CHECK(NULLIF(LTRIM(RTRIM(AliasText)),N'') IS NOT NULL AND NULLIF(LTRIM(RTRIM(NormalizedAliasText)),N'') IS NOT NULL)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ProductCategoryAliases') AND name=N'UX_ProductCategoryAliases_Scope_Phrase_Category') CREATE UNIQUE INDEX UX_ProductCategoryAliases_Scope_Phrase_Category ON dbo.ProductCategoryAliases(TenantId,StoreId,NormalizedAliasText,ProductCategoryId);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ProductCategoryAliases') AND name=N'IX_ProductCategoryAliases_Tenant_Category_Active') CREATE INDEX IX_ProductCategoryAliases_Tenant_Category_Active ON dbo.ProductCategoryAliases(TenantId,ProductCategoryId,IsActive);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ProductCategoryAliases') AND name=N'IX_ProductCategoryAliases_Tenant_Store_Phrase') CREATE INDEX IX_ProductCategoryAliases_Tenant_Store_Phrase ON dbo.ProductCategoryAliases(TenantId,StoreId,NormalizedAliasText,IsActive);
+GO
+
+-- ============================================================
+-- 10D — PHASE 5 VOICE MASTER RUNTIME EXTENSION
+-- ============================================================
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.StoreVoiceCommandSettings') AND name=N'UX_StoreVoiceCommandSettings_Tenant_Store') CREATE UNIQUE INDEX UX_StoreVoiceCommandSettings_Tenant_Store ON dbo.StoreVoiceCommandSettings(TenantId,StoreId);
+GO
+IF OBJECT_ID(N'dbo.StoreVoiceCommandRuntimeSettings',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.StoreVoiceCommandRuntimeSettings
+    (
+        StoreId BIGINT NOT NULL CONSTRAINT PK_StoreVoiceCommandRuntimeSettings PRIMARY KEY,
+        TenantId BIGINT NOT NULL, LanguageCode NVARCHAR(20) NOT NULL CONSTRAINT DF_StoreVoiceRuntime_Language DEFAULT(N'en-IN'),
+        RequireConfirmation BIT NOT NULL CONSTRAINT DF_StoreVoiceRuntime_Confirmation DEFAULT(1),
+        ListeningTimeoutSeconds INT NOT NULL CONSTRAINT DF_StoreVoiceRuntime_Timeout DEFAULT(30),
+        MinimumRecognitionConfidence DECIMAL(6,2) NOT NULL CONSTRAINT DF_StoreVoiceRuntime_Confidence DEFAULT(70),
+        CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_StoreVoiceRuntime_Created DEFAULT(SYSUTCDATETIME()),
+        UpdatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_StoreVoiceRuntime_Updated DEFAULT(SYSUTCDATETIME()),
+        CONSTRAINT FK_StoreVoiceRuntime_Stores_TenantStore FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),
+        CONSTRAINT CK_StoreVoiceRuntime_Timeout CHECK(ListeningTimeoutSeconds BETWEEN 3 AND 120),
+        CONSTRAINT CK_StoreVoiceRuntime_Confidence CHECK(MinimumRecognitionConfidence BETWEEN 0 AND 100)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.StoreVoiceCommandRuntimeSettings') AND name=N'UX_StoreVoiceRuntime_Tenant_Store') CREATE UNIQUE INDEX UX_StoreVoiceRuntime_Tenant_Store ON dbo.StoreVoiceCommandRuntimeSettings(TenantId,StoreId);
+GO
+
+-- ============================================================
+-- 10E — CONFIRMATION-CONTROLLED VOICE COMMAND SESSIONS
+-- ============================================================
+IF OBJECT_ID(N'dbo.VoiceCommandSessions',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.VoiceCommandSessions
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_VoiceCommandSessions PRIMARY KEY,
+        TenantId BIGINT NOT NULL, StoreId BIGINT NOT NULL, StaffUserId BIGINT NOT NULL, CustomerId BIGINT NOT NULL,
+        MatchedTrigger NVARCHAR(100) NOT NULL, RecognizedText NVARCHAR(250) NULL,
+        RecognitionConfidence DECIMAL(6,2) NULL, ProposedPreferenceType TINYINT NULL,
+        ProposedReferenceId BIGINT NULL, ProposedValue NVARCHAR(200) NULL,
+        ConfirmationRequired BIT NOT NULL, Status TINYINT NOT NULL,
+        ExpiresUtc DATETIME2(7) NOT NULL, ResolvedUtc DATETIME2(7) NULL,
+        CreatedUtc DATETIME2(7) NOT NULL, UpdatedUtc DATETIME2(7) NOT NULL,
+        CONSTRAINT FK_VoiceCommandSessions_Stores_TenantStore FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),
+        CONSTRAINT FK_VoiceCommandSessions_Customers_TenantCustomer FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),
+        CONSTRAINT FK_VoiceCommandSessions_Users FOREIGN KEY(StaffUserId) REFERENCES dbo.Users(Id),
+        CONSTRAINT CK_VoiceCommandSessions_Status CHECK(Status BETWEEN 1 AND 5),
+        CONSTRAINT CK_VoiceCommandSessions_Confidence CHECK(RecognitionConfidence IS NULL OR RecognitionConfidence BETWEEN 0 AND 100),
+        CONSTRAINT CK_VoiceCommandSessions_Type CHECK(ProposedPreferenceType IS NULL OR ProposedPreferenceType BETWEEN 1 AND 5),
+        CONSTRAINT CK_VoiceCommandSessions_Period CHECK(ExpiresUtc>CreatedUtc AND (ResolvedUtc IS NULL OR ResolvedUtc>=CreatedUtc))
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.VoiceCommandSessions') AND name=N'IX_VoiceCommandSessions_Tenant_Store_Customer_Status') CREATE INDEX IX_VoiceCommandSessions_Tenant_Store_Customer_Status ON dbo.VoiceCommandSessions(TenantId,StoreId,CustomerId,Status,CreatedUtc DESC);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.VoiceCommandSessions') AND name=N'IX_VoiceCommandSessions_Tenant_Staff_Created') CREATE INDEX IX_VoiceCommandSessions_Tenant_Staff_Created ON dbo.VoiceCommandSessions(TenantId,StaffUserId,CreatedUtc DESC);
+GO
+
+-- ============================================================
+-- 10F — VERSIONED RECALCULATION WEIGHTS + DERIVED SCORES
+-- ============================================================
+IF OBJECT_ID(N'dbo.PreferenceWeightVersions',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PreferenceWeightVersions
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PreferenceWeightVersions PRIMARY KEY,
+        TenantId BIGINT NOT NULL, VersionCode NVARCHAR(50) NOT NULL,
+        ManualStaffWeight DECIMAL(6,3) NOT NULL, PurchaseWeight DECIMAL(6,3) NOT NULL,
+        CategoryInteractionWeight DECIMAL(6,3) NOT NULL, VoiceConfirmedWeight DECIMAL(6,3) NOT NULL,
+        IsActive BIT NOT NULL CONSTRAINT DF_PreferenceWeightVersions_IsActive DEFAULT(1),
+        CreatedByUserId BIGINT NOT NULL, CreatedUtc DATETIME2(7) NOT NULL,
+        CONSTRAINT FK_PreferenceWeightVersions_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+        CONSTRAINT FK_PreferenceWeightVersions_Users FOREIGN KEY(CreatedByUserId) REFERENCES dbo.Users(Id),
+        CONSTRAINT CK_PreferenceWeightVersions_Weights CHECK(ManualStaffWeight BETWEEN 0 AND 10 AND PurchaseWeight BETWEEN 0 AND 10 AND CategoryInteractionWeight BETWEEN 0 AND 10 AND VoiceConfirmedWeight BETWEEN 0 AND 10)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PreferenceWeightVersions') AND name=N'UX_PreferenceWeightVersions_Tenant_Code') CREATE UNIQUE INDEX UX_PreferenceWeightVersions_Tenant_Code ON dbo.PreferenceWeightVersions(TenantId,VersionCode);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PreferenceWeightVersions') AND name=N'UX_PreferenceWeightVersions_Tenant_Id') CREATE UNIQUE INDEX UX_PreferenceWeightVersions_Tenant_Id ON dbo.PreferenceWeightVersions(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PreferenceWeightVersions') AND name=N'UX_PreferenceWeightVersions_OneActive') CREATE UNIQUE INDEX UX_PreferenceWeightVersions_OneActive ON dbo.PreferenceWeightVersions(TenantId) WHERE IsActive=1;
+GO
+IF OBJECT_ID(N'dbo.CustomerPreferenceScores',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CustomerPreferenceScores
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CustomerPreferenceScores PRIMARY KEY,
+        TenantId BIGINT NOT NULL, CustomerId BIGINT NOT NULL, PreferenceType TINYINT NOT NULL,
+        ReferenceId BIGINT NULL, Value NVARCHAR(200) NULL, Score DECIMAL(6,2) NOT NULL,
+        WeightVersionId BIGINT NOT NULL, CalculatedUtc DATETIME2(7) NOT NULL,
+        CONSTRAINT FK_CustomerPreferenceScores_Customers_TenantCustomer FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),
+        CONSTRAINT FK_CustomerPreferenceScores_Weight_TenantVersion FOREIGN KEY(TenantId,WeightVersionId) REFERENCES dbo.PreferenceWeightVersions(TenantId,Id),
+        CONSTRAINT CK_CustomerPreferenceScores_Type CHECK(PreferenceType BETWEEN 1 AND 5),
+        CONSTRAINT CK_CustomerPreferenceScores_Identity CHECK(ReferenceId IS NOT NULL OR NULLIF(LTRIM(RTRIM(Value)),N'') IS NOT NULL),
+        CONSTRAINT CK_CustomerPreferenceScores_Value CHECK(Score BETWEEN 0 AND 100)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CustomerPreferenceScores') AND name=N'IX_CustomerPreferenceScores_Tenant_Customer_Score') CREATE INDEX IX_CustomerPreferenceScores_Tenant_Customer_Score ON dbo.CustomerPreferenceScores(TenantId,CustomerId,Score DESC);
+GO
+
+-- ============================================================
+-- 10G — STABLE PERMISSIONS
+-- ============================================================
+DECLARE @Phase10Permissions TABLE(Name NVARCHAR(150),Description NVARCHAR(300));
+INSERT INTO @Phase10Permissions VALUES
+(N'Preferences.View',N'View customer and verified-household preferences.'),
+(N'Preferences.Manage',N'Manage explicit preferences and run recalculation.'),
+(N'VoiceCommands.Use',N'Use store-configured voice commands.'),
+(N'VoiceCommands.View',N'View store voice-command settings.'),
+(N'VoiceCommands.Configure',N'Configure store voice triggers, aliases and runtime controls.'),
+(N'VoiceCommands.Audit',N'View preference and voice-command audit history.');
+INSERT INTO dbo.Permissions(Scope,Name,Description,IsActive,CreatedUtc)
+SELECT 2,p.Name,p.Description,1,SYSUTCDATETIME() FROM @Phase10Permissions p
+WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Name=p.Name);
+GO
+
+-- ============================================================
+-- READ PROCEDURES — TenantId/store scope is applied before return/paging.
+-- ============================================================
+CREATE OR ALTER PROCEDURE dbo.CustomerPreference_Get @TenantId BIGINT,@CustomerId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL
+AS
+BEGIN
+ SET NOCOUNT ON;
+ IF NOT EXISTS(SELECT 1 FROM dbo.Customers c WHERE c.TenantId=@TenantId AND c.Id=@CustomerId AND (@AllowedStoreIdsCsv IS NULL OR EXISTS(SELECT 1 FROM dbo.CustomerStoreAssignments csa JOIN STRING_SPLIT(@AllowedStoreIdsCsv,N',') s ON TRY_CONVERT(BIGINT,s.value)=csa.StoreId WHERE csa.TenantId=@TenantId AND csa.CustomerId=c.Id))) RETURN;
+ SELECT Id,StoreId,CustomerId,PreferenceType,ReferenceId,Value,SignalScore,Source,Confidence,FirstObservedUtc,LastObservedUtc,IsActive,Reason FROM dbo.CustomerPreferenceSignals WHERE TenantId=@TenantId AND CustomerId=@CustomerId ORDER BY LastObservedUtc DESC,Id DESC;
+ SELECT Id,CustomerId,PreferenceType,ReferenceId,Value,Score,WeightVersionId,CalculatedUtc FROM dbo.CustomerPreferenceScores WHERE TenantId=@TenantId AND CustomerId=@CustomerId ORDER BY Score DESC,Id DESC;
+END;
+GO
+CREATE OR ALTER PROCEDURE dbo.HouseholdPreference_Get @TenantId BIGINT,@HouseholdId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL
+AS
+BEGIN
+ SET NOCOUNT ON;
+ IF NOT EXISTS(SELECT 1 FROM dbo.Households h WHERE h.TenantId=@TenantId AND h.Id=@HouseholdId AND h.IsActive=1) RETURN;
+ IF @AllowedStoreIdsCsv IS NOT NULL AND NOT EXISTS(SELECT 1 FROM dbo.HouseholdMembers hm JOIN dbo.CustomerStoreAssignments csa ON csa.TenantId=@TenantId AND csa.CustomerId=hm.CustomerId JOIN STRING_SPLIT(@AllowedStoreIdsCsv,N',') s ON TRY_CONVERT(BIGINT,s.value)=csa.StoreId WHERE hm.TenantId=@TenantId AND hm.HouseholdId=@HouseholdId AND hm.IsActive=1 AND hm.IsVerified=1) RETURN;
+ SELECT hm.CustomerId,c.FirstName,c.LastName,hm.RelationshipType,hm.RelationshipSource,hm.VerifiedUtc FROM dbo.HouseholdMembers hm JOIN dbo.Customers c ON c.TenantId=hm.TenantId AND c.Id=hm.CustomerId WHERE hm.TenantId=@TenantId AND hm.HouseholdId=@HouseholdId AND hm.IsActive=1 AND hm.IsVerified=1 AND (@AllowedStoreIdsCsv IS NULL OR EXISTS(SELECT 1 FROM dbo.CustomerStoreAssignments csa JOIN STRING_SPLIT(@AllowedStoreIdsCsv,N',') s ON TRY_CONVERT(BIGINT,s.value)=csa.StoreId WHERE csa.TenantId=@TenantId AND csa.CustomerId=hm.CustomerId));
+ SELECT s.CustomerId,s.PreferenceType,s.ReferenceId,s.Value,s.Score,s.WeightVersionId,s.CalculatedUtc FROM dbo.CustomerPreferenceScores s JOIN dbo.HouseholdMembers hm ON hm.TenantId=s.TenantId AND hm.CustomerId=s.CustomerId AND hm.HouseholdId=@HouseholdId AND hm.IsActive=1 AND hm.IsVerified=1 WHERE s.TenantId=@TenantId AND (@AllowedStoreIdsCsv IS NULL OR EXISTS(SELECT 1 FROM dbo.CustomerStoreAssignments csa JOIN STRING_SPLIT(@AllowedStoreIdsCsv,N',') x ON TRY_CONVERT(BIGINT,x.value)=csa.StoreId WHERE csa.TenantId=@TenantId AND csa.CustomerId=s.CustomerId));
+ SELECT Id,PreferenceType,ReferenceId,Value,Source,Reason,CreatedUtc FROM dbo.HouseholdPreferenceTags WHERE TenantId=@TenantId AND HouseholdId=@HouseholdId AND IsActive=1 ORDER BY CreatedUtc DESC;
+END;
+GO
+CREATE OR ALTER PROCEDURE dbo.ProductCategoryAlias_Search @TenantId BIGINT,@StoreId BIGINT=NULL,@ProductCategoryId BIGINT=NULL
+AS
+BEGIN
+ SET NOCOUNT ON;
+ SELECT a.Id,a.StoreId,a.ProductCategoryId,c.CategoryCode,c.Name CategoryName,a.AliasText,a.NormalizedAliasText,a.LanguageCode,a.IsActive,a.CreatedUtc
+ FROM dbo.ProductCategoryAliases a JOIN dbo.ProductCategories c ON c.TenantId=a.TenantId AND c.Id=a.ProductCategoryId
+ WHERE a.TenantId=@TenantId AND a.IsActive=1 AND (@StoreId IS NULL OR a.StoreId IS NULL OR a.StoreId=@StoreId) AND (@ProductCategoryId IS NULL OR a.ProductCategoryId=@ProductCategoryId)
+ ORDER BY a.AliasText,a.Id;
+END;
+GO
+CREATE OR ALTER PROCEDURE dbo.PreferenceWeight_GetActive @TenantId BIGINT
+AS
+BEGIN
+ SET NOCOUNT ON; SELECT TOP(1) Id,VersionCode,ManualStaffWeight,PurchaseWeight,CategoryInteractionWeight,VoiceConfirmedWeight,IsActive,CreatedUtc FROM dbo.PreferenceWeightVersions WHERE TenantId=@TenantId AND IsActive=1 ORDER BY Id DESC;
+END;
+GO
+CREATE OR ALTER PROCEDURE dbo.PreferenceAudit_Search @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@PageNumber INT=1,@PageSize INT=50
+AS
+BEGIN
+ SET NOCOUNT ON;IF @PageNumber<1 SET @PageNumber=1;IF @PageSize<1 SET @PageSize=50;IF @PageSize>200 SET @PageSize=200;
+ SELECT Id,StoreId,UserId,Action,EntityType,EntityId,BeforeJson,AfterJson,CorrelationId,CreatedUtc,COUNT_BIG(1) OVER() TotalCount FROM dbo.AuditLogs
+ WHERE TenantId=@TenantId AND (Action LIKE N'CustomerPreference%' OR Action LIKE N'HouseholdPreference%' OR Action LIKE N'PreferenceWeight%' OR Action LIKE N'VoiceCommand%' OR Action LIKE N'StoreVoice%' OR Action LIKE N'ProductCategoryAlias%')
+ AND (@AllowedStoreIdsCsv IS NULL OR StoreId IS NULL OR EXISTS(SELECT 1 FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') s WHERE TRY_CONVERT(BIGINT,s.value)=StoreId))
+ ORDER BY CreatedUtc DESC,Id DESC OFFSET (@PageNumber-1)*@PageSize ROWS FETCH NEXT @PageSize ROWS ONLY;
+END;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.9.0')
+    INSERT INTO dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy) VALUES(N'V1.9.0',N'Phase 10 factual preferences, category aliases, verified-household aggregation, dynamic voice confirmation and versioned recalculation',SYSUTCDATETIME(),SUSER_SNAME());
+GO
+IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.9.0')<>1 THROW 52090,'V1.9.0 DatabaseVersions row must exist exactly once.',1;
+GO
+
+-- ============================================================
+-- PHASE 11 - ALERTS & REAL-TIME
+-- VERSION: V1.10.0
+-- ============================================================
+/*
+ CustSearch AI — Phase 11 production database upgrade
+ Version: V1.10.0
+ Scope: tenant/store alerts, durable real-time recovery events and transactional notification outbox.
+ Rules: SQL Server 2022, repeat-safe, no EF migrations, UTC timestamps, no provider credentials.
+*/
+USE [CustSearch_AI];
+GO
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+GO
+
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.9.0')
+    THROW 53000,'Phase 10 V1.9.0 must be installed before Phase 11.',1;
+GO
+
+-- 11A — Authoritative tenant/store alert domain. StoreId NULL means tenant-wide.
+IF OBJECT_ID(N'dbo.Alerts',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Alerts
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Alerts PRIMARY KEY,
+        AlertType NVARCHAR(100) NOT NULL,
+        TenantId BIGINT NOT NULL,
+        StoreId BIGINT NULL,
+        Severity TINYINT NOT NULL,
+        Title NVARCHAR(200) NOT NULL,
+        Message NVARCHAR(2000) NOT NULL,
+        EntityType NVARCHAR(100) NOT NULL,
+        EntityId NVARCHAR(100) NULL,
+        CreatedUtc DATETIME2(7) NOT NULL,
+        AcknowledgedUtc DATETIME2(7) NULL,
+        AcknowledgedByUserId BIGINT NULL,
+        ResolvedUtc DATETIME2(7) NULL,
+        Status TINYINT NOT NULL,
+        CorrelationId NVARCHAR(64) NOT NULL,
+        DeduplicationKey NVARCHAR(200) NOT NULL,
+        CONSTRAINT FK_Alerts_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+        CONSTRAINT FK_Alerts_Stores_TenantStore FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),
+        CONSTRAINT FK_Alerts_AcknowledgedByUser FOREIGN KEY(AcknowledgedByUserId) REFERENCES dbo.Users(Id),
+        CONSTRAINT CK_Alerts_Severity CHECK(Severity BETWEEN 1 AND 3),
+        CONSTRAINT CK_Alerts_Status CHECK(Status BETWEEN 1 AND 5),
+        CONSTRAINT CK_Alerts_Acknowledgement CHECK((AcknowledgedUtc IS NULL AND AcknowledgedByUserId IS NULL) OR (AcknowledgedUtc IS NOT NULL AND AcknowledgedByUserId IS NOT NULL)),
+        CONSTRAINT CK_Alerts_Resolution CHECK(ResolvedUtc IS NULL OR ResolvedUtc>=CreatedUtc)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Alerts') AND name=N'UX_Alerts_Tenant_Id') CREATE UNIQUE INDEX UX_Alerts_Tenant_Id ON dbo.Alerts(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Alerts') AND name=N'UX_Alerts_Tenant_DeduplicationKey') CREATE UNIQUE INDEX UX_Alerts_Tenant_DeduplicationKey ON dbo.Alerts(TenantId,DeduplicationKey);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Alerts') AND name=N'IX_Alerts_Tenant_Store_Status_Created') CREATE INDEX IX_Alerts_Tenant_Store_Status_Created ON dbo.Alerts(TenantId,StoreId,Status,CreatedUtc DESC,Id DESC);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Alerts') AND name=N'IX_Alerts_Tenant_Entity') CREATE INDEX IX_Alerts_Tenant_Entity ON dbo.Alerts(TenantId,EntityType,EntityId);
+GO
+
+-- 11D/11E — Durable ordered events remain authoritative for reconnect recovery.
+IF OBJECT_ID(N'dbo.RealtimeEvents',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.RealtimeEvents
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RealtimeEvents PRIMARY KEY,
+        TenantId BIGINT NOT NULL,
+        StoreId BIGINT NULL,
+        AlertId BIGINT NOT NULL,
+        EventName NVARCHAR(100) NOT NULL,
+        ContractVersion INT NOT NULL,
+        PayloadJson NVARCHAR(MAX) NOT NULL,
+        OccurredUtc DATETIME2(7) NOT NULL,
+        CorrelationId NVARCHAR(64) NOT NULL,
+        DeduplicationKey NVARCHAR(200) NOT NULL,
+        CONSTRAINT FK_RealtimeEvents_Alerts_TenantAlert FOREIGN KEY(TenantId,AlertId) REFERENCES dbo.Alerts(TenantId,Id),
+        CONSTRAINT FK_RealtimeEvents_Stores_TenantStore FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),
+        CONSTRAINT CK_RealtimeEvents_ContractVersion CHECK(ContractVersion>=1),
+        CONSTRAINT CK_RealtimeEvents_Payload CHECK(ISJSON(PayloadJson)=1)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RealtimeEvents') AND name=N'UX_RealtimeEvents_Tenant_Id') CREATE UNIQUE INDEX UX_RealtimeEvents_Tenant_Id ON dbo.RealtimeEvents(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RealtimeEvents') AND name=N'UX_RealtimeEvents_Tenant_DeduplicationKey') CREATE UNIQUE INDEX UX_RealtimeEvents_Tenant_DeduplicationKey ON dbo.RealtimeEvents(TenantId,DeduplicationKey);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RealtimeEvents') AND name=N'IX_RealtimeEvents_Tenant_Store_Cursor') CREATE INDEX IX_RealtimeEvents_Tenant_Store_Cursor ON dbo.RealtimeEvents(TenantId,StoreId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RealtimeEvents') AND name=N'IX_RealtimeEvents_Tenant_Occurred') CREATE INDEX IX_RealtimeEvents_Tenant_Occurred ON dbo.RealtimeEvents(TenantId,OccurredUtc DESC);
+GO
+
+-- 11B/11G — Transactional channel outbox. External adapters run only after commit.
+IF OBJECT_ID(N'dbo.NotificationOutbox',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.NotificationOutbox
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_NotificationOutbox PRIMARY KEY,
+        TenantId BIGINT NOT NULL,
+        StoreId BIGINT NULL,
+        AlertId BIGINT NOT NULL,
+        RealtimeEventId BIGINT NOT NULL,
+        Channel NVARCHAR(30) NOT NULL,
+        EventType NVARCHAR(100) NOT NULL,
+        ContractVersion INT NOT NULL,
+        PayloadJson NVARCHAR(MAX) NOT NULL,
+        Status TINYINT NOT NULL,
+        AttemptCount INT NOT NULL CONSTRAINT DF_NotificationOutbox_AttemptCount DEFAULT(0),
+        NextAttemptUtc DATETIME2(7) NOT NULL,
+        LastError NVARCHAR(2000) NULL,
+        CorrelationId NVARCHAR(64) NOT NULL,
+        IdempotencyKey NVARCHAR(200) NOT NULL,
+        CreatedUtc DATETIME2(7) NOT NULL,
+        ProcessedUtc DATETIME2(7) NULL,
+        RowVersion ROWVERSION NOT NULL,
+        CONSTRAINT FK_NotificationOutbox_Alerts_TenantAlert FOREIGN KEY(TenantId,AlertId) REFERENCES dbo.Alerts(TenantId,Id),
+        CONSTRAINT FK_NotificationOutbox_RealtimeEvents_TenantEvent FOREIGN KEY(TenantId,RealtimeEventId) REFERENCES dbo.RealtimeEvents(TenantId,Id),
+        CONSTRAINT FK_NotificationOutbox_Stores_TenantStore FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),
+        CONSTRAINT CK_NotificationOutbox_Status CHECK(Status BETWEEN 1 AND 6),
+        CONSTRAINT CK_NotificationOutbox_AttemptCount CHECK(AttemptCount>=0),
+        CONSTRAINT CK_NotificationOutbox_ContractVersion CHECK(ContractVersion>=1),
+        CONSTRAINT CK_NotificationOutbox_Payload CHECK(ISJSON(PayloadJson)=1),
+        CONSTRAINT CK_NotificationOutbox_Processed CHECK((Status IN(3,6) AND ProcessedUtc IS NOT NULL) OR (Status NOT IN(3,6) AND ProcessedUtc IS NULL))
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.NotificationOutbox') AND name=N'UX_NotificationOutbox_IdempotencyKey') CREATE UNIQUE INDEX UX_NotificationOutbox_IdempotencyKey ON dbo.NotificationOutbox(IdempotencyKey);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.NotificationOutbox') AND name=N'IX_NotificationOutbox_Status_NextAttempt') CREATE INDEX IX_NotificationOutbox_Status_NextAttempt ON dbo.NotificationOutbox(Status,NextAttemptUtc,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.NotificationOutbox') AND name=N'IX_NotificationOutbox_Tenant_Status_Created') CREATE INDEX IX_NotificationOutbox_Tenant_Status_Created ON dbo.NotificationOutbox(TenantId,Status,CreatedUtc);
+GO
+
+-- Tenant/store reads always accept server-authorized store IDs, never browser TenantId.
+CREATE OR ALTER PROCEDURE dbo.Alert_Search
+    @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@StoreId BIGINT=NULL,@Status TINYINT=NULL,@Take INT=100
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @Take<1 SET @Take=1;IF @Take>200 SET @Take=200;
+    IF @StoreId IS NOT NULL AND @AllowedStoreIdsCsv IS NOT NULL AND NOT EXISTS(SELECT 1 FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') s WHERE TRY_CONVERT(BIGINT,s.value)=@StoreId) RETURN;
+    SELECT TOP(@Take) Id,AlertType,StoreId,Severity,Title,Message,EntityType,EntityId,CreatedUtc,AcknowledgedUtc,AcknowledgedByUserId,ResolvedUtc,Status,CorrelationId,DeduplicationKey
+    FROM dbo.Alerts
+    WHERE TenantId=@TenantId AND (@StoreId IS NULL OR StoreId=@StoreId) AND (@Status IS NULL OR Status=@Status)
+      AND (StoreId IS NULL OR @AllowedStoreIdsCsv IS NULL OR EXISTS(SELECT 1 FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') s WHERE TRY_CONVERT(BIGINT,s.value)=StoreId))
+    ORDER BY CreatedUtc DESC,Id DESC;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.AlertRecovery_Get
+    @TenantId BIGINT,@AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,@AfterEventId BIGINT=0,@Take INT=200
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @AfterEventId<0 THROW 53020,'Recovery cursor cannot be negative.',1;
+    IF @Take<1 SET @Take=1;IF @Take>500 SET @Take=500;
+    SELECT TOP(@Take) Id EventId,EventName,ContractVersion,PayloadJson,OccurredUtc,StoreId,CorrelationId
+    FROM dbo.RealtimeEvents
+    WHERE TenantId=@TenantId AND Id>@AfterEventId
+      AND (StoreId IS NULL OR @AllowedStoreIdsCsv IS NULL OR EXISTS(SELECT 1 FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') s WHERE TRY_CONVERT(BIGINT,s.value)=StoreId))
+    ORDER BY Id;
+END;
+GO
+
+-- READPAST/UPDLOCK claims avoid duplicate processing between concurrent dispatchers.
+CREATE OR ALTER PROCEDURE dbo.NotificationOutbox_Claim @BatchSize INT=50,@UtcNow DATETIME2(7)=NULL
+AS
+BEGIN
+    SET NOCOUNT ON;SET XACT_ABORT ON;
+    IF @UtcNow IS NULL SET @UtcNow=SYSUTCDATETIME();IF @BatchSize<1 SET @BatchSize=1;IF @BatchSize>200 SET @BatchSize=200;
+    ;WITH Due AS
+    (
+        SELECT TOP(@BatchSize) * FROM dbo.NotificationOutbox WITH(UPDLOCK,READPAST,ROWLOCK)
+        WHERE Status IN(1,4,5,2) AND NextAttemptUtc<=@UtcNow ORDER BY NextAttemptUtc,Id
+    )
+    UPDATE Due SET Status=2,AttemptCount=AttemptCount+1,NextAttemptUtc=DATEADD(MINUTE,2,@UtcNow),LastError=NULL
+    OUTPUT inserted.Id,inserted.TenantId,inserted.StoreId,inserted.AlertId,inserted.RealtimeEventId,inserted.Channel,inserted.EventType,inserted.ContractVersion,inserted.PayloadJson,inserted.AttemptCount,inserted.CorrelationId,inserted.IdempotencyKey;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.NotificationOutbox_Metrics @TenantId BIGINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+      SUM(CASE WHEN Status IN(1,2,4,5) THEN CONVERT(BIGINT,1) ELSE 0 END) OutboxBacklog,
+      SUM(CASE WHEN Status=3 THEN CONVERT(BIGINT,1) ELSE 0 END) DeliverySuccesses,
+      SUM(CASE WHEN Status IN(4,5,6) THEN CONVERT(BIGINT,1) ELSE 0 END) DeliveryFailures,
+      SUM(CASE WHEN AttemptCount>1 THEN CONVERT(BIGINT,AttemptCount-1) ELSE 0 END) Retries,
+      SUM(CASE WHEN Status=6 THEN CONVERT(BIGINT,1) ELSE 0 END) DeadLetters,
+      MIN(CASE WHEN Status IN(1,2,4,5) THEN CreatedUtc END) OldestPendingUtc
+    FROM dbo.NotificationOutbox WHERE TenantId=@TenantId;
+END;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.10.0')
+    INSERT INTO dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy) VALUES(N'V1.10.0',N'Phase 11 tenant/store alerts, durable real-time recovery and transactional notification outbox',SYSUTCDATETIME(),SUSER_SNAME());
+GO
+IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.10.0')<>1 THROW 53090,'V1.10.0 DatabaseVersions row must exist exactly once.',1;
+IF OBJECT_ID(N'dbo.Alerts',N'U') IS NULL OR OBJECT_ID(N'dbo.RealtimeEvents',N'U') IS NULL OR OBJECT_ID(N'dbo.NotificationOutbox',N'U') IS NULL THROW 53091,'Phase 11 tables are incomplete.',1;
+IF OBJECT_ID(N'dbo.Alert_Search',N'P') IS NULL OR OBJECT_ID(N'dbo.AlertRecovery_Get',N'P') IS NULL OR OBJECT_ID(N'dbo.NotificationOutbox_Claim',N'P') IS NULL OR OBJECT_ID(N'dbo.NotificationOutbox_Metrics',N'P') IS NULL THROW 53092,'Phase 11 procedures are incomplete.',1;
+GO
+
+-- ============================================================
+-- PHASE 12 - SECURE INTEGRATIONS
+-- VERSION: V1.11.0
+-- ============================================================
+/*
+ CustSearch AI — Phase 12 production database upgrade
+ Version: V1.11.0
+ Scope: tenant integration configuration, authenticated inbound receipts, outbound outbox and delivery audit.
+ Security: only opaque credential/signing-secret references are stored; no provider secret values or full inbound payloads.
+*/
+USE [CustSearch_AI];
+GO
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+GO
+
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.10.0') THROW 54000,'Phase 11 V1.10.0 must be installed before Phase 12.',1;
+GO
+
+IF OBJECT_ID(N'dbo.IntegrationConfigurations',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.IntegrationConfigurations
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationConfigurations PRIMARY KEY,
+        TenantId BIGINT NOT NULL,
+        Provider NVARCHAR(100) NOT NULL,
+        IntegrationType TINYINT NOT NULL,
+        Enabled BIT NOT NULL,
+        EndpointBaseUrl NVARCHAR(500) NOT NULL,
+        CredentialReference NVARCHAR(200) NULL,
+        WebhookSigningSecretReference NVARCHAR(200) NULL,
+        PreviousWebhookSigningSecretReference NVARCHAR(200) NULL,
+        PreviousSigningSecretValidUntilUtc DATETIME2(7) NULL,
+        TimeoutSeconds INT NOT NULL,
+        RetryMaxAttempts INT NOT NULL,
+        RetryBaseDelaySeconds INT NOT NULL,
+        CreatedUtc DATETIME2(7) NOT NULL,
+        UpdatedUtc DATETIME2(7) NOT NULL,
+        RowVersion ROWVERSION NOT NULL,
+        CONSTRAINT FK_IntegrationConfigurations_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+        CONSTRAINT CK_IntegrationConfigurations_Type CHECK(IntegrationType BETWEEN 1 AND 4),
+        CONSTRAINT CK_IntegrationConfigurations_Endpoint CHECK(EndpointBaseUrl LIKE N'https://%' AND EndpointBaseUrl NOT LIKE N'%@%'),
+        CONSTRAINT CK_IntegrationConfigurations_Timeout CHECK(TimeoutSeconds BETWEEN 1 AND 120),
+        CONSTRAINT CK_IntegrationConfigurations_Retry CHECK(RetryMaxAttempts BETWEEN 1 AND 10 AND RetryBaseDelaySeconds BETWEEN 1 AND 300),
+        CONSTRAINT CK_IntegrationConfigurations_Period CHECK(UpdatedUtc>=CreatedUtc)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationConfigurations') AND name=N'UX_IntegrationConfigurations_Tenant_Id') CREATE UNIQUE INDEX UX_IntegrationConfigurations_Tenant_Id ON dbo.IntegrationConfigurations(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationConfigurations') AND name=N'UX_IntegrationConfigurations_Tenant_Provider_Type') CREATE UNIQUE INDEX UX_IntegrationConfigurations_Tenant_Provider_Type ON dbo.IntegrationConfigurations(TenantId,Provider,IntegrationType);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationConfigurations') AND name=N'IX_IntegrationConfigurations_Tenant_Enabled_Updated') CREATE INDEX IX_IntegrationConfigurations_Tenant_Enabled_Updated ON dbo.IntegrationConfigurations(TenantId,Enabled,UpdatedUtc DESC);
+GO
+
+IF OBJECT_ID(N'dbo.IntegrationInboundEvents',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.IntegrationInboundEvents
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationInboundEvents PRIMARY KEY,
+        TenantId BIGINT NOT NULL,
+        IntegrationConfigurationId BIGINT NOT NULL,
+        ProviderEventId NVARCHAR(200) NOT NULL,
+        IdempotencyKey NVARCHAR(200) NOT NULL,
+        EventType NVARCHAR(100) NOT NULL,
+        ContractVersion INT NOT NULL,
+        PayloadHash CHAR(64) NOT NULL,
+        CorrelationId NVARCHAR(64) NOT NULL,
+        ProviderTimestampUtc DATETIME2(7) NOT NULL,
+        ReceivedUtc DATETIME2(7) NOT NULL,
+        ProcessedUtc DATETIME2(7) NULL,
+        Status TINYINT NOT NULL,
+        CONSTRAINT FK_IntegrationInboundEvents_Configuration FOREIGN KEY(TenantId,IntegrationConfigurationId) REFERENCES dbo.IntegrationConfigurations(TenantId,Id),
+        CONSTRAINT CK_IntegrationInboundEvents_Status CHECK(Status BETWEEN 1 AND 3),
+        CONSTRAINT CK_IntegrationInboundEvents_ContractVersion CHECK(ContractVersion>=1),
+        CONSTRAINT CK_IntegrationInboundEvents_Hash CHECK(PayloadHash NOT LIKE N'%[^0-9a-f]%' AND LEN(PayloadHash)=64),
+        CONSTRAINT CK_IntegrationInboundEvents_Period CHECK(ProcessedUtc IS NULL OR ProcessedUtc>=ReceivedUtc)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationInboundEvents') AND name=N'UX_IntegrationInboundEvents_Tenant_Config_Event') CREATE UNIQUE INDEX UX_IntegrationInboundEvents_Tenant_Config_Event ON dbo.IntegrationInboundEvents(TenantId,IntegrationConfigurationId,ProviderEventId);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationInboundEvents') AND name=N'UX_IntegrationInboundEvents_Tenant_Config_Idempotency') CREATE UNIQUE INDEX UX_IntegrationInboundEvents_Tenant_Config_Idempotency ON dbo.IntegrationInboundEvents(TenantId,IntegrationConfigurationId,IdempotencyKey);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationInboundEvents') AND name=N'UX_IntegrationInboundEvents_Tenant_Id') CREATE UNIQUE INDEX UX_IntegrationInboundEvents_Tenant_Id ON dbo.IntegrationInboundEvents(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationInboundEvents') AND name=N'IX_IntegrationInboundEvents_Tenant_Received') CREATE INDEX IX_IntegrationInboundEvents_Tenant_Received ON dbo.IntegrationInboundEvents(TenantId,ReceivedUtc DESC,Id DESC);
+GO
+
+IF OBJECT_ID(N'dbo.IntegrationOutbox',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.IntegrationOutbox
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationOutbox PRIMARY KEY,
+        TenantId BIGINT NOT NULL,
+        IntegrationConfigurationId BIGINT NOT NULL,
+        Provider NVARCHAR(100) NOT NULL,
+        Destination NVARCHAR(500) NOT NULL,
+        EventType NVARCHAR(100) NOT NULL,
+        ContractVersion INT NOT NULL,
+        PayloadJson NVARCHAR(MAX) NOT NULL,
+        PayloadHash CHAR(64) NOT NULL,
+        Status TINYINT NOT NULL,
+        AttemptCount INT NOT NULL CONSTRAINT DF_IntegrationOutbox_AttemptCount DEFAULT(0),
+        MaxAttempts INT NOT NULL,
+        RetryBaseDelaySeconds INT NOT NULL,
+        NextAttemptUtc DATETIME2(7) NOT NULL,
+        LastResponseCode INT NULL,
+        LastError NVARCHAR(2000) NULL,
+        CorrelationId NVARCHAR(64) NOT NULL,
+        IdempotencyKey NVARCHAR(200) NOT NULL,
+        CreatedUtc DATETIME2(7) NOT NULL,
+        DeliveredUtc DATETIME2(7) NULL,
+        CompletedUtc DATETIME2(7) NULL,
+        RowVersion ROWVERSION NOT NULL,
+        CONSTRAINT FK_IntegrationOutbox_Configuration FOREIGN KEY(TenantId,IntegrationConfigurationId) REFERENCES dbo.IntegrationConfigurations(TenantId,Id),
+        CONSTRAINT CK_IntegrationOutbox_Status CHECK(Status BETWEEN 1 AND 6),
+        CONSTRAINT CK_IntegrationOutbox_Attempts CHECK(AttemptCount>=0 AND MaxAttempts BETWEEN 1 AND 10),
+        CONSTRAINT CK_IntegrationOutbox_RetryBase CHECK(RetryBaseDelaySeconds BETWEEN 1 AND 300),
+        CONSTRAINT CK_IntegrationOutbox_ContractVersion CHECK(ContractVersion>=1),
+        CONSTRAINT CK_IntegrationOutbox_Payload CHECK(ISJSON(PayloadJson)=1),
+        CONSTRAINT CK_IntegrationOutbox_Hash CHECK(PayloadHash NOT LIKE N'%[^0-9a-f]%' AND LEN(PayloadHash)=64),
+        CONSTRAINT CK_IntegrationOutbox_Completion CHECK((Status=3 AND DeliveredUtc IS NOT NULL AND CompletedUtc IS NOT NULL) OR (Status=6 AND CompletedUtc IS NOT NULL) OR (Status NOT IN(3,6) AND CompletedUtc IS NULL))
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationOutbox') AND name=N'UX_IntegrationOutbox_Tenant_Id') CREATE UNIQUE INDEX UX_IntegrationOutbox_Tenant_Id ON dbo.IntegrationOutbox(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationOutbox') AND name=N'UX_IntegrationOutbox_Tenant_Idempotency') CREATE UNIQUE INDEX UX_IntegrationOutbox_Tenant_Idempotency ON dbo.IntegrationOutbox(TenantId,IdempotencyKey);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationOutbox') AND name=N'IX_IntegrationOutbox_Status_NextAttempt') CREATE INDEX IX_IntegrationOutbox_Status_NextAttempt ON dbo.IntegrationOutbox(Status,NextAttemptUtc,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationOutbox') AND name=N'IX_IntegrationOutbox_Tenant_Config_Created') CREATE INDEX IX_IntegrationOutbox_Tenant_Config_Created ON dbo.IntegrationOutbox(TenantId,IntegrationConfigurationId,CreatedUtc DESC);
+GO
+
+IF OBJECT_ID(N'dbo.IntegrationDeliveryLogs',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.IntegrationDeliveryLogs
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationDeliveryLogs PRIMARY KEY,
+        TenantId BIGINT NOT NULL,
+        IntegrationConfigurationId BIGINT NOT NULL,
+        InboundEventId BIGINT NULL,
+        OutboxMessageId BIGINT NULL,
+        CorrelationId NVARCHAR(64) NOT NULL,
+        Provider NVARCHAR(100) NOT NULL,
+        Direction TINYINT NOT NULL,
+        Status TINYINT NOT NULL,
+        DurationMilliseconds BIGINT NOT NULL,
+        HttpStatusCode INT NULL,
+        ErrorCategory NVARCHAR(100) NULL,
+        CreatedUtc DATETIME2(7) NOT NULL,
+        CONSTRAINT FK_IntegrationDeliveryLogs_Configuration FOREIGN KEY(TenantId,IntegrationConfigurationId) REFERENCES dbo.IntegrationConfigurations(TenantId,Id),
+        CONSTRAINT FK_IntegrationDeliveryLogs_Inbound FOREIGN KEY(TenantId,InboundEventId) REFERENCES dbo.IntegrationInboundEvents(TenantId,Id),
+        CONSTRAINT FK_IntegrationDeliveryLogs_Outbox FOREIGN KEY(TenantId,OutboxMessageId) REFERENCES dbo.IntegrationOutbox(TenantId,Id),
+        CONSTRAINT CK_IntegrationDeliveryLogs_Direction CHECK(Direction BETWEEN 1 AND 2),
+        CONSTRAINT CK_IntegrationDeliveryLogs_Status CHECK(Status BETWEEN 1 AND 5),
+        CONSTRAINT CK_IntegrationDeliveryLogs_Source CHECK((InboundEventId IS NULL AND OutboxMessageId IS NOT NULL) OR (InboundEventId IS NOT NULL AND OutboxMessageId IS NULL)),
+        CONSTRAINT CK_IntegrationDeliveryLogs_Duration CHECK(DurationMilliseconds>=0),
+        CONSTRAINT CK_IntegrationDeliveryLogs_Http CHECK(HttpStatusCode IS NULL OR HttpStatusCode BETWEEN 100 AND 599)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationDeliveryLogs') AND name=N'IX_IntegrationDeliveryLogs_Tenant_Config_Created') CREATE INDEX IX_IntegrationDeliveryLogs_Tenant_Config_Created ON dbo.IntegrationDeliveryLogs(TenantId,IntegrationConfigurationId,CreatedUtc DESC,Id DESC);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.IntegrationDeliveryLogs') AND name=N'IX_IntegrationDeliveryLogs_Tenant_Direction_Status') CREATE INDEX IX_IntegrationDeliveryLogs_Tenant_Direction_Status ON dbo.IntegrationDeliveryLogs(TenantId,Direction,Status,CreatedUtc DESC);
+GO
+
+CREATE OR ALTER PROCEDURE dbo.Integration_Search @TenantId BIGINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT Id,Provider,IntegrationType,Enabled,EndpointBaseUrl,
+           CONVERT(BIT,CASE WHEN CredentialReference IS NULL THEN 0 ELSE 1 END) HasCredentialReference,
+           CONVERT(BIT,CASE WHEN WebhookSigningSecretReference IS NULL THEN 0 ELSE 1 END) HasWebhookSigningSecret,
+           TimeoutSeconds,RetryMaxAttempts,RetryBaseDelaySeconds,CreatedUtc,UpdatedUtc,RowVersion
+    FROM dbo.IntegrationConfigurations WHERE TenantId=@TenantId ORDER BY Provider,IntegrationType;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.IntegrationOutbox_Claim @BatchSize INT=50,@UtcNow DATETIME2(7)=NULL
+AS
+BEGIN
+    SET NOCOUNT ON;SET XACT_ABORT ON;IF @UtcNow IS NULL SET @UtcNow=SYSUTCDATETIME();IF @BatchSize<1 SET @BatchSize=1;IF @BatchSize>200 SET @BatchSize=200;
+    ;WITH Due AS(SELECT TOP(@BatchSize)* FROM dbo.IntegrationOutbox WITH(UPDLOCK,READPAST,ROWLOCK) WHERE Status IN(1,2,4,5) AND NextAttemptUtc<=@UtcNow ORDER BY NextAttemptUtc,Id)
+    UPDATE Due SET Status=2,AttemptCount=AttemptCount+1,NextAttemptUtc=DATEADD(MINUTE,2,@UtcNow),LastError=NULL
+    OUTPUT inserted.Id,inserted.TenantId,inserted.IntegrationConfigurationId,inserted.Provider,inserted.Destination,inserted.EventType,inserted.ContractVersion,inserted.PayloadJson,inserted.AttemptCount,inserted.MaxAttempts,inserted.RetryBaseDelaySeconds,inserted.CorrelationId,inserted.IdempotencyKey;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.IntegrationOutbox_ManualRetry @TenantId BIGINT,@DeliveryId BIGINT,@UtcNow DATETIME2(7)=NULL
+AS
+BEGIN
+    SET NOCOUNT ON;IF @UtcNow IS NULL SET @UtcNow=SYSUTCDATETIME();
+    UPDATE dbo.IntegrationOutbox SET Status=5,AttemptCount=0,NextAttemptUtc=@UtcNow,LastResponseCode=NULL,LastError=NULL,DeliveredUtc=NULL,CompletedUtc=NULL WHERE TenantId=@TenantId AND Id=@DeliveryId AND Status IN(4,5,6);
+    IF @@ROWCOUNT<>1 THROW 54020,'Failed/dead-letter integration delivery was not found.',1;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.IntegrationDeliveryLog_Search @TenantId BIGINT,@IntegrationConfigurationId BIGINT=NULL,@Take INT=100
+AS
+BEGIN
+    SET NOCOUNT ON;IF @Take<1 SET @Take=1;IF @Take>500 SET @Take=500;
+    SELECT TOP(@Take) Id,IntegrationConfigurationId,InboundEventId,OutboxMessageId,CorrelationId,Provider,Direction,Status,DurationMilliseconds,HttpStatusCode,ErrorCategory,CreatedUtc FROM dbo.IntegrationDeliveryLogs WHERE TenantId=@TenantId AND (@IntegrationConfigurationId IS NULL OR IntegrationConfigurationId=@IntegrationConfigurationId) ORDER BY CreatedUtc DESC,Id DESC;
+END;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.11.0') INSERT INTO dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy) VALUES(N'V1.11.0',N'Phase 12 secure tenant integrations, HMAC inbound receipts, outbound outbox and delivery audit',SYSUTCDATETIME(),SUSER_SNAME());
+GO
+IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.11.0')<>1 THROW 54090,'V1.11.0 DatabaseVersions row must exist exactly once.',1;
+IF OBJECT_ID(N'dbo.IntegrationConfigurations',N'U') IS NULL OR OBJECT_ID(N'dbo.IntegrationInboundEvents',N'U') IS NULL OR OBJECT_ID(N'dbo.IntegrationOutbox',N'U') IS NULL OR OBJECT_ID(N'dbo.IntegrationDeliveryLogs',N'U') IS NULL THROW 54091,'Phase 12 tables are incomplete.',1;
+IF OBJECT_ID(N'dbo.Integration_Search',N'P') IS NULL OR OBJECT_ID(N'dbo.IntegrationOutbox_Claim',N'P') IS NULL OR OBJECT_ID(N'dbo.IntegrationOutbox_ManualRetry',N'P') IS NULL OR OBJECT_ID(N'dbo.IntegrationDeliveryLog_Search',N'P') IS NULL THROW 54092,'Phase 12 procedures are incomplete.',1;
+GO
+
+-- ============================================================
+-- PHASE 13 - CAMERAS & ANONYMOUS TRACKING
+-- VERSION: V1.12.0
+-- ============================================================
+/*
+ CustSearch AI — Phase 13 production database upgrade
+ Version: V1.12.0
+ Scope: tenant/store cameras, versioned zones, anonymous-first tracking, camera handoffs and idempotent metadata receipts.
+ Privacy: stores opaque RTSP references and normalized metadata only; no raw frames, embeddings or inferred identities.
+*/
+USE [CustSearch_AI];
+GO
+SET NOCOUNT ON;SET XACT_ABORT ON;SET ANSI_NULLS ON;SET QUOTED_IDENTIFIER ON;SET ANSI_PADDING ON;SET ANSI_WARNINGS ON;SET CONCAT_NULL_YIELDS_NULL ON;SET ARITHABORT ON;SET NUMERIC_ROUNDABORT OFF;
+GO
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.11.0') THROW 54500,'Phase 12 V1.11.0 must be installed before Phase 13.',1;
+GO
+
+IF OBJECT_ID(N'dbo.Cameras',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.Cameras(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Cameras PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,CameraCode NVARCHAR(50) NOT NULL,Name NVARCHAR(150) NOT NULL,RtspConfigurationReference NVARCHAR(200) NOT NULL,Status TINYINT NOT NULL CONSTRAINT DF_Cameras_Status DEFAULT(1),Location NVARCHAR(250) NULL,Direction TINYINT NOT NULL,IsActive BIT NOT NULL,LastHeartbeatUtc DATETIME2(7) NULL,CreatedUtc DATETIME2(7) NOT NULL,UpdatedUtc DATETIME2(7) NOT NULL,RowVersion ROWVERSION NOT NULL,
+  CONSTRAINT FK_Cameras_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),CONSTRAINT FK_Cameras_Stores FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),CONSTRAINT CK_Cameras_Status CHECK(Status BETWEEN 1 AND 4),CONSTRAINT CK_Cameras_Direction CHECK(Direction BETWEEN 1 AND 4),CONSTRAINT CK_Cameras_Period CHECK(UpdatedUtc>=CreatedUtc AND (LastHeartbeatUtc IS NULL OR LastHeartbeatUtc>=CreatedUtc)),CONSTRAINT CK_Cameras_Reference CHECK(LEN(LTRIM(RTRIM(RtspConfigurationReference)))>0 AND RtspConfigurationReference NOT LIKE N'rtsp://%')
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Cameras') AND name=N'UX_Cameras_Tenant_Store_Code') CREATE UNIQUE INDEX UX_Cameras_Tenant_Store_Code ON dbo.Cameras(TenantId,StoreId,CameraCode);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Cameras') AND name=N'UX_Cameras_Tenant_Store_Id') CREATE UNIQUE INDEX UX_Cameras_Tenant_Store_Id ON dbo.Cameras(TenantId,StoreId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Cameras') AND name=N'IX_Cameras_Tenant_Store_Active_Status') CREATE INDEX IX_Cameras_Tenant_Store_Active_Status ON dbo.Cameras(TenantId,StoreId,IsActive,Status,Id);
+GO
+
+IF OBJECT_ID(N'dbo.CameraZoneConfigurations',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.CameraZoneConfigurations(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CameraZoneConfigurations PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,CameraId BIGINT NOT NULL,ZoneCode NVARCHAR(50) NOT NULL,Name NVARCHAR(150) NOT NULL,ZoneType TINYINT NOT NULL,GeometryJson NVARCHAR(4000) NOT NULL,Version INT NOT NULL,CategoryId BIGINT NULL,EffectiveUtc DATETIME2(7) NOT NULL,SupersededUtc DATETIME2(7) NULL,IsActive BIT NOT NULL,CreatedUtc DATETIME2(7) NOT NULL,
+  CONSTRAINT FK_CameraZones_Cameras FOREIGN KEY(TenantId,StoreId,CameraId) REFERENCES dbo.Cameras(TenantId,StoreId,Id),CONSTRAINT CK_CameraZones_Type CHECK(ZoneType BETWEEN 1 AND 7),CONSTRAINT CK_CameraZones_Version CHECK(Version>=1),CONSTRAINT CK_CameraZones_Geometry CHECK(ISJSON(GeometryJson)=1),CONSTRAINT CK_CameraZones_Category CHECK((ZoneType=5 AND CategoryId IS NOT NULL) OR ZoneType<>5),CONSTRAINT CK_CameraZones_Period CHECK((IsActive=1 AND SupersededUtc IS NULL) OR (IsActive=0 AND SupersededUtc>=EffectiveUtc))
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CameraZoneConfigurations') AND name=N'UX_CameraZones_Tenant_Camera_Code_Version') CREATE UNIQUE INDEX UX_CameraZones_Tenant_Camera_Code_Version ON dbo.CameraZoneConfigurations(TenantId,CameraId,ZoneCode,Version);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CameraZoneConfigurations') AND name=N'UX_CameraZones_Current') CREATE UNIQUE INDEX UX_CameraZones_Current ON dbo.CameraZoneConfigurations(TenantId,CameraId,ZoneCode) WHERE IsActive=1;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CameraZoneConfigurations') AND name=N'IX_CameraZones_Tenant_Store_Camera') CREATE INDEX IX_CameraZones_Tenant_Store_Camera ON dbo.CameraZoneConfigurations(TenantId,StoreId,CameraId,IsActive);
+GO
+
+IF OBJECT_ID(N'dbo.PersonTrackSessions',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.PersonTrackSessions(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PersonTrackSessions PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,CameraId BIGINT NOT NULL,PersonTrackId NVARCHAR(100) NOT NULL,StartUtc DATETIME2(7) NOT NULL,EndUtc DATETIME2(7) NULL,Confidence DECIMAL(5,4) NOT NULL,TrackingState TINYINT NOT NULL,SubjectKind TINYINT NOT NULL CONSTRAINT DF_PersonTracks_SubjectKind DEFAULT(1),CustomerId BIGINT NULL,StaffProfileId BIGINT NULL,UpdatedUtc DATETIME2(7) NOT NULL,RowVersion ROWVERSION NOT NULL,
+  CONSTRAINT FK_PersonTracks_Cameras FOREIGN KEY(TenantId,StoreId,CameraId) REFERENCES dbo.Cameras(TenantId,StoreId,Id),CONSTRAINT CK_PersonTracks_Confidence CHECK(Confidence BETWEEN 0 AND 1),CONSTRAINT CK_PersonTracks_State CHECK(TrackingState BETWEEN 1 AND 4),CONSTRAINT CK_PersonTracks_Subject CHECK((SubjectKind=1 AND CustomerId IS NULL AND StaffProfileId IS NULL) OR (SubjectKind=2 AND CustomerId IS NOT NULL AND StaffProfileId IS NULL) OR (SubjectKind=3 AND CustomerId IS NULL AND StaffProfileId IS NOT NULL)),CONSTRAINT CK_PersonTracks_Period CHECK(EndUtc IS NULL OR EndUtc>=StartUtc)
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PersonTrackSessions') AND name=N'UX_PersonTracks_Tenant_Store_Track') CREATE UNIQUE INDEX UX_PersonTracks_Tenant_Store_Track ON dbo.PersonTrackSessions(TenantId,StoreId,PersonTrackId);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PersonTrackSessions') AND name=N'UX_PersonTracks_Tenant_Store_Id') CREATE UNIQUE INDEX UX_PersonTracks_Tenant_Store_Id ON dbo.PersonTrackSessions(TenantId,StoreId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.PersonTrackSessions') AND name=N'IX_PersonTracks_Tenant_Store_State') CREATE INDEX IX_PersonTracks_Tenant_Store_State ON dbo.PersonTrackSessions(TenantId,StoreId,TrackingState,UpdatedUtc DESC,Id DESC);
+GO
+
+IF OBJECT_ID(N'dbo.CameraTrackHandoffs',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.CameraTrackHandoffs(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CameraTrackHandoffs PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,PersonTrackSessionId BIGINT NOT NULL,FromCameraId BIGINT NOT NULL,ToCameraId BIGINT NOT NULL,Confidence DECIMAL(5,4) NOT NULL,GapMilliseconds INT NOT NULL,OccurredUtc DATETIME2(7) NOT NULL,
+  CONSTRAINT FK_CameraHandoffs_Track FOREIGN KEY(TenantId,StoreId,PersonTrackSessionId) REFERENCES dbo.PersonTrackSessions(TenantId,StoreId,Id),CONSTRAINT FK_CameraHandoffs_From FOREIGN KEY(TenantId,StoreId,FromCameraId) REFERENCES dbo.Cameras(TenantId,StoreId,Id),CONSTRAINT FK_CameraHandoffs_To FOREIGN KEY(TenantId,StoreId,ToCameraId) REFERENCES dbo.Cameras(TenantId,StoreId,Id),CONSTRAINT CK_CameraHandoffs_Cameras CHECK(FromCameraId<>ToCameraId),CONSTRAINT CK_CameraHandoffs_Confidence CHECK(Confidence BETWEEN 0 AND 1),CONSTRAINT CK_CameraHandoffs_Gap CHECK(GapMilliseconds>=0)
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CameraTrackHandoffs') AND name=N'IX_CameraHandoffs_Tenant_Store_Track') CREATE INDEX IX_CameraHandoffs_Tenant_Store_Track ON dbo.CameraTrackHandoffs(TenantId,StoreId,PersonTrackSessionId,OccurredUtc,Id);
+GO
+
+IF OBJECT_ID(N'dbo.CameraOperationalEvents',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.CameraOperationalEvents(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CameraOperationalEvents PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,CameraId BIGINT NOT NULL,ServiceId NVARCHAR(100) NOT NULL,EventId NVARCHAR(150) NOT NULL,IdempotencyKey NVARCHAR(150) NOT NULL,EventType NVARCHAR(100) NOT NULL,ContractVersion INT NOT NULL,PayloadHash CHAR(64) NOT NULL,CorrelationId NVARCHAR(64) NOT NULL,OccurredUtc DATETIME2(7) NOT NULL,ReceivedUtc DATETIME2(7) NOT NULL,Status TINYINT NOT NULL,
+  CONSTRAINT FK_CameraEvents_Cameras FOREIGN KEY(TenantId,StoreId,CameraId) REFERENCES dbo.Cameras(TenantId,StoreId,Id),CONSTRAINT CK_CameraEvents_Status CHECK(Status BETWEEN 1 AND 4),CONSTRAINT CK_CameraEvents_Contract CHECK(ContractVersion=1),CONSTRAINT CK_CameraEvents_Hash CHECK(PayloadHash NOT LIKE N'%[^0-9a-f]%' AND LEN(PayloadHash)=64)
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CameraOperationalEvents') AND name=N'UX_CameraEvents_Service_Event') CREATE UNIQUE INDEX UX_CameraEvents_Service_Event ON dbo.CameraOperationalEvents(ServiceId,EventId);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CameraOperationalEvents') AND name=N'UX_CameraEvents_Service_Idempotency') CREATE UNIQUE INDEX UX_CameraEvents_Service_Idempotency ON dbo.CameraOperationalEvents(ServiceId,IdempotencyKey);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CameraOperationalEvents') AND name=N'IX_CameraEvents_Tenant_Store_Received') CREATE INDEX IX_CameraEvents_Tenant_Store_Received ON dbo.CameraOperationalEvents(TenantId,StoreId,ReceivedUtc DESC,Id DESC);
+GO
+
+CREATE OR ALTER PROCEDURE dbo.Camera_Search @TenantId BIGINT,@StoreId BIGINT=NULL
+AS BEGIN SET NOCOUNT ON;SELECT Id,StoreId,CameraCode,Name,CONVERT(BIT,1) HasRtspConfiguration,Status,Location,Direction,IsActive,LastHeartbeatUtc,CreatedUtc,UpdatedUtc,RowVersion FROM dbo.Cameras WHERE TenantId=@TenantId AND (@StoreId IS NULL OR StoreId=@StoreId) ORDER BY StoreId,CameraCode;END;
+GO
+CREATE OR ALTER PROCEDURE dbo.PersonTrack_Search @TenantId BIGINT,@StoreId BIGINT=NULL,@AfterId BIGINT=NULL,@Take INT=100
+AS BEGIN SET NOCOUNT ON;IF @Take<1 SET @Take=1;IF @Take>500 SET @Take=500;SELECT TOP(@Take) Id,StoreId,CameraId,PersonTrackId,StartUtc,EndUtc,Confidence,TrackingState,SubjectKind,CustomerId,StaffProfileId,UpdatedUtc FROM dbo.PersonTrackSessions WHERE TenantId=@TenantId AND (@StoreId IS NULL OR StoreId=@StoreId) AND (@AfterId IS NULL OR Id>@AfterId) ORDER BY Id;END;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.12.0') INSERT INTO dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy) VALUES(N'V1.12.0',N'Phase 13 cameras, versioned zones, anonymous tracking, handoffs and authenticated CCTV metadata receipts',SYSUTCDATETIME(),SUSER_SNAME());
+GO
+IF(SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.12.0')<>1 THROW 54590,'V1.12.0 DatabaseVersions row must exist exactly once.',1;
+IF OBJECT_ID(N'dbo.Cameras',N'U') IS NULL OR OBJECT_ID(N'dbo.CameraZoneConfigurations',N'U') IS NULL OR OBJECT_ID(N'dbo.PersonTrackSessions',N'U') IS NULL OR OBJECT_ID(N'dbo.CameraTrackHandoffs',N'U') IS NULL OR OBJECT_ID(N'dbo.CameraOperationalEvents',N'U') IS NULL THROW 54591,'Phase 13 tables are incomplete.',1;
+IF OBJECT_ID(N'dbo.Camera_Search',N'P') IS NULL OR OBJECT_ID(N'dbo.PersonTrack_Search',N'P') IS NULL THROW 54592,'Phase 13 procedures are incomplete.',1;
+GO
+
+-- ============================================================
+-- PHASE 14 - CONSENT-BASED RECOGNITION
+-- VERSION: V1.13.0
+-- ============================================================
+/* CustSearch AI Phase 14 — consent-gated recognition metadata and encrypted derived templates. */
+USE [CustSearch_AI];
+GO
+SET NOCOUNT ON;SET XACT_ABORT ON;SET ANSI_NULLS ON;SET QUOTED_IDENTIFIER ON;SET ANSI_PADDING ON;SET ANSI_WARNINGS ON;SET CONCAT_NULL_YIELDS_NULL ON;SET ARITHABORT ON;SET NUMERIC_ROUNDABORT OFF;
+GO
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.12.0') THROW 54700,'Phase 13 V1.12.0 must be installed before Phase 14.',1;
+GO
+
+IF OBJECT_ID(N'dbo.CustomerRecognitionConsents',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.CustomerRecognitionConsents(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CustomerRecognitionConsents PRIMARY KEY,TenantId BIGINT NOT NULL,CustomerId BIGINT NOT NULL,ConsentType TINYINT NOT NULL,Purpose NVARCHAR(200) NOT NULL,GrantedUtc DATETIME2(7) NOT NULL,ExpiresUtc DATETIME2(7) NULL,WithdrawnUtc DATETIME2(7) NULL,ConsentVersion NVARCHAR(50) NOT NULL,CapturedByUserId BIGINT NOT NULL,EvidenceReference NVARCHAR(500) NULL,CreatedUtc DATETIME2(7) NOT NULL,
+  CONSTRAINT FK_RecognitionConsents_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),CONSTRAINT FK_RecognitionConsents_Customers FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),CONSTRAINT CK_RecognitionConsents_Type CHECK(ConsentType=1),CONSTRAINT CK_RecognitionConsents_Period CHECK(ExpiresUtc IS NULL OR ExpiresUtc>GrantedUtc),CONSTRAINT CK_RecognitionConsents_Withdrawal CHECK(WithdrawnUtc IS NULL OR WithdrawnUtc>=GrantedUtc)
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CustomerRecognitionConsents') AND name=N'UX_RecognitionConsents_Tenant_Id') CREATE UNIQUE INDEX UX_RecognitionConsents_Tenant_Id ON dbo.CustomerRecognitionConsents(TenantId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CustomerRecognitionConsents') AND name=N'IX_RecognitionConsents_Tenant_Customer_Purpose') CREATE INDEX IX_RecognitionConsents_Tenant_Customer_Purpose ON dbo.CustomerRecognitionConsents(TenantId,CustomerId,ConsentType,Purpose,GrantedUtc DESC);
+GO
+
+IF OBJECT_ID(N'dbo.BiometricTemplates',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.BiometricTemplates(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_BiometricTemplates PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,CustomerId BIGINT NOT NULL,ConsentId BIGINT NOT NULL,EncryptedTemplate VARBINARY(MAX) NOT NULL,Nonce VARBINARY(12) NOT NULL,AuthenticationTag VARBINARY(16) NOT NULL,EncryptionKeyReference NVARCHAR(200) NOT NULL,Algorithm NVARCHAR(50) NOT NULL,TemplateVersion NVARCHAR(50) NOT NULL,Status TINYINT NOT NULL,CreatedUtc DATETIME2(7) NOT NULL,DisabledUtc DATETIME2(7) NULL,DeletedUtc DATETIME2(7) NULL,RetentionUntilUtc DATETIME2(7) NULL,
+  CONSTRAINT FK_BiometricTemplates_Stores FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),CONSTRAINT FK_BiometricTemplates_Customers FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),CONSTRAINT FK_BiometricTemplates_Consents FOREIGN KEY(TenantId,ConsentId) REFERENCES dbo.CustomerRecognitionConsents(TenantId,Id),CONSTRAINT CK_BiometricTemplates_Status CHECK(Status BETWEEN 1 AND 3),CONSTRAINT CK_BiometricTemplates_Protected CHECK((Status=1 AND DATALENGTH(EncryptedTemplate)>0 AND DATALENGTH(Nonce)=12 AND DATALENGTH(AuthenticationTag)=16) OR (Status IN(2,3) AND DATALENGTH(EncryptedTemplate)=0 AND DATALENGTH(Nonce)=0 AND DATALENGTH(AuthenticationTag)=0)),CONSTRAINT CK_BiometricTemplates_Deletion CHECK((Status=1 AND DisabledUtc IS NULL AND DeletedUtc IS NULL) OR (Status IN(2,3) AND DisabledUtc IS NOT NULL))
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.BiometricTemplates') AND name=N'UX_BiometricTemplates_Tenant_Store_Id') CREATE UNIQUE INDEX UX_BiometricTemplates_Tenant_Store_Id ON dbo.BiometricTemplates(TenantId,StoreId,Id);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.BiometricTemplates') AND name=N'UX_BiometricTemplates_Current') CREATE UNIQUE INDEX UX_BiometricTemplates_Current ON dbo.BiometricTemplates(TenantId,StoreId,CustomerId) WHERE Status=1;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.BiometricTemplates') AND name=N'IX_BiometricTemplates_Consent') CREATE INDEX IX_BiometricTemplates_Consent ON dbo.BiometricTemplates(TenantId,ConsentId,Status);
+GO
+
+IF OBJECT_ID(N'dbo.RecognitionCandidates',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.RecognitionCandidates(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RecognitionCandidates PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,PersonTrackSessionId BIGINT NOT NULL,BiometricTemplateId BIGINT NOT NULL,CustomerId BIGINT NOT NULL,RequestId NVARCHAR(150) NOT NULL,Purpose NVARCHAR(200) NOT NULL,Confidence DECIMAL(5,4) NOT NULL,Quality DECIMAL(5,4) NOT NULL,SecondBestConfidence DECIMAL(5,4) NULL,Status TINYINT NOT NULL,CreatedUtc DATETIME2(7) NOT NULL,ReviewedUtc DATETIME2(7) NULL,ReviewedByUserId BIGINT NULL,ReviewReason NVARCHAR(500) NULL,
+  CONSTRAINT FK_RecognitionCandidates_Tracks FOREIGN KEY(TenantId,StoreId,PersonTrackSessionId) REFERENCES dbo.PersonTrackSessions(TenantId,StoreId,Id),CONSTRAINT FK_RecognitionCandidates_Templates FOREIGN KEY(TenantId,StoreId,BiometricTemplateId) REFERENCES dbo.BiometricTemplates(TenantId,StoreId,Id),CONSTRAINT FK_RecognitionCandidates_Customers FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),CONSTRAINT CK_RecognitionCandidates_Status CHECK(Status BETWEEN 1 AND 5),CONSTRAINT CK_RecognitionCandidates_Scores CHECK(Confidence BETWEEN 0 AND 1 AND Quality BETWEEN 0 AND 1 AND (SecondBestConfidence IS NULL OR SecondBestConfidence BETWEEN 0 AND 1)),CONSTRAINT CK_RecognitionCandidates_Review CHECK((Status IN(1,2) AND ReviewedUtc IS NULL AND ReviewedByUserId IS NULL) OR (Status IN(3,4,5) AND ReviewedUtc IS NOT NULL AND ReviewedByUserId IS NOT NULL))
+ );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RecognitionCandidates') AND name=N'UX_RecognitionCandidates_Tenant_Store_Request') CREATE UNIQUE INDEX UX_RecognitionCandidates_Tenant_Store_Request ON dbo.RecognitionCandidates(TenantId,StoreId,RequestId);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.RecognitionCandidates') AND name=N'IX_RecognitionCandidates_Tenant_Store_Status') CREATE INDEX IX_RecognitionCandidates_Tenant_Store_Status ON dbo.RecognitionCandidates(TenantId,StoreId,Status,CreatedUtc DESC,Id DESC);
+GO
+
+DECLARE @Phase14Permissions TABLE(Name NVARCHAR(150),Description NVARCHAR(300));
+INSERT @Phase14Permissions VALUES
+(N'Recognition.View',N'View consent, template metadata and recognition candidates.'),(N'Recognition.Enroll',N'Enroll a derived biometric template for an explicitly consenting customer.'),(N'Recognition.Review',N'Human-review recognition candidates.'),(N'Recognition.Settings.Manage',N'Manage recognition thresholds and submit protected candidate results.'),(N'Recognition.Consent.Manage',N'Record and withdraw purpose-specific recognition consent.');
+INSERT dbo.Permissions(Scope,Name,Description,IsActive,CreatedUtc) SELECT 2,p.Name,p.Description,1,SYSUTCDATETIME() FROM @Phase14Permissions p WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Name=p.Name);
+GO
+INSERT dbo.RolePermissions(RoleId,PermissionId) SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1 WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName IN(N'TENANTADMIN',N'TENANTOWNER',N'SHOPOWNER',N'STOREADMIN',N'STOREMANAGER') AND p.Name IN(N'Recognition.View',N'Recognition.Enroll',N'Recognition.Review',N'Recognition.Settings.Manage',N'Recognition.Consent.Manage') AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+INSERT dbo.RolePermissions(RoleId,PermissionId) SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1 WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName=N'CAMERAOPERATOR' AND p.Name IN(N'Recognition.View',N'Recognition.Review') AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+INSERT dbo.RolePermissions(RoleId,PermissionId) SELECT r.Id,p.Id FROM dbo.Roles r JOIN dbo.Permissions p ON p.Scope=2 AND p.IsActive=1 WHERE r.Scope=2 AND r.IsActive=1 AND r.NormalizedName=N'CRMSTAFF' AND p.Name IN(N'Recognition.View',N'Recognition.Enroll',N'Recognition.Consent.Manage') AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+GO
+
+CREATE OR ALTER PROCEDURE dbo.RecognitionConsent_Search @TenantId BIGINT,@CustomerId BIGINT
+AS BEGIN SET NOCOUNT ON;SELECT Id,CustomerId,ConsentType,Purpose,GrantedUtc,ExpiresUtc,WithdrawnUtc,ConsentVersion,CapturedByUserId,EvidenceReference,CreatedUtc FROM dbo.CustomerRecognitionConsents WHERE TenantId=@TenantId AND CustomerId=@CustomerId ORDER BY GrantedUtc DESC,Id DESC;END;
+GO
+CREATE OR ALTER PROCEDURE dbo.RecognitionCandidate_Search @TenantId BIGINT,@StoreId BIGINT=NULL,@Status TINYINT=NULL
+AS BEGIN SET NOCOUNT ON;SELECT TOP(500) Id,StoreId,PersonTrackSessionId,BiometricTemplateId,CustomerId,RequestId,Purpose,Confidence,Quality,SecondBestConfidence,Status,CreatedUtc,ReviewedUtc,ReviewedByUserId,ReviewReason FROM dbo.RecognitionCandidates WHERE TenantId=@TenantId AND (@StoreId IS NULL OR StoreId=@StoreId) AND (@Status IS NULL OR Status=@Status) ORDER BY CreatedUtc DESC,Id DESC;END;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.13.0') INSERT dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy) VALUES(N'V1.13.0',N'Phase 14 consent-gated encrypted biometric templates and human-reviewed recognition candidates',SYSUTCDATETIME(),SUSER_SNAME());
+GO
+IF(SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.13.0')<>1 THROW 54790,'V1.13.0 DatabaseVersions row must exist exactly once.',1;
+IF OBJECT_ID(N'dbo.CustomerRecognitionConsents',N'U') IS NULL OR OBJECT_ID(N'dbo.BiometricTemplates',N'U') IS NULL OR OBJECT_ID(N'dbo.RecognitionCandidates',N'U') IS NULL THROW 54791,'Phase 14 tables are incomplete.',1;
+IF OBJECT_ID(N'dbo.RecognitionConsent_Search',N'P') IS NULL OR OBJECT_ID(N'dbo.RecognitionCandidate_Search',N'P') IS NULL THROW 54792,'Phase 14 procedures are incomplete.',1;
+GO
+-- ============================================================
+-- PHASE 15 - REPORTS AND ASYNC EXPORTS
+-- VERSION: V1.14.0
+-- ============================================================/* CustSearch AI Phase 15 - tenant/platform reports and asynchronous export jobs. */
+USE [CustSearch_AI];
+GO
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+GO
+
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL
+   OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.13.0')
+    THROW 54900,'Phase 14 V1.13.0 must be installed before Phase 15.',1;
+GO
+
+/* StorageReference is an opaque application-managed key, never a public URL or client path. */
+IF OBJECT_ID(N'dbo.ReportExportJobs',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ReportExportJobs
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ReportExportJobs PRIMARY KEY,
+        TenantId BIGINT NULL,
+        RequestedByUserId BIGINT NOT NULL,
+        ReportType NVARCHAR(100) NOT NULL,
+        FilterJson NVARCHAR(4000) NOT NULL,
+        Format TINYINT NOT NULL,
+        Status TINYINT NOT NULL CONSTRAINT DF_ReportExportJobs_Status DEFAULT(1),
+        ProgressPercent TINYINT NOT NULL CONSTRAINT DF_ReportExportJobs_Progress DEFAULT(0),
+        StorageReference NVARCHAR(500) NULL,
+        DownloadFileName NVARCHAR(260) NULL,
+        ContentType NVARCHAR(100) NULL,
+        ContentLength BIGINT NULL,
+        Sha256 CHAR(64) NULL,
+        ErrorMessage NVARCHAR(1000) NULL,
+        RequestedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_ReportExportJobs_RequestedUtc DEFAULT(SYSUTCDATETIME()),
+        StartedUtc DATETIME2(7) NULL,
+        HeartbeatUtc DATETIME2(7) NULL,
+        CompletedUtc DATETIME2(7) NULL,
+        ExpiresUtc DATETIME2(7) NULL,
+        AttemptCount INT NOT NULL CONSTRAINT DF_ReportExportJobs_AttemptCount DEFAULT(0),
+        LeaseToken UNIQUEIDENTIFIER NULL,
+        RowVersion ROWVERSION NOT NULL,
+        CONSTRAINT FK_ReportExportJobs_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+        CONSTRAINT FK_ReportExportJobs_Users FOREIGN KEY(RequestedByUserId) REFERENCES dbo.Users(Id),
+        CONSTRAINT CK_ReportExportJobs_Scope CHECK(
+            (TenantId IS NULL AND ReportType LIKE N'Platform.%') OR
+            (TenantId IS NOT NULL AND ReportType LIKE N'Tenant.%')),
+        CONSTRAINT CK_ReportExportJobs_FilterJson CHECK(ISJSON(FilterJson)=1 AND DATALENGTH(FilterJson)<=8000),
+        CONSTRAINT CK_ReportExportJobs_Format CHECK(Format IN(1,2,3)),
+        CONSTRAINT CK_ReportExportJobs_Status CHECK(Status BETWEEN 1 AND 5),
+        CONSTRAINT CK_ReportExportJobs_Progress CHECK(ProgressPercent BETWEEN 0 AND 100),
+        CONSTRAINT CK_ReportExportJobs_Attempts CHECK(AttemptCount BETWEEN 0 AND 20),
+        CONSTRAINT CK_ReportExportJobs_Period CHECK(
+            (StartedUtc IS NULL OR StartedUtc>=RequestedUtc) AND
+            (HeartbeatUtc IS NULL OR HeartbeatUtc>=RequestedUtc) AND
+            (CompletedUtc IS NULL OR CompletedUtc>=RequestedUtc) AND
+            (ExpiresUtc IS NULL OR CompletedUtc IS NULL OR ExpiresUtc>CompletedUtc)),
+        CONSTRAINT CK_ReportExportJobs_Artifact CHECK(
+            (Status=3 AND ProgressPercent=100 AND StorageReference IS NOT NULL AND DownloadFileName IS NOT NULL
+                AND ContentType IS NOT NULL AND ContentLength>=0 AND LEN(Sha256)=64 AND CompletedUtc IS NOT NULL AND ExpiresUtc IS NOT NULL)
+            OR Status<>3),
+        CONSTRAINT CK_ReportExportJobs_Failure CHECK((Status=4 AND ErrorMessage IS NOT NULL AND CompletedUtc IS NOT NULL) OR Status<>4)
+    );
+END;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ReportExportJobs') AND name=N'IX_ReportExportJobs_Queue')
+    CREATE INDEX IX_ReportExportJobs_Queue ON dbo.ReportExportJobs(Status,RequestedUtc,Id)
+    INCLUDE(AttemptCount,HeartbeatUtc) WHERE Status IN(1,2);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ReportExportJobs') AND name=N'IX_ReportExportJobs_Requester')
+    CREATE INDEX IX_ReportExportJobs_Requester ON dbo.ReportExportJobs(RequestedByUserId,RequestedUtc DESC,Id DESC)
+    INCLUDE(TenantId,ReportType,Format,Status,ProgressPercent,ExpiresUtc);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ReportExportJobs') AND name=N'IX_ReportExportJobs_Tenant_Requester')
+    CREATE INDEX IX_ReportExportJobs_Tenant_Requester ON dbo.ReportExportJobs(TenantId,RequestedByUserId,RequestedUtc DESC,Id DESC)
+    WHERE TenantId IS NOT NULL;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ReportExportJobs') AND name=N'IX_ReportExportJobs_Expiry')
+    CREATE INDEX IX_ReportExportJobs_Expiry ON dbo.ReportExportJobs(ExpiresUtc,Id)
+    INCLUDE(StorageReference,Status) WHERE ExpiresUtc IS NOT NULL;
+GO
+
+/* Durable relay from Worker/SQL state changes to the authenticated report SignalR hub. */
+IF OBJECT_ID(N'dbo.ReportExportEvents',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ReportExportEvents
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ReportExportEvents PRIMARY KEY,
+        ReportExportJobId BIGINT NOT NULL,
+        TenantId BIGINT NULL,
+        RequestedByUserId BIGINT NOT NULL,
+        EventType NVARCHAR(50) NOT NULL,
+        JobStatus TINYINT NOT NULL,
+        ProgressPercent TINYINT NOT NULL,
+        CreatedUtc DATETIME2(7) NOT NULL,
+        ClaimedUtc DATETIME2(7) NULL,
+        DeliveredUtc DATETIME2(7) NULL,
+        AttemptCount INT NOT NULL CONSTRAINT DF_ReportExportEvents_Attempts DEFAULT(0),
+        LeaseToken UNIQUEIDENTIFIER NULL,
+        LastError NVARCHAR(500) NULL,
+        CONSTRAINT FK_ReportExportEvents_Jobs FOREIGN KEY(ReportExportJobId) REFERENCES dbo.ReportExportJobs(Id),
+        CONSTRAINT FK_ReportExportEvents_Users FOREIGN KEY(RequestedByUserId) REFERENCES dbo.Users(Id),
+        CONSTRAINT CK_ReportExportEvents_Status CHECK(JobStatus BETWEEN 1 AND 5),
+        CONSTRAINT CK_ReportExportEvents_Progress CHECK(ProgressPercent BETWEEN 0 AND 100),
+        CONSTRAINT CK_ReportExportEvents_Type CHECK(EventType IN(N'ReportExportQueued',N'ReportExportProgress',N'ReportExportReady',N'ReportExportFailed',N'ReportExportExpired'))
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ReportExportEvents') AND name=N'UX_ReportExportEvents_Job_Event_Progress')
+    CREATE UNIQUE INDEX UX_ReportExportEvents_Job_Event_Progress ON dbo.ReportExportEvents(ReportExportJobId,EventType,ProgressPercent);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ReportExportEvents') AND name=N'IX_ReportExportEvents_Delivery')
+    CREATE INDEX IX_ReportExportEvents_Delivery ON dbo.ReportExportEvents(DeliveredUtc,ClaimedUtc,Id) INCLUDE(AttemptCount) WHERE DeliveredUtc IS NULL;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.ReportExportJob_Create
+    @TenantId BIGINT=NULL,
+    @RequestedByUserId BIGINT,
+    @ReportType NVARCHAR(100),
+    @FilterJson NVARCHAR(4000),
+    @Format TINYINT,
+    @IpAddress VARCHAR(64)=NULL,
+    @UserAgent NVARCHAR(500)=NULL,
+    @CorrelationId VARCHAR(64)=NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    SET @ReportType=LTRIM(RTRIM(@ReportType));
+    SET @CorrelationId=LTRIM(RTRIM(@CorrelationId));
+    IF @RequestedByUserId<=0 OR @ReportType=N'' OR ISJSON(@FilterJson)<>1 OR @Format NOT IN(1,2,3) OR NULLIF(@CorrelationId,'') IS NULL
+        THROW 54901,'The export request is invalid.',1;
+
+    IF @TenantId IS NULL
+    BEGIN
+        IF @ReportType NOT LIKE N'Platform.%' OR NOT EXISTS(
+            SELECT 1 FROM dbo.Users WHERE Id=@RequestedByUserId AND Scope=1 AND TenantId IS NULL AND IsActive=1)
+            THROW 54902,'A valid platform requester is required.',1;
+    END
+    ELSE IF @ReportType NOT LIKE N'Tenant.%' OR NOT EXISTS(
+        SELECT 1 FROM dbo.Users WHERE Id=@RequestedByUserId AND Scope=2 AND TenantId=@TenantId AND IsActive=1)
+        THROW 54903,'A valid tenant requester is required.',1;
+
+    DECLARE @RequiredPermission NVARCHAR(150)=CASE @ReportType
+      WHEN N'Tenant.DailyVisitors' THEN N'TenantReports.View' WHEN N'Tenant.CurrentVisitors' THEN N'TenantReports.View'
+      WHEN N'Tenant.NewCustomers' THEN N'TenantReports.View' WHEN N'Tenant.ReturningCustomers' THEN N'TenantReports.View'
+      WHEN N'Tenant.HouseholdVisits' THEN N'Households.View'
+      WHEN N'Tenant.RetailSales' THEN N'RetailReports.View' WHEN N'Tenant.StaffPerformance' THEN N'StaffPerformance.View'
+      WHEN N'Tenant.RetailInvoices' THEN N'RetailReports.View' WHEN N'Tenant.Payments' THEN N'RetailReports.View'
+      WHEN N'Tenant.PersonalSpend' THEN N'RetailReports.View' WHEN N'Tenant.HouseholdSpend' THEN N'RetailReports.View'
+      WHEN N'Tenant.ProductSales' THEN N'RetailReports.View' WHEN N'Tenant.ProductCategorySales' THEN N'RetailReports.View'
+      WHEN N'Tenant.CustomerPreferences' THEN N'Preferences.View' WHEN N'Tenant.HouseholdPreferences' THEN N'Preferences.View'
+      WHEN N'Tenant.CustomerJourneys' THEN N'CustomerJourneys.View'
+      WHEN N'Tenant.CustomerDwell' THEN N'DwellAnalytics.View' WHEN N'Tenant.VoiceCommandUsage' THEN N'VoiceCommands.Audit'
+      WHEN N'Tenant.FamilyVisitParty' THEN N'VisitParties.View' WHEN N'Tenant.CameraHealth' THEN N'Cameras.View'
+      WHEN N'Tenant.Recognition' THEN N'Recognition.View' WHEN N'Tenant.Alerts' THEN N'Alerts.View'
+      WHEN N'Tenant.WebhookDelivery' THEN N'Webhooks.View' WHEN N'Tenant.AuditActivity' THEN N'TenantAudit.View' WHEN N'Tenant.UserActivity' THEN N'TenantAudit.View'
+      WHEN N'Tenant.IntegrationSync' THEN N'Integrations.View'
+      WHEN N'Platform.AuditActivity' THEN N'PlatformAudit.View'
+      WHEN N'Platform.TenantOperationalSummary' THEN N'PlatformReports.View' WHEN N'Platform.PlatformBillingInvoices' THEN N'PlatformReports.View' WHEN N'Platform.PaymentCollection' THEN N'PlatformReports.View'
+      WHEN N'Platform.SubscriptionExpiry' THEN N'PlatformReports.View' WHEN N'Platform.WebhookFailures' THEN N'PlatformReports.View' END;
+    DECLARE @ExportPermission NVARCHAR(150)=CASE WHEN @TenantId IS NULL THEN N'PlatformReports.Export' ELSE N'TenantReports.Export' END;
+    IF @RequiredPermission IS NULL THROW 54904,'The report type is not supported.',1;
+    IF NOT EXISTS(
+        SELECT 1 FROM dbo.UserRoles ur JOIN dbo.Users u ON u.Id=ur.UserId
+        JOIN dbo.Roles r ON r.Id=ur.RoleId AND r.IsActive=1 AND r.Scope=u.Scope AND ((r.TenantId IS NULL AND u.TenantId IS NULL) OR r.TenantId=u.TenantId)
+        JOIN dbo.RolePermissions rp ON rp.RoleId=r.Id JOIN dbo.Permissions p ON p.Id=rp.PermissionId AND p.IsActive=1
+        WHERE ur.UserId=@RequestedByUserId AND p.Name=@ExportPermission)
+        THROW 54905,'Report export permission is required.',1;
+    IF NOT EXISTS(
+        SELECT 1 FROM dbo.UserRoles ur JOIN dbo.Users u ON u.Id=ur.UserId
+        JOIN dbo.Roles r ON r.Id=ur.RoleId AND r.IsActive=1 AND r.Scope=u.Scope AND ((r.TenantId IS NULL AND u.TenantId IS NULL) OR r.TenantId=u.TenantId)
+        JOIN dbo.RolePermissions rp ON rp.RoleId=r.Id JOIN dbo.Permissions p ON p.Id=rp.PermissionId AND p.IsActive=1
+        WHERE ur.UserId=@RequestedByUserId AND p.Name=@RequiredPermission)
+        THROW 54906,'The required report permission is missing.',1;
+
+    DECLARE @Id BIGINT,@IsPlatform BIT=CASE WHEN @TenantId IS NULL THEN 1 ELSE 0 END,@AuditTenantId BIGINT=@TenantId,
+        @AuditStoreId BIGINT,@AuditAction NVARCHAR(100)=CASE WHEN @TenantId IS NULL THEN N'PlatformReportExportQueued' ELSE N'ReportExportQueued' END,
+        @AuditEntityId NVARCHAR(100);
+    BEGIN TRY
+      BEGIN TRANSACTION;
+      INSERT dbo.ReportExportJobs(TenantId,RequestedByUserId,ReportType,FilterJson,Format,Status,ProgressPercent,RequestedUtc)
+      VALUES(@TenantId,@RequestedByUserId,@ReportType,@FilterJson,@Format,1,0,SYSUTCDATETIME());
+      SET @Id=SCOPE_IDENTITY();
+      INSERT dbo.ReportExportEvents(ReportExportJobId,TenantId,RequestedByUserId,EventType,JobStatus,ProgressPercent,CreatedUtc)
+      VALUES(@Id,@TenantId,@RequestedByUserId,N'ReportExportQueued',1,0,SYSUTCDATETIME());
+      IF @AuditTenantId IS NULL SET @AuditTenantId=TRY_CONVERT(BIGINT,JSON_VALUE(@FilterJson,N'$.tenantId'));
+      IF @TenantId IS NOT NULL SET @AuditStoreId=TRY_CONVERT(BIGINT,JSON_VALUE(@FilterJson,N'$.storeId'));
+      SET @AuditEntityId=CONVERT(NVARCHAR(100),@Id);
+      EXEC dbo.ReportAudit_Write @TenantId=@AuditTenantId,@StoreId=@AuditStoreId,
+          @ActorUserId=@RequestedByUserId,@Action=@AuditAction,
+          @EntityType=N'ReportExport',@EntityId=@AuditEntityId,@AfterJson=@FilterJson,@IpAddress=@IpAddress,@UserAgent=@UserAgent,@CorrelationId=@CorrelationId;
+      COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+      IF XACT_STATE()<>0 ROLLBACK TRANSACTION;
+      THROW;
+    END CATCH;
+    EXEC dbo.ReportExportJob_Get @JobId=@Id,@RequestedByUserId=@RequestedByUserId,@TenantId=@TenantId,@IsPlatform=@IsPlatform;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.ReportExportJob_Get
+    @JobId BIGINT,
+    @RequestedByUserId BIGINT=NULL,
+    @TenantId BIGINT=NULL,
+    @IsPlatform BIT=0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    SELECT Id,TenantId,RequestedByUserId,ReportType,FilterJson,Format,Status,ProgressPercent,
+           StorageReference,DownloadFileName,ContentType,ContentLength,Sha256,ErrorMessage,
+           RequestedUtc,StartedUtc,HeartbeatUtc,CompletedUtc,ExpiresUtc,AttemptCount,RowVersion
+    FROM dbo.ReportExportJobs
+    WHERE Id=@JobId
+      AND (@RequestedByUserId IS NULL OR RequestedByUserId=@RequestedByUserId)
+      AND ((@IsPlatform=1 AND TenantId IS NULL) OR (@IsPlatform=0 AND TenantId=@TenantId));
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.ReportExportJob_List
+    @RequestedByUserId BIGINT,
+    @TenantId BIGINT=NULL,
+    @IsPlatform BIT=0,
+    @Status TINYINT=NULL,
+    @Take INT=100
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF @Take<1 SET @Take=1;
+    IF @Take>200 SET @Take=200;
+    SELECT TOP(@Take) Id,TenantId,RequestedByUserId,ReportType,Format,Status,ProgressPercent,
+           CONVERT(NVARCHAR(500),NULL) StorageReference,DownloadFileName,ContentType,ContentLength,Sha256,ErrorMessage,
+           RequestedUtc,StartedUtc,CompletedUtc,ExpiresUtc,AttemptCount
+    FROM dbo.ReportExportJobs
+    WHERE RequestedByUserId=@RequestedByUserId
+      AND ((@IsPlatform=1 AND TenantId IS NULL) OR (@IsPlatform=0 AND TenantId=@TenantId))
+      AND (@Status IS NULL OR Status=@Status)
+    ORDER BY RequestedUtc DESC,Id DESC;
+END;
+GO
+
+/* READPAST/UPDLOCK makes claiming safe across multiple Worker instances. Expired leases are reclaimable. */
+CREATE OR ALTER PROCEDURE dbo.ReportExportJob_Claim @LeaseSeconds INT=300
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF @LeaseSeconds<30 OR @LeaseSeconds>3600 THROW 54904,'LeaseSeconds must be between 30 and 3600.',1;
+
+    DECLARE @Now DATETIME2(7)=SYSUTCDATETIME(),@Lease UNIQUEIDENTIFIER=NEWID();
+    ;WITH Candidate AS
+    (
+        SELECT TOP(1) * FROM dbo.ReportExportJobs WITH(UPDLOCK,READPAST,ROWLOCK)
+        WHERE (Status=1 OR (Status=2 AND HeartbeatUtc<DATEADD(SECOND,-@LeaseSeconds,@Now))) AND AttemptCount<5
+        ORDER BY RequestedUtc,Id
+    )
+    UPDATE Candidate SET Status=2,ProgressPercent=CASE WHEN ProgressPercent<1 THEN 1 ELSE ProgressPercent END,
+        StartedUtc=COALESCE(StartedUtc,@Now),HeartbeatUtc=@Now,AttemptCount=AttemptCount+1,LeaseToken=@Lease,ErrorMessage=NULL
+    OUTPUT inserted.Id,inserted.TenantId,inserted.RequestedByUserId,inserted.ReportType,inserted.FilterJson,
+           inserted.Format,inserted.AttemptCount,inserted.LeaseToken,inserted.RequestedUtc;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.ReportExportJob_Progress @JobId BIGINT,@LeaseToken UNIQUEIDENTIFIER,@ProgressPercent TINYINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF @ProgressPercent<1 OR @ProgressPercent>99 THROW 54905,'Processing progress must be between 1 and 99.',1;
+    UPDATE dbo.ReportExportJobs SET ProgressPercent=@ProgressPercent,HeartbeatUtc=SYSUTCDATETIME()
+    WHERE Id=@JobId AND Status=2 AND LeaseToken=@LeaseToken;
+    IF @@ROWCOUNT<>1 THROW 54906,'The report export lease is no longer valid.',1;
+    INSERT dbo.ReportExportEvents(ReportExportJobId,TenantId,RequestedByUserId,EventType,JobStatus,ProgressPercent,CreatedUtc)
+    SELECT Id,TenantId,RequestedByUserId,N'ReportExportProgress',Status,ProgressPercent,SYSUTCDATETIME() FROM dbo.ReportExportJobs j
+    WHERE Id=@JobId AND NOT EXISTS(SELECT 1 FROM dbo.ReportExportEvents e WHERE e.ReportExportJobId=j.Id AND e.EventType=N'ReportExportProgress' AND e.ProgressPercent=j.ProgressPercent);
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.ReportExportJob_Complete
+    @JobId BIGINT,@LeaseToken UNIQUEIDENTIFIER,@StorageReference NVARCHAR(500),@DownloadFileName NVARCHAR(260),
+    @ContentType NVARCHAR(100),@ContentLength BIGINT,@Sha256 CHAR(64),@RetentionHours INT=24
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF @RetentionHours<1 OR @RetentionHours>168 OR @ContentLength<0 OR LEN(@Sha256)<>64 OR @Sha256 LIKE '%[^0-9a-f]%'
+       OR NULLIF(LTRIM(RTRIM(@StorageReference)),N'') IS NULL OR CHARINDEX(N'..',@StorageReference)>0
+        THROW 54907,'The report artifact metadata is invalid.',1;
+    DECLARE @Now DATETIME2(7)=SYSUTCDATETIME();
+    UPDATE dbo.ReportExportJobs SET Status=3,ProgressPercent=100,StorageReference=@StorageReference,
+        DownloadFileName=@DownloadFileName,ContentType=@ContentType,ContentLength=@ContentLength,Sha256=@Sha256,
+        ErrorMessage=NULL,HeartbeatUtc=@Now,CompletedUtc=@Now,ExpiresUtc=DATEADD(HOUR,@RetentionHours,@Now),LeaseToken=NULL
+    WHERE Id=@JobId AND Status=2 AND LeaseToken=@LeaseToken;
+    IF @@ROWCOUNT<>1 THROW 54908,'The report export lease is no longer valid.',1;
+    INSERT dbo.ReportExportEvents(ReportExportJobId,TenantId,RequestedByUserId,EventType,JobStatus,ProgressPercent,CreatedUtc)
+    SELECT Id,TenantId,RequestedByUserId,N'ReportExportReady',Status,ProgressPercent,@Now FROM dbo.ReportExportJobs j
+    WHERE Id=@JobId AND NOT EXISTS(SELECT 1 FROM dbo.ReportExportEvents e WHERE e.ReportExportJobId=j.Id AND e.EventType=N'ReportExportReady' AND e.ProgressPercent=100);
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.ReportExportJob_Fail @JobId BIGINT,@LeaseToken UNIQUEIDENTIFIER,@ErrorMessage NVARCHAR(1000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF NULLIF(LTRIM(RTRIM(@ErrorMessage)),N'') IS NULL THROW 54909,'A safe failure message is required.',1;
+    UPDATE dbo.ReportExportJobs SET Status=4,ErrorMessage=LEFT(@ErrorMessage,1000),HeartbeatUtc=SYSUTCDATETIME(),
+        CompletedUtc=SYSUTCDATETIME(),LeaseToken=NULL
+    WHERE Id=@JobId AND Status=2 AND LeaseToken=@LeaseToken;
+    IF @@ROWCOUNT<>1 THROW 54910,'The report export lease is no longer valid.',1;
+    INSERT dbo.ReportExportEvents(ReportExportJobId,TenantId,RequestedByUserId,EventType,JobStatus,ProgressPercent,CreatedUtc)
+    SELECT Id,TenantId,RequestedByUserId,N'ReportExportFailed',Status,ProgressPercent,SYSUTCDATETIME() FROM dbo.ReportExportJobs j
+    WHERE Id=@JobId AND NOT EXISTS(SELECT 1 FROM dbo.ReportExportEvents e WHERE e.ReportExportJobId=j.Id AND e.EventType=N'ReportExportFailed' AND e.ProgressPercent=j.ProgressPercent);
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.ReportExportJob_Expire @Take INT=100
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF @Take<1 SET @Take=1;
+    IF @Take>1000 SET @Take=1000;
+    ;WITH Expired AS
+    (
+        SELECT TOP(@Take) * FROM dbo.ReportExportJobs WITH(UPDLOCK,READPAST,ROWLOCK)
+        WHERE Status=3 AND ExpiresUtc<=SYSUTCDATETIME()
+        ORDER BY ExpiresUtc,Id
+    )
+    UPDATE Expired SET Status=5,StorageReference=NULL,LeaseToken=NULL
+    OUTPUT deleted.Id,deleted.StorageReference;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.ReportExportEvent_Claim @LeaseSeconds INT=60,@Take INT=50
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF @LeaseSeconds<15 OR @LeaseSeconds>600 OR @Take<1 OR @Take>200 THROW 54911,'Event claim options are invalid.',1;
+    DECLARE @Now DATETIME2(7)=SYSUTCDATETIME(),@Lease UNIQUEIDENTIFIER=NEWID();
+    ;WITH Due AS
+    (
+        SELECT TOP(@Take) * FROM dbo.ReportExportEvents WITH(UPDLOCK,READPAST,ROWLOCK)
+        WHERE DeliveredUtc IS NULL AND (ClaimedUtc IS NULL OR ClaimedUtc<DATEADD(SECOND,-@LeaseSeconds,@Now)) AND AttemptCount<10
+        ORDER BY Id
+    )
+    UPDATE Due SET ClaimedUtc=@Now,LeaseToken=@Lease,AttemptCount=AttemptCount+1
+    OUTPUT inserted.Id,inserted.ReportExportJobId,inserted.TenantId,inserted.RequestedByUserId,inserted.EventType,inserted.JobStatus,inserted.ProgressPercent,inserted.CreatedUtc,inserted.LeaseToken;
+END;
+GO
+CREATE OR ALTER PROCEDURE dbo.ReportExportEvent_Complete @EventId BIGINT,@LeaseToken UNIQUEIDENTIFIER
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    UPDATE dbo.ReportExportEvents SET DeliveredUtc=SYSUTCDATETIME(),LeaseToken=NULL,LastError=NULL WHERE Id=@EventId AND DeliveredUtc IS NULL AND LeaseToken=@LeaseToken;
+    IF @@ROWCOUNT<>1 THROW 54912,'The report export event lease is no longer valid.',1;
+END;
+GO
+CREATE OR ALTER PROCEDURE dbo.ReportExportEvent_Fail @EventId BIGINT,@LeaseToken UNIQUEIDENTIFIER,@ErrorMessage NVARCHAR(500)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    UPDATE dbo.ReportExportEvents SET ClaimedUtc=NULL,LeaseToken=NULL,LastError=LEFT(COALESCE(NULLIF(@ErrorMessage,N''),N'Delivery failed.'),500) WHERE Id=@EventId AND DeliveredUtc IS NULL AND LeaseToken=@LeaseToken;
+    IF @@ROWCOUNT<>1 THROW 54913,'The report export event lease is no longer valid.',1;
+END;
+GO
+
+/* Worker re-resolves the requester's current role/store authority instead of trusting queued filter JSON. */
+CREATE OR ALTER PROCEDURE dbo.ReportExportRequesterScope_Get @TenantId BIGINT=NULL,@RequestedByUserId BIGINT,@ReportType NVARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    DECLARE @RequiredPermission NVARCHAR(150)=CASE @ReportType
+      WHEN N'Tenant.DailyVisitors' THEN N'TenantReports.View' WHEN N'Tenant.CurrentVisitors' THEN N'TenantReports.View'
+      WHEN N'Tenant.NewCustomers' THEN N'TenantReports.View' WHEN N'Tenant.ReturningCustomers' THEN N'TenantReports.View'
+      WHEN N'Tenant.HouseholdVisits' THEN N'Households.View'
+      WHEN N'Tenant.RetailSales' THEN N'RetailReports.View' WHEN N'Tenant.StaffPerformance' THEN N'StaffPerformance.View'
+      WHEN N'Tenant.RetailInvoices' THEN N'RetailReports.View' WHEN N'Tenant.Payments' THEN N'RetailReports.View'
+      WHEN N'Tenant.PersonalSpend' THEN N'RetailReports.View' WHEN N'Tenant.HouseholdSpend' THEN N'RetailReports.View'
+      WHEN N'Tenant.ProductSales' THEN N'RetailReports.View' WHEN N'Tenant.ProductCategorySales' THEN N'RetailReports.View'
+      WHEN N'Tenant.CustomerPreferences' THEN N'Preferences.View' WHEN N'Tenant.HouseholdPreferences' THEN N'Preferences.View'
+      WHEN N'Tenant.CustomerJourneys' THEN N'CustomerJourneys.View'
+      WHEN N'Tenant.CustomerDwell' THEN N'DwellAnalytics.View' WHEN N'Tenant.VoiceCommandUsage' THEN N'VoiceCommands.Audit'
+      WHEN N'Tenant.FamilyVisitParty' THEN N'VisitParties.View' WHEN N'Tenant.CameraHealth' THEN N'Cameras.View'
+      WHEN N'Tenant.Recognition' THEN N'Recognition.View' WHEN N'Tenant.Alerts' THEN N'Alerts.View'
+      WHEN N'Tenant.WebhookDelivery' THEN N'Webhooks.View' WHEN N'Tenant.AuditActivity' THEN N'TenantAudit.View' WHEN N'Tenant.UserActivity' THEN N'TenantAudit.View'
+      WHEN N'Tenant.IntegrationSync' THEN N'Integrations.View'
+      WHEN N'Platform.AuditActivity' THEN N'PlatformAudit.View'
+      WHEN N'Platform.TenantOperationalSummary' THEN N'PlatformReports.View' WHEN N'Platform.PlatformBillingInvoices' THEN N'PlatformReports.View' WHEN N'Platform.PaymentCollection' THEN N'PlatformReports.View'
+      WHEN N'Platform.SubscriptionExpiry' THEN N'PlatformReports.View' WHEN N'Platform.WebhookFailures' THEN N'PlatformReports.View' END;
+    IF @RequiredPermission IS NULL RETURN;
+    DECLARE @ExportPermission NVARCHAR(150)=CASE WHEN @TenantId IS NULL THEN N'PlatformReports.Export' ELSE N'TenantReports.Export' END;
+    IF NOT EXISTS(SELECT 1 FROM dbo.Users WHERE Id=@RequestedByUserId AND ((@TenantId IS NULL AND TenantId IS NULL) OR TenantId=@TenantId) AND Scope=CASE WHEN @TenantId IS NULL THEN 1 ELSE 2 END AND IsActive=1) RETURN;
+    IF NOT EXISTS(SELECT 1 FROM dbo.UserRoles ur JOIN dbo.Users u ON u.Id=ur.UserId JOIN dbo.Roles r ON r.Id=ur.RoleId AND r.IsActive=1 AND r.Scope=u.Scope AND ((r.TenantId IS NULL AND u.TenantId IS NULL) OR r.TenantId=u.TenantId) JOIN dbo.RolePermissions rp ON rp.RoleId=r.Id JOIN dbo.Permissions p ON p.Id=rp.PermissionId AND p.IsActive=1 WHERE ur.UserId=@RequestedByUserId AND p.Name=@ExportPermission) RETURN;
+    IF NOT EXISTS(SELECT 1 FROM dbo.UserRoles ur JOIN dbo.Users u ON u.Id=ur.UserId JOIN dbo.Roles r ON r.Id=ur.RoleId AND r.IsActive=1 AND r.Scope=u.Scope AND ((r.TenantId IS NULL AND u.TenantId IS NULL) OR r.TenantId=u.TenantId) JOIN dbo.RolePermissions rp ON rp.RoleId=r.Id JOIN dbo.Permissions p ON p.Id=rp.PermissionId AND p.IsActive=1 WHERE ur.UserId=@RequestedByUserId AND p.Name=@RequiredPermission) RETURN;
+    SELECT CONVERT(BIT,CASE WHEN EXISTS(
+        SELECT 1 FROM dbo.UserRoles ur JOIN dbo.Roles r ON r.Id=ur.RoleId
+        WHERE ur.UserId=@RequestedByUserId AND r.TenantId=@TenantId AND r.IsActive=1
+          AND r.NormalizedName IN(N'TENANTADMIN',N'TENANTOWNER',N'SHOPOWNER')) THEN 1 ELSE 0 END) TenantWide;
+    SELECT usa.StoreId FROM dbo.UserStoreAssignments usa JOIN dbo.Stores s ON s.Id=usa.StoreId AND s.TenantId=usa.TenantId
+    WHERE usa.TenantId=@TenantId AND usa.UserId=@RequestedByUserId AND s.IsActive=1 ORDER BY usa.StoreId;
+END;
+GO
+
+/* Append-only access evidence. Platform actions retain the selected target tenant when one exists. */
+CREATE OR ALTER PROCEDURE dbo.ReportAudit_Write
+    @TenantId BIGINT=NULL,@StoreId BIGINT=NULL,@ActorUserId BIGINT,@Action NVARCHAR(100),
+    @EntityType NVARCHAR(100),@EntityId NVARCHAR(100)=NULL,@AfterJson NVARCHAR(4000),
+    @IpAddress VARCHAR(64)=NULL,@UserAgent NVARCHAR(500)=NULL,@CorrelationId VARCHAR(64)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    SET @Action=LTRIM(RTRIM(@Action));SET @EntityType=LTRIM(RTRIM(@EntityType));SET @CorrelationId=LTRIM(RTRIM(@CorrelationId));
+    IF @Action NOT IN(N'ReportPreviewed',N'PlatformReportPreviewed',N'ReportExportQueued',N'PlatformReportExportQueued',N'ReportExportDownloaded',N'PlatformReportExportDownloaded')
+       OR @EntityType<>N'ReportExport' OR @CorrelationId='' OR ISJSON(@AfterJson)<>1 THROW 54914,'The report audit request is invalid.',1;
+    IF @TenantId IS NULL AND @Action=N'PlatformReportExportDownloaded' AND TRY_CONVERT(BIGINT,@EntityId)>0
+        SELECT @TenantId=TRY_CONVERT(BIGINT,JSON_VALUE(FilterJson,N'$.tenantId')) FROM dbo.ReportExportJobs WHERE Id=TRY_CONVERT(BIGINT,@EntityId) AND RequestedByUserId=@ActorUserId AND TenantId IS NULL;
+    IF @TenantId IS NOT NULL AND NOT EXISTS(SELECT 1 FROM dbo.Tenants WHERE Id=@TenantId) THROW 54915,'The report audit tenant is invalid.',1;
+    IF @StoreId IS NOT NULL AND (@TenantId IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.Stores WHERE Id=@StoreId AND TenantId=@TenantId)) THROW 54916,'The report audit store is invalid.',1;
+    IF NOT EXISTS(SELECT 1 FROM dbo.Users WHERE Id=@ActorUserId AND IsActive=1 AND ((Scope=1 AND TenantId IS NULL) OR (Scope=2 AND TenantId=@TenantId))) THROW 54917,'The report audit actor is outside the requested scope.',1;
+    INSERT dbo.AuditLogs(TenantId,StoreId,UserId,ActorType,Action,EntityType,EntityId,BeforeJson,AfterJson,IpAddress,UserAgent,CorrelationId,CreatedUtc)
+    VALUES(@TenantId,@StoreId,@ActorUserId,CASE WHEN EXISTS(SELECT 1 FROM dbo.Users WHERE Id=@ActorUserId AND Scope=1) THEN N'PlatformUser' ELSE N'TenantUser' END,@Action,@EntityType,NULLIF(@EntityId,N''),NULL,@AfterJson,NULLIF(@IpAddress,''),NULLIF(@UserAgent,N''),@CorrelationId,SYSUTCDATETIME());
+END;
+GO
+
+/* Static allow-listed report branches prevent caller-controlled SQL object or column names. */
+CREATE OR ALTER PROCEDURE dbo.TenantReport_Get
+    @TenantId BIGINT,
+    @AllowedStoreIdsCsv NVARCHAR(MAX)=NULL,
+    @ReportType NVARCHAR(100),
+    @StoreId BIGINT=NULL,
+    @FromUtc DATETIME2(7)=NULL,
+    @ToUtc DATETIME2(7)=NULL,
+    @Take INT=10000
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF @TenantId<=0 OR @ReportType NOT LIKE N'Tenant.%' THROW 54920,'A valid tenant report is required.',1;
+    IF @FromUtc IS NOT NULL AND @ToUtc IS NOT NULL AND @FromUtc>=@ToUtc THROW 54921,'FromUtc must be earlier than ToUtc.',1;
+    IF @Take<1 SET @Take=1;
+    IF @Take>10000 SET @Take=10000;
+    IF @StoreId IS NOT NULL AND @AllowedStoreIdsCsv IS NOT NULL
+       AND NOT EXISTS(SELECT 1 FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value)=@StoreId)
+        THROW 54922,'The requested store is outside the authorized scope.',1;
+
+    IF @ReportType=N'Tenant.DailyVisitors'
+    BEGIN
+        SELECT TOP(@Take) CONVERT(date,v.EnteredUtc) VisitDate,v.StoreId,s.StoreName,
+               COUNT_BIG(*) VisitCount,COUNT_BIG(DISTINCT v.CustomerId) CustomerCount,
+               SUM(CASE WHEN v.ExitedUtc IS NULL THEN 1 ELSE 0 END) CurrentVisitorCount
+        FROM dbo.CustomerVisits v JOIN dbo.Stores s ON s.TenantId=v.TenantId AND s.Id=v.StoreId
+        WHERE v.TenantId=@TenantId AND (@StoreId IS NULL OR v.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR v.EnteredUtc>=@FromUtc) AND (@ToUtc IS NULL OR v.EnteredUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR v.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        GROUP BY CONVERT(date,v.EnteredUtc),v.StoreId,s.StoreName ORDER BY VisitDate DESC,v.StoreId;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.CurrentVisitors'
+    BEGIN
+        SELECT TOP(@Take) v.Id VisitId,v.StoreId,s.StoreName,v.CustomerId,c.CustomerCode,
+               CONCAT(c.FirstName,CASE WHEN c.LastName IS NULL THEN N'' ELSE N' '+c.LastName END) CustomerName,v.EnteredUtc,v.Source,v.Status
+        FROM dbo.CustomerVisits v JOIN dbo.Stores s ON s.TenantId=v.TenantId AND s.Id=v.StoreId
+        JOIN dbo.Customers c ON c.TenantId=v.TenantId AND c.Id=v.CustomerId
+        WHERE v.TenantId=@TenantId AND v.ExitedUtc IS NULL AND (@StoreId IS NULL OR v.StoreId=@StoreId)
+          AND (@AllowedStoreIdsCsv IS NULL OR v.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY v.EnteredUtc DESC,v.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.NewCustomers'
+    BEGIN
+        SELECT DISTINCT TOP(@Take) c.Id CustomerId,c.CustomerCode,c.FirstName,c.LastName,c.Mobile,c.Email,c.IsActive,c.CreatedUtc
+        FROM dbo.Customers c LEFT JOIN dbo.CustomerStoreAssignments a ON a.TenantId=c.TenantId AND a.CustomerId=c.Id
+        WHERE c.TenantId=@TenantId AND (@StoreId IS NULL OR a.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR c.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR c.CreatedUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR a.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY c.CreatedUtc DESC,c.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.ReturningCustomers'
+    BEGIN
+        SELECT TOP(@Take) c.Id CustomerId,c.CustomerCode,c.FirstName,c.LastName,COUNT_BIG(*) VisitCount,MIN(v.EnteredUtc) FirstVisitUtc,MAX(v.EnteredUtc) LatestVisitUtc
+        FROM dbo.CustomerVisits v JOIN dbo.Customers c ON c.TenantId=v.TenantId AND c.Id=v.CustomerId
+        WHERE v.TenantId=@TenantId AND (@StoreId IS NULL OR v.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR v.EnteredUtc>=@FromUtc) AND (@ToUtc IS NULL OR v.EnteredUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR v.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        GROUP BY c.Id,c.CustomerCode,c.FirstName,c.LastName HAVING COUNT_BIG(*)>=2 ORDER BY LatestVisitUtc DESC,c.Id;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.HouseholdVisits'
+    BEGIN
+        SELECT TOP(@Take) h.Id HouseholdId,h.HouseholdCode,h.Name HouseholdName,v.Id VisitId,v.VisitCode,v.StoreId,s.StoreName,v.CustomerId,v.EnteredUtc,v.ExitedUtc
+        FROM dbo.Households h JOIN dbo.HouseholdMembers hm ON hm.TenantId=h.TenantId AND hm.HouseholdId=h.Id AND hm.IsActive=1 AND hm.IsVerified=1
+        JOIN dbo.CustomerVisits v ON v.TenantId=hm.TenantId AND v.CustomerId=hm.CustomerId JOIN dbo.Stores s ON s.TenantId=v.TenantId AND s.Id=v.StoreId
+        WHERE h.TenantId=@TenantId AND (@StoreId IS NULL OR v.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR v.EnteredUtc>=@FromUtc) AND (@ToUtc IS NULL OR v.EnteredUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR v.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY v.EnteredUtc DESC,v.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.RetailSales'
+    BEGIN
+        SELECT TOP(@Take) CONVERT(date,i.InvoiceUtc) SalesDate,i.StoreId,s.StoreName,COUNT_BIG(*) InvoiceCount,
+               SUM(i.GrandTotal) NetSales,SUM(i.PaidAmount) PaidAmount,SUM(i.BalanceAmount) OutstandingAmount
+        FROM dbo.RetailInvoices i JOIN dbo.Stores s ON s.TenantId=i.TenantId AND s.Id=i.StoreId
+        WHERE i.TenantId=@TenantId AND i.Status IN(2,3,4) AND (@StoreId IS NULL OR i.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        GROUP BY CONVERT(date,i.InvoiceUtc),i.StoreId,s.StoreName ORDER BY SalesDate DESC,i.StoreId;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.RetailInvoices'
+    BEGIN
+        SELECT TOP(@Take) i.Id InvoiceId,i.InvoiceNumber,i.StoreId,s.StoreName,i.CustomerId,i.HouseholdId,i.InvoiceUtc,i.Subtotal,i.DiscountAmount,i.TaxAmount,i.GrandTotal,i.PaidAmount,i.BalanceAmount,i.Status
+        FROM dbo.RetailInvoices i JOIN dbo.Stores s ON s.TenantId=i.TenantId AND s.Id=i.StoreId
+        WHERE i.TenantId=@TenantId AND (@StoreId IS NULL OR i.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY i.InvoiceUtc DESC,i.Id DESC;RETURN;
+    END;
+    IF @ReportType=N'Tenant.Payments'
+    BEGIN
+        SELECT TOP(@Take) p.Id PaymentId,p.StoreId,s.StoreName,p.InvoiceId,i.InvoiceNumber,p.PaymentReference,p.PaymentMethod,p.Amount,p.PaymentUtc,p.Status,p.ExternalTransactionId
+        FROM dbo.RetailInvoicePayments p JOIN dbo.Stores s ON s.TenantId=p.TenantId AND s.Id=p.StoreId JOIN dbo.RetailInvoices i ON i.TenantId=p.TenantId AND i.Id=p.InvoiceId
+        WHERE p.TenantId=@TenantId AND (@StoreId IS NULL OR p.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR p.PaymentUtc>=@FromUtc) AND (@ToUtc IS NULL OR p.PaymentUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR p.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY p.PaymentUtc DESC,p.Id DESC;RETURN;
+    END;
+    IF @ReportType=N'Tenant.PersonalSpend'
+    BEGIN
+        SELECT TOP(@Take) a.CustomerId,c.CustomerCode,c.FirstName,c.LastName,COUNT_BIG(DISTINCT a.InvoiceId) InvoiceCount,SUM(a.AmountAttributed) AttributedSpend
+        FROM dbo.RetailInvoiceItemAttributions a JOIN dbo.RetailInvoices i ON i.TenantId=a.TenantId AND i.Id=a.InvoiceId AND i.Status IN(2,3,4)
+        JOIN dbo.Customers c ON c.TenantId=a.TenantId AND c.Id=a.CustomerId
+        WHERE a.TenantId=@TenantId AND (@StoreId IS NULL OR i.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        GROUP BY a.CustomerId,c.CustomerCode,c.FirstName,c.LastName ORDER BY AttributedSpend DESC,a.CustomerId;RETURN;
+    END;
+    IF @ReportType=N'Tenant.HouseholdSpend'
+    BEGIN
+        SELECT TOP(@Take) h.Id HouseholdId,h.HouseholdCode,h.Name HouseholdName,COUNT_BIG(i.Id) InvoiceCount,SUM(i.GrandTotal) HouseholdSpend
+        FROM dbo.Households h JOIN dbo.RetailInvoices i ON i.TenantId=h.TenantId AND i.HouseholdId=h.Id AND i.Status IN(2,3,4)
+        WHERE h.TenantId=@TenantId AND (@StoreId IS NULL OR i.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        GROUP BY h.Id,h.HouseholdCode,h.Name ORDER BY HouseholdSpend DESC,h.Id;RETURN;
+    END;
+    IF @ReportType IN(N'Tenant.ProductSales',N'Tenant.ProductCategorySales')
+    BEGIN
+        IF @ReportType=N'Tenant.ProductSales'
+            SELECT TOP(@Take) x.ProductId,x.ProductCodeSnapshot ProductCode,x.ProductNameSnapshot ProductName,SUM(x.Quantity) Quantity,SUM(x.LineTotal) SalesTotal
+            FROM dbo.RetailInvoiceItems x JOIN dbo.RetailInvoices i ON i.TenantId=x.TenantId AND i.Id=x.InvoiceId AND i.Status IN(2,3,4)
+            WHERE x.TenantId=@TenantId AND (@StoreId IS NULL OR i.StoreId=@StoreId) AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc)
+              AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+            GROUP BY x.ProductId,x.ProductCodeSnapshot,x.ProductNameSnapshot ORDER BY SalesTotal DESC,x.ProductId;
+        ELSE
+            SELECT TOP(@Take) x.CategoryId,x.CategoryNameSnapshot CategoryName,SUM(x.Quantity) Quantity,SUM(x.LineTotal) SalesTotal
+            FROM dbo.RetailInvoiceItems x JOIN dbo.RetailInvoices i ON i.TenantId=x.TenantId AND i.Id=x.InvoiceId AND i.Status IN(2,3,4)
+            WHERE x.TenantId=@TenantId AND (@StoreId IS NULL OR i.StoreId=@StoreId) AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc)
+              AND (@AllowedStoreIdsCsv IS NULL OR i.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+            GROUP BY x.CategoryId,x.CategoryNameSnapshot ORDER BY SalesTotal DESC,x.CategoryId;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.StaffPerformance'
+    BEGIN
+        SELECT TOP(@Take) sp.Id StaffProfileId,sp.EmployeeCode,CONCAT(sp.FirstName,N' ',sp.LastName) StaffName,
+               ss.StoreId,s.StoreName,COUNT_BIG(ss.Id) ShiftCount,
+               SUM(CASE WHEN ss.ActualEndsUtc IS NOT NULL THEN DATEDIFF(MINUTE,ss.StartsUtc,ss.ActualEndsUtc) ELSE 0 END) CompletedMinutes
+        FROM dbo.StaffProfiles sp LEFT JOIN dbo.StaffShifts ss ON ss.TenantId=sp.TenantId AND ss.StaffProfileId=sp.Id
+          AND (@StoreId IS NULL OR ss.StoreId=@StoreId) AND (@FromUtc IS NULL OR ss.StartsUtc>=@FromUtc) AND (@ToUtc IS NULL OR ss.StartsUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR ss.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        LEFT JOIN dbo.Stores s ON s.TenantId=ss.TenantId AND s.Id=ss.StoreId
+        WHERE sp.TenantId=@TenantId AND (@AllowedStoreIdsCsv IS NULL OR ss.Id IS NOT NULL)
+        GROUP BY sp.Id,sp.EmployeeCode,sp.FirstName,sp.LastName,ss.StoreId,s.StoreName ORDER BY StaffName,ss.StoreId;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.CustomerDwell'
+    BEGIN
+        SELECT TOP(@Take) p.Id TrackId,p.StoreId,s.StoreName,p.CameraId,c.Name CameraName,p.CustomerId,
+               p.StartUtc,p.EndUtc,CASE WHEN p.EndUtc IS NULL THEN NULL ELSE DATEDIFF(SECOND,p.StartUtc,p.EndUtc) END DwellSeconds,p.Confidence
+        FROM dbo.PersonTrackSessions p JOIN dbo.Stores s ON s.TenantId=p.TenantId AND s.Id=p.StoreId
+        JOIN dbo.Cameras c ON c.TenantId=p.TenantId AND c.StoreId=p.StoreId AND c.Id=p.CameraId
+        WHERE p.TenantId=@TenantId AND p.SubjectKind=2 AND (@StoreId IS NULL OR p.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR p.StartUtc>=@FromUtc) AND (@ToUtc IS NULL OR p.StartUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR p.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY p.StartUtc DESC,p.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.CustomerJourneys'
+    BEGIN
+        SELECT TOP(@Take) v.Id VisitId,v.VisitCode,v.StoreId,s.StoreName,v.CustomerId,c.CustomerCode,v.EnteredUtc,v.ExitedUtc,
+               COUNT_BIG(i.Id) InvoiceCount,COALESCE(SUM(CASE WHEN i.Status IN(2,3,4) THEN i.GrandTotal ELSE 0 END),0) FinalizedSales
+        FROM dbo.CustomerVisits v JOIN dbo.Stores s ON s.TenantId=v.TenantId AND s.Id=v.StoreId JOIN dbo.Customers c ON c.TenantId=v.TenantId AND c.Id=v.CustomerId
+        LEFT JOIN dbo.RetailInvoices i ON i.TenantId=v.TenantId AND i.StoreId=v.StoreId AND i.CustomerVisitId=v.Id
+        WHERE v.TenantId=@TenantId AND (@StoreId IS NULL OR v.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR v.EnteredUtc>=@FromUtc) AND (@ToUtc IS NULL OR v.EnteredUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR v.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        GROUP BY v.Id,v.VisitCode,v.StoreId,s.StoreName,v.CustomerId,c.CustomerCode,v.EnteredUtc,v.ExitedUtc ORDER BY v.EnteredUtc DESC,v.Id DESC;RETURN;
+    END;
+    IF @ReportType=N'Tenant.CustomerPreferences'
+    BEGIN
+        SELECT TOP(@Take) p.Id,p.CustomerId,c.CustomerCode,p.PreferenceType,p.ReferenceId,p.Value,p.Score,p.WeightVersionId,p.CalculatedUtc
+        FROM dbo.CustomerPreferenceScores p JOIN dbo.Customers c ON c.TenantId=p.TenantId AND c.Id=p.CustomerId
+        WHERE p.TenantId=@TenantId AND (@FromUtc IS NULL OR p.CalculatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR p.CalculatedUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR EXISTS(SELECT 1 FROM dbo.CustomerStoreAssignments a WHERE a.TenantId=p.TenantId AND a.CustomerId=p.CustomerId AND a.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL)))
+        ORDER BY p.CalculatedUtc DESC,p.Id DESC;RETURN;
+    END;
+    IF @ReportType=N'Tenant.HouseholdPreferences'
+    BEGIN
+        SELECT TOP(@Take) p.Id,p.HouseholdId,h.HouseholdCode,h.Name HouseholdName,p.PreferenceType,p.ReferenceId,p.Value,p.Source,p.Reason,p.CreatedUtc
+        FROM dbo.HouseholdPreferenceTags p JOIN dbo.Households h ON h.TenantId=p.TenantId AND h.Id=p.HouseholdId
+        WHERE p.TenantId=@TenantId AND p.IsActive=1 AND (@FromUtc IS NULL OR p.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR p.CreatedUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR EXISTS(SELECT 1 FROM dbo.HouseholdMembers hm JOIN dbo.CustomerStoreAssignments a ON a.TenantId=hm.TenantId AND a.CustomerId=hm.CustomerId WHERE hm.TenantId=p.TenantId AND hm.HouseholdId=p.HouseholdId AND hm.IsActive=1 AND a.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL)))
+        ORDER BY p.CreatedUtc DESC,p.Id DESC;RETURN;
+    END;
+    IF @ReportType=N'Tenant.VoiceCommandUsage'
+    BEGIN
+        SELECT TOP(@Take) v.Id,v.StoreId,s.StoreName,v.StaffUserId,v.CustomerId,v.MatchedTrigger,
+               v.RecognitionConfidence,v.ConfirmationRequired,v.Status,v.CreatedUtc,v.ResolvedUtc
+        FROM dbo.VoiceCommandSessions v JOIN dbo.Stores s ON s.TenantId=v.TenantId AND s.Id=v.StoreId
+        WHERE v.TenantId=@TenantId AND (@StoreId IS NULL OR v.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR v.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR v.CreatedUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR v.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY v.CreatedUtc DESC,v.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.FamilyVisitParty'
+    BEGIN
+        SELECT TOP(@Take) p.Id VisitPartyId,p.PartyCode,p.StoreId,s.StoreName,p.StartedUtc,p.EndedUtc,p.Source,p.Status,
+               COUNT_BIG(m.Id) MemberCount,SUM(CASE WHEN m.CustomerId IS NOT NULL THEN 1 ELSE 0 END) KnownCustomerCount
+        FROM dbo.VisitParties p JOIN dbo.Stores s ON s.TenantId=p.TenantId AND s.Id=p.StoreId
+        LEFT JOIN dbo.VisitPartyMembers m ON m.TenantId=p.TenantId AND m.StoreId=p.StoreId AND m.VisitPartyId=p.Id
+        WHERE p.TenantId=@TenantId AND (@StoreId IS NULL OR p.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR p.StartedUtc>=@FromUtc) AND (@ToUtc IS NULL OR p.StartedUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR p.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        GROUP BY p.Id,p.PartyCode,p.StoreId,s.StoreName,p.StartedUtc,p.EndedUtc,p.Source,p.Status
+        ORDER BY p.StartedUtc DESC,p.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.CameraHealth'
+    BEGIN
+        SELECT TOP(@Take) c.Id CameraId,c.StoreId,s.StoreName,c.CameraCode,c.Name,c.Status,c.IsActive,c.LastHeartbeatUtc,
+               DATEDIFF(MINUTE,c.LastHeartbeatUtc,SYSUTCDATETIME()) MinutesSinceHeartbeat
+        FROM dbo.Cameras c JOIN dbo.Stores s ON s.TenantId=c.TenantId AND s.Id=c.StoreId
+        WHERE c.TenantId=@TenantId AND (@StoreId IS NULL OR c.StoreId=@StoreId)
+          AND (@AllowedStoreIdsCsv IS NULL OR c.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY c.StoreId,c.CameraCode;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.Recognition'
+    BEGIN
+        SELECT TOP(@Take) r.Id,r.StoreId,s.StoreName,r.CustomerId,r.Confidence,r.Quality,r.Status,r.CreatedUtc,r.ReviewedUtc,r.ReviewedByUserId
+        FROM dbo.RecognitionCandidates r JOIN dbo.Stores s ON s.TenantId=r.TenantId AND s.Id=r.StoreId
+        WHERE r.TenantId=@TenantId AND (@StoreId IS NULL OR r.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR r.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR r.CreatedUtc<@ToUtc)
+          AND (@AllowedStoreIdsCsv IS NULL OR r.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY r.CreatedUtc DESC,r.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.Alerts'
+    BEGIN
+        SELECT TOP(@Take) a.Id,a.StoreId,s.StoreName,a.AlertType,a.Severity,a.Title,a.Status,a.CreatedUtc,a.AcknowledgedUtc,a.ResolvedUtc
+        FROM dbo.Alerts a LEFT JOIN dbo.Stores s ON s.TenantId=a.TenantId AND s.Id=a.StoreId
+        WHERE a.TenantId=@TenantId AND (@StoreId IS NULL OR a.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR a.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR a.CreatedUtc<@ToUtc)
+          AND (a.StoreId IS NULL OR @AllowedStoreIdsCsv IS NULL OR a.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY a.CreatedUtc DESC,a.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.WebhookDelivery'
+    BEGIN
+        SELECT TOP(@Take) l.Id,l.IntegrationConfigurationId,l.Provider,l.Direction,l.Status,l.DurationMilliseconds,l.HttpStatusCode,l.ErrorCategory,l.CreatedUtc
+        FROM dbo.IntegrationDeliveryLogs l
+        WHERE l.TenantId=@TenantId AND (@FromUtc IS NULL OR l.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR l.CreatedUtc<@ToUtc)
+        ORDER BY l.CreatedUtc DESC,l.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Tenant.IntegrationSync'
+    BEGIN
+        SELECT TOP(@Take) x.Direction,x.Id,x.IntegrationConfigurationId,x.EventType,x.Status,x.AttemptCount,x.OccurredUtc
+        FROM(
+          SELECT N'Inbound' Direction,e.Id,e.IntegrationConfigurationId,e.EventType,e.Status,CONVERT(INT,NULL) AttemptCount,e.ReceivedUtc OccurredUtc FROM dbo.IntegrationInboundEvents e WHERE e.TenantId=@TenantId
+          UNION ALL
+          SELECT N'Outbound',o.Id,o.IntegrationConfigurationId,o.EventType,o.Status,o.AttemptCount,o.CreatedUtc FROM dbo.IntegrationOutbox o WHERE o.TenantId=@TenantId
+        )x
+        WHERE @AllowedStoreIdsCsv IS NULL AND (@FromUtc IS NULL OR x.OccurredUtc>=@FromUtc) AND (@ToUtc IS NULL OR x.OccurredUtc<@ToUtc)
+        ORDER BY x.OccurredUtc DESC,x.Id DESC;RETURN;
+    END;
+    IF @ReportType IN(N'Tenant.AuditActivity',N'Tenant.UserActivity')
+    BEGIN
+        SELECT TOP(@Take) a.Id,a.StoreId,a.UserId,a.ActorType,a.Action,a.EntityType,a.EntityId,a.CorrelationId,a.CreatedUtc
+        FROM dbo.AuditLogs a
+        WHERE a.TenantId=@TenantId AND (@StoreId IS NULL OR a.StoreId=@StoreId)
+          AND (@FromUtc IS NULL OR a.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR a.CreatedUtc<@ToUtc)
+          AND (a.StoreId IS NULL OR @AllowedStoreIdsCsv IS NULL OR a.StoreId IN(SELECT TRY_CONVERT(BIGINT,value) FROM STRING_SPLIT(@AllowedStoreIdsCsv,N',') WHERE TRY_CONVERT(BIGINT,value) IS NOT NULL))
+        ORDER BY a.CreatedUtc DESC,a.Id DESC;
+        RETURN;
+    END;
+    THROW 54923,'The tenant report type is not supported.',1;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.PlatformReport_Get
+    @ReportType NVARCHAR(100),@TenantId BIGINT=NULL,@FromUtc DATETIME2(7)=NULL,@ToUtc DATETIME2(7)=NULL,@Take INT=10000
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF @ReportType NOT LIKE N'Platform.%' THROW 54930,'A valid platform report is required.',1;
+    IF @FromUtc IS NOT NULL AND @ToUtc IS NOT NULL AND @FromUtc>=@ToUtc THROW 54931,'FromUtc must be earlier than ToUtc.',1;
+    IF @Take<1 SET @Take=1;
+    IF @Take>10000 SET @Take=10000;
+
+    IF @ReportType=N'Platform.TenantOperationalSummary'
+    BEGIN
+        SELECT TOP(@Take) t.Id TenantId,t.TenantCode,t.DisplayName,t.IsActive,t.IsSuspended,t.SubscriptionStatus,
+            (SELECT COUNT_BIG(*) FROM dbo.Stores s WHERE s.TenantId=t.Id) StoreCount,
+            (SELECT COUNT_BIG(*) FROM dbo.Users u WHERE u.TenantId=t.Id) UserCount,
+            (SELECT COUNT_BIG(*) FROM dbo.Customers c WHERE c.TenantId=t.Id) ShopperCount,
+            (SELECT COUNT_BIG(*) FROM dbo.Cameras c WHERE c.TenantId=t.Id) CameraCount,
+            (SELECT COUNT_BIG(*) FROM dbo.CustomerVisits v WHERE v.TenantId=t.Id AND (@FromUtc IS NULL OR v.EnteredUtc>=@FromUtc) AND (@ToUtc IS NULL OR v.EnteredUtc<@ToUtc)) VisitCount,
+            (SELECT COALESCE(SUM(i.GrandTotal),0) FROM dbo.RetailInvoices i WHERE i.TenantId=t.Id AND i.Status IN(2,3,4) AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc)) RetailSales,
+            (SELECT COUNT_BIG(*) FROM dbo.Alerts a WHERE a.TenantId=t.Id AND (@FromUtc IS NULL OR a.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR a.CreatedUtc<@ToUtc)) AlertCount
+        FROM dbo.Tenants t WHERE (@TenantId IS NULL OR t.Id=@TenantId) ORDER BY t.TenantCode;
+        RETURN;
+    END;
+    IF @ReportType=N'Platform.PlatformBillingInvoices'
+    BEGIN
+        SELECT TOP(@Take) i.Id,i.TenantId,t.TenantCode,t.DisplayName,i.InvoiceNumber,i.Currency,i.InvoiceUtc,i.DueUtc,i.Status,i.Total,i.PaidAmount,(i.Total-i.PaidAmount) BalanceAmount
+        FROM dbo.PlatformInvoices i JOIN dbo.Tenants t ON t.Id=i.TenantId
+        WHERE (@TenantId IS NULL OR i.TenantId=@TenantId) AND (@FromUtc IS NULL OR i.InvoiceUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.InvoiceUtc<@ToUtc)
+        ORDER BY i.InvoiceUtc DESC,i.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Platform.PaymentCollection'
+    BEGIN
+        SELECT TOP(@Take) p.Id PaymentId,p.TenantId,t.TenantCode,t.DisplayName,p.PlatformInvoiceId,i.InvoiceNumber,p.PaymentMethod,p.Amount,p.Currency,p.GatewayReference,p.TransactionReference,p.PaymentUtc,p.Status
+        FROM dbo.PlatformPayments p JOIN dbo.Tenants t ON t.Id=p.TenantId JOIN dbo.PlatformInvoices i ON i.Id=p.PlatformInvoiceId AND i.TenantId=p.TenantId
+        WHERE (@TenantId IS NULL OR p.TenantId=@TenantId) AND (@FromUtc IS NULL OR p.PaymentUtc>=@FromUtc) AND (@ToUtc IS NULL OR p.PaymentUtc<@ToUtc)
+        ORDER BY p.PaymentUtc DESC,p.Id DESC;RETURN;
+    END;
+    IF @ReportType=N'Platform.SubscriptionExpiry'
+    BEGIN
+        SELECT TOP(@Take) s.Id SubscriptionId,s.TenantId,t.TenantCode,t.DisplayName,p.PlanCode,p.PlanName,s.Status,s.CurrentPeriodEndUtc,s.EndsUtc,s.CancelAtPeriodEnd
+        FROM dbo.TenantSubscriptions s JOIN dbo.Tenants t ON t.Id=s.TenantId JOIN dbo.SubscriptionPlans p ON p.Id=s.SubscriptionPlanId
+        WHERE (@TenantId IS NULL OR s.TenantId=@TenantId) AND (@FromUtc IS NULL OR COALESCE(s.CurrentPeriodEndUtc,s.EndsUtc)>=@FromUtc) AND (@ToUtc IS NULL OR COALESCE(s.CurrentPeriodEndUtc,s.EndsUtc)<@ToUtc)
+        ORDER BY COALESCE(s.CurrentPeriodEndUtc,s.EndsUtc),s.Id;
+        RETURN;
+    END;
+    IF @ReportType=N'Platform.WebhookFailures'
+    BEGIN
+        SELECT TOP(@Take) l.Id,l.TenantId,t.TenantCode,l.Provider,l.Direction,l.Status,l.HttpStatusCode,l.ErrorCategory,l.DurationMilliseconds,l.CreatedUtc
+        FROM dbo.IntegrationDeliveryLogs l JOIN dbo.Tenants t ON t.Id=l.TenantId
+        WHERE l.Status<>2 AND (@TenantId IS NULL OR l.TenantId=@TenantId) AND (@FromUtc IS NULL OR l.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR l.CreatedUtc<@ToUtc)
+        ORDER BY l.CreatedUtc DESC,l.Id DESC;
+        RETURN;
+    END;
+    IF @ReportType=N'Platform.AuditActivity'
+    BEGIN
+        SELECT TOP(@Take) a.Id,a.TenantId,t.TenantCode,a.StoreId,a.UserId,a.ActorType,a.Action,a.EntityType,a.EntityId,a.CorrelationId,a.CreatedUtc
+        FROM dbo.AuditLogs a LEFT JOIN dbo.Tenants t ON t.Id=a.TenantId
+        WHERE (@TenantId IS NULL OR a.TenantId=@TenantId) AND (@FromUtc IS NULL OR a.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR a.CreatedUtc<@ToUtc)
+        ORDER BY a.CreatedUtc DESC,a.Id DESC;
+        RETURN;
+    END;
+    THROW 54932,'The platform report type is not supported.',1;
+END;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.14.0')
+    INSERT dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy)
+    VALUES(N'V1.14.0',N'Phase 15 tenant/platform operational reports and asynchronous export job lifecycle',SYSUTCDATETIME(),SUSER_SNAME());
+GO
+
+IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.14.0')<>1 THROW 54990,'V1.14.0 must exist exactly once.',1;
+IF OBJECT_ID(N'dbo.ReportExportJobs',N'U') IS NULL OR OBJECT_ID(N'dbo.ReportExportEvents',N'U') IS NULL THROW 54991,'Phase 15 report export tables are missing.',1;
+IF OBJECT_ID(N'dbo.ReportExportJob_Claim',N'P') IS NULL OR OBJECT_ID(N'dbo.ReportExportRequesterScope_Get',N'P') IS NULL OR OBJECT_ID(N'dbo.ReportAudit_Write',N'P') IS NULL OR OBJECT_ID(N'dbo.ReportExportEvent_Claim',N'P') IS NULL OR OBJECT_ID(N'dbo.TenantReport_Get',N'P') IS NULL OR OBJECT_ID(N'dbo.PlatformReport_Get',N'P') IS NULL THROW 54992,'Phase 15 procedures are incomplete.',1;
+GO
+-- ============================================================
+-- PHASE 16 - OPERATIONAL PLATFORM
+-- VERSION: V1.15.0
+-- ============================================================/* CustSearch AI Phase 16 - operational settings, audit, worker heartbeat and health. */
+USE [CustSearch_AI];
+GO
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+GO
+
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL
+   OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.14.0')
+    THROW 55000,'Phase 15 V1.14.0 must be installed before Phase 16.',1;
+GO
+
+/* Values are operational policy only. Secrets belong in a deployment secret provider. */
+IF OBJECT_ID(N'dbo.SystemSettings',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SystemSettings
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SystemSettings PRIMARY KEY,
+        TenantId BIGINT NULL,
+        StoreId BIGINT NULL,
+        SettingKey NVARCHAR(100) NOT NULL,
+        ValueType TINYINT NOT NULL,
+        SettingValue NVARCHAR(1000) NOT NULL,
+        Description NVARCHAR(500) NULL,
+        UpdatedByUserId BIGINT NULL,
+        CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SystemSettings_CreatedUtc DEFAULT(SYSUTCDATETIME()),
+        UpdatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SystemSettings_UpdatedUtc DEFAULT(SYSUTCDATETIME()),
+        RowVersion ROWVERSION NOT NULL,
+        CONSTRAINT FK_SystemSettings_Tenants FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),
+        CONSTRAINT FK_SystemSettings_Stores FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),
+        CONSTRAINT FK_SystemSettings_UpdatedBy FOREIGN KEY(UpdatedByUserId) REFERENCES dbo.Users(Id),
+        CONSTRAINT CK_SystemSettings_Scope CHECK((TenantId IS NULL AND StoreId IS NULL) OR TenantId IS NOT NULL),
+        CONSTRAINT CK_SystemSettings_Key CHECK(SettingKey<>N'' AND SettingKey NOT LIKE N'%[^A-Za-z0-9._-]%'),
+        CONSTRAINT CK_SystemSettings_ValueType CHECK(ValueType BETWEEN 1 AND 4),
+        CONSTRAINT CK_SystemSettings_Value CHECK(
+            (ValueType=1 AND SettingValue IN(N'true',N'false')) OR
+            (ValueType=2 AND TRY_CONVERT(BIGINT,SettingValue) IS NOT NULL) OR
+            (ValueType=3 AND TRY_CONVERT(DECIMAL(19,6),SettingValue) IS NOT NULL) OR
+            (ValueType=4 AND DATALENGTH(SettingValue)<=2000))
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SystemSettings') AND name=N'UX_SystemSettings_Platform')
+    CREATE UNIQUE INDEX UX_SystemSettings_Platform ON dbo.SystemSettings(SettingKey) WHERE TenantId IS NULL AND StoreId IS NULL;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SystemSettings') AND name=N'UX_SystemSettings_Tenant')
+    CREATE UNIQUE INDEX UX_SystemSettings_Tenant ON dbo.SystemSettings(TenantId,SettingKey) WHERE TenantId IS NOT NULL AND StoreId IS NULL;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SystemSettings') AND name=N'UX_SystemSettings_Store')
+    CREATE UNIQUE INDEX UX_SystemSettings_Store ON dbo.SystemSettings(TenantId,StoreId,SettingKey) WHERE StoreId IS NOT NULL;
+GO
+
+IF OBJECT_ID(N'dbo.WorkerHeartbeats',N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.WorkerHeartbeats
+    (
+        InstanceId NVARCHAR(100) NOT NULL CONSTRAINT PK_WorkerHeartbeats PRIMARY KEY,
+        WorkerName NVARCHAR(100) NOT NULL,
+        Status TINYINT NOT NULL,
+        StartedUtc DATETIME2(7) NOT NULL,
+        LastHeartbeatUtc DATETIME2(7) NOT NULL,
+        LastSuccessfulCycleUtc DATETIME2(7) NULL,
+        LastErrorUtc DATETIME2(7) NULL,
+        LastError NVARCHAR(1000) NULL,
+        MetadataJson NVARCHAR(2000) NULL,
+        CONSTRAINT CK_WorkerHeartbeats_Status CHECK(Status BETWEEN 1 AND 3),
+        CONSTRAINT CK_WorkerHeartbeats_Time CHECK(LastHeartbeatUtc>=StartedUtc AND (LastSuccessfulCycleUtc IS NULL OR LastSuccessfulCycleUtc>=StartedUtc)),
+        CONSTRAINT CK_WorkerHeartbeats_Metadata CHECK(MetadataJson IS NULL OR ISJSON(MetadataJson)=1)
+    );
+END;
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.WorkerHeartbeats') AND name=N'IX_WorkerHeartbeats_Health')
+    CREATE INDEX IX_WorkerHeartbeats_Health ON dbo.WorkerHeartbeats(LastHeartbeatUtc DESC) INCLUDE(WorkerName,Status,LastSuccessfulCycleUtc,LastErrorUtc);
+GO
+
+DECLARE @PlatformPermissions TABLE(Name NVARCHAR(150),Description NVARCHAR(300));
+INSERT @PlatformPermissions VALUES
+(N'PlatformSettings.View',N'View platform operational settings.'),
+(N'PlatformSettings.Manage',N'Manage platform operational settings.'),
+(N'SystemHealth.View',N'View platform operational health.');
+INSERT dbo.Permissions(Scope,Name,Description,IsActive,CreatedUtc)
+SELECT 1,p.Name,p.Description,1,SYSUTCDATETIME() FROM @PlatformPermissions p
+WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Name=p.Name);
+GO
+INSERT dbo.RolePermissions(RoleId,PermissionId)
+SELECT r.Id,p.Id FROM dbo.Roles r CROSS JOIN dbo.Permissions p
+WHERE r.Scope=1 AND r.IsActive=1 AND p.Scope=1 AND p.IsActive=1
+  AND ((r.NormalizedName IN(N'PLATFORMSUPERADMIN',N'PLATFORMOPERATIONSADMIN') AND p.Name IN(N'PlatformSettings.View',N'PlatformSettings.Manage',N'SystemHealth.View'))
+    OR (r.NormalizedName IN(N'PLATFORMSUPPORTADMIN',N'PLATFORMAUDITOR') AND p.Name=N'SystemHealth.View'))
+  AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
+GO
+
+DECLARE @Defaults TABLE(SettingKey NVARCHAR(100),ValueType TINYINT,SettingValue NVARCHAR(1000),Description NVARCHAR(500));
+INSERT @Defaults VALUES
+(N'RecognitionThreshold',3,N'0.85',N'Minimum recognition confidence.'),(N'ReviewThreshold',3,N'0.70',N'Minimum human-review confidence.'),
+(N'FaceQualityThreshold',3,N'0.70',N'Minimum face-template quality.'),(N'PersonDetectionThreshold',3,N'0.60',N'Minimum person-detection confidence.'),
+(N'AIProcessingFPS',2,N'5',N'Target AI frames per second.'),(N'SamePersonCooldownSeconds',2,N'30',N'Duplicate event cooldown.'),
+(N'PartyDetectionWindowSeconds',2,N'15',N'Visit-party grouping window.'),(N'NotificationCooldownMinutes',2,N'5',N'Notification cooldown.'),
+(N'HighValueThreshold',3,N'0',N'Configured factual high-value purchase threshold; zero disables classification.'),(N'SnapshotEnabled',1,N'false',N'Allow evidence snapshots when consent and policy permit.'),
+(N'SnapshotRetentionDays',2,N'30',N'Snapshot retention period.'),(N'AnonymousVisitorRetentionDays',2,N'30',N'Anonymous visitor retention period.'),
+(N'WebhookRetryCount',2,N'5',N'Maximum webhook attempts.'),(N'WebhookTimeoutSeconds',2,N'30',N'Webhook timeout.'),(N'DemoMode',1,N'false',N'Enable demo workflows outside production.'),
+(N'StaffTrackingEnabled',1,N'true',N'Enable disclosed staff tracking.'),(N'StaffZoneTrackingEnabled',1,N'true',N'Enable staff zone tracking.'),
+(N'StaffCustomerInteractionTrackingEnabled',1,N'true',N'Enable staff/customer interaction tracking.'),(N'CustomerDwellTrackingEnabled',1,N'true',N'Enable customer dwell tracking.'),
+(N'CustomerJourneyTrackingEnabled',1,N'true',N'Enable customer journey tracking.'),(N'StaffAssistedConversionEnabled',1,N'true',N'Enable assisted conversion tracking.'),
+(N'AssistedConversionWindowMinutes',2,N'120',N'Assisted conversion window.'),(N'MultiPersonTrackingEnabled',1,N'true',N'Enable multi-person tracking.'),
+(N'VisitPartyDetectionEnabled',1,N'true',N'Enable visit-party detection.'),(N'VerifiedHouseholdContextEnabled',1,N'true',N'Allow verified household context.'),
+(N'FamilyGroupTrackingEnabled',1,N'true',N'Enable verified family group tracking.'),(N'AutoSuggestFrequentCoVisitorsEnabled',1,N'true',N'Suggest frequent co-visitors for human review.'),
+(N'AutoLinkHouseholdFromFaceSimilarity',1,N'false',N'Must remain false; never infer family relationship from facial similarity.'),
+(N'VoiceCommandEnabled',1,N'true',N'Enable configured staff voice commands.'),(N'VoiceCommandDefaultLanguageCode',4,N'en-IN',N'Default voice language.'),
+(N'VoiceCommandConfirmationMode',4,N'Ambiguous',N'Voice confirmation policy.'),(N'VoiceCommandSessionTimeoutSeconds',2,N'30',N'Voice session timeout.'),
+(N'AllowVoiceCategoryCreate',1,N'false',N'Prevent unreviewed category creation from voice.' );
+INSERT dbo.SystemSettings(TenantId,StoreId,SettingKey,ValueType,SettingValue,Description,UpdatedByUserId,CreatedUtc,UpdatedUtc)
+SELECT NULL,NULL,d.SettingKey,d.ValueType,d.SettingValue,d.Description,NULL,SYSUTCDATETIME(),SYSUTCDATETIME()
+FROM @Defaults d WHERE NOT EXISTS(SELECT 1 FROM dbo.SystemSettings s WHERE s.TenantId IS NULL AND s.StoreId IS NULL AND s.SettingKey=d.SettingKey);
+GO
+
+CREATE OR ALTER PROCEDURE dbo.SystemSetting_List
+    @TenantId BIGINT=NULL,@StoreId BIGINT=NULL,@IncludeInherited BIT=1
+AS
+BEGIN
+    SET NOCOUNT ON; SET XACT_ABORT ON;
+    IF @StoreId IS NOT NULL AND (@TenantId IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.Stores WHERE Id=@StoreId AND TenantId=@TenantId))
+        THROW 55001,'The store is outside the authorized tenant.',1;
+    IF @IncludeInherited=0
+    BEGIN
+        SELECT Id,TenantId,StoreId,SettingKey,ValueType,SettingValue,Description,UpdatedByUserId,CreatedUtc,UpdatedUtc,
+            CASE WHEN StoreId IS NOT NULL THEN N'Store' WHEN TenantId IS NOT NULL THEN N'Tenant' ELSE N'Platform' END SourceScope
+        FROM dbo.SystemSettings
+        WHERE ((@TenantId IS NULL AND TenantId IS NULL AND StoreId IS NULL) OR
+               (@TenantId IS NOT NULL AND TenantId=@TenantId AND ((@StoreId IS NULL AND StoreId IS NULL) OR StoreId=@StoreId)))
+        ORDER BY SettingKey; RETURN;
+    END;
+    ;WITH Candidates AS
+    (
+        SELECT s.*,CASE WHEN s.StoreId=@StoreId AND @StoreId IS NOT NULL THEN 3 WHEN s.TenantId=@TenantId AND s.StoreId IS NULL AND @TenantId IS NOT NULL THEN 2 ELSE 1 END Priority
+        FROM dbo.SystemSettings s
+        WHERE (s.TenantId IS NULL AND s.StoreId IS NULL)
+           OR (@TenantId IS NOT NULL AND s.TenantId=@TenantId AND s.StoreId IS NULL)
+           OR (@StoreId IS NOT NULL AND s.TenantId=@TenantId AND s.StoreId=@StoreId)
+    ), Ranked AS
+    (
+        SELECT *,ROW_NUMBER() OVER(PARTITION BY SettingKey ORDER BY Priority DESC,Id DESC) rn FROM Candidates
+    )
+    SELECT Id,TenantId,StoreId,SettingKey,ValueType,SettingValue,Description,UpdatedByUserId,CreatedUtc,UpdatedUtc,
+        CASE Priority WHEN 3 THEN N'Store' WHEN 2 THEN N'Tenant' ELSE N'Platform' END SourceScope
+    FROM Ranked WHERE rn=1 ORDER BY SettingKey;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.SystemSetting_Upsert
+    @TenantId BIGINT=NULL,@StoreId BIGINT=NULL,@SettingKey NVARCHAR(100),@ValueType TINYINT,@SettingValue NVARCHAR(1000),
+    @Description NVARCHAR(500)=NULL,@UpdatedByUserId BIGINT,@IpAddress VARCHAR(64)=NULL,@UserAgent NVARCHAR(500)=NULL,@CorrelationId VARCHAR(64)
+AS
+BEGIN
+    SET NOCOUNT ON; SET XACT_ABORT ON;
+    SET @SettingKey=LTRIM(RTRIM(@SettingKey)); SET @SettingValue=LTRIM(RTRIM(@SettingValue));
+    SET @CorrelationId=LTRIM(RTRIM(@CorrelationId));
+    IF @SettingKey=N'' OR @SettingKey LIKE N'%[^A-Za-z0-9._-]%' OR @ValueType NOT BETWEEN 1 AND 4 OR NULLIF(@CorrelationId,'') IS NULL
+        THROW 55002,'The setting key or type is invalid.',1;
+    IF (@ValueType=1 AND @SettingValue NOT IN(N'true',N'false')) OR (@ValueType=2 AND TRY_CONVERT(BIGINT,@SettingValue) IS NULL)
+       OR (@ValueType=3 AND TRY_CONVERT(DECIMAL(19,6),@SettingValue) IS NULL) OR (@ValueType=4 AND DATALENGTH(@SettingValue)>2000)
+        THROW 55003,'The setting value does not match its declared type.',1;
+    IF @TenantId IS NOT NULL AND @SettingKey=N'AutoLinkHouseholdFromFaceSimilarity'
+        THROW 55006,'This safety setting is platform-controlled.',1;
+    IF @StoreId IS NOT NULL AND (@TenantId IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.Stores WHERE Id=@StoreId AND TenantId=@TenantId))
+        THROW 55004,'The store is outside the authorized tenant.',1;
+    IF NOT EXISTS(SELECT 1 FROM dbo.Users WHERE Id=@UpdatedByUserId AND IsActive=1 AND
+        ((@TenantId IS NULL AND Scope=1 AND TenantId IS NULL) OR (@TenantId IS NOT NULL AND Scope=2 AND TenantId=@TenantId)))
+        THROW 55005,'The setting actor is outside the authorized scope.',1;
+
+    BEGIN TRANSACTION;
+    DECLARE @Id BIGINT;
+    SELECT @Id=Id FROM dbo.SystemSettings WITH(UPDLOCK,HOLDLOCK)
+    WHERE SettingKey=@SettingKey AND ((@TenantId IS NULL AND TenantId IS NULL AND StoreId IS NULL)
+      OR (TenantId=@TenantId AND ((@StoreId IS NULL AND StoreId IS NULL) OR StoreId=@StoreId)));
+    IF @Id IS NULL
+    BEGIN
+        INSERT dbo.SystemSettings(TenantId,StoreId,SettingKey,ValueType,SettingValue,Description,UpdatedByUserId,CreatedUtc,UpdatedUtc)
+        VALUES(@TenantId,@StoreId,@SettingKey,@ValueType,@SettingValue,NULLIF(LTRIM(RTRIM(@Description)),N''),@UpdatedByUserId,SYSUTCDATETIME(),SYSUTCDATETIME());
+        SET @Id=SCOPE_IDENTITY();
+    END
+    ELSE UPDATE dbo.SystemSettings SET ValueType=@ValueType,SettingValue=@SettingValue,
+        Description=COALESCE(NULLIF(LTRIM(RTRIM(@Description)),N''),Description),UpdatedByUserId=@UpdatedByUserId,UpdatedUtc=SYSUTCDATETIME() WHERE Id=@Id;
+    INSERT dbo.AuditLogs(TenantId,StoreId,UserId,ActorType,Action,EntityType,EntityId,BeforeJson,AfterJson,IpAddress,UserAgent,CorrelationId,CreatedUtc)
+    SELECT @TenantId,@StoreId,@UpdatedByUserId,CASE WHEN @TenantId IS NULL THEN N'PlatformUser' ELSE N'TenantUser' END,N'SystemSettingUpserted',N'SystemSetting',CONVERT(NVARCHAR(30),@Id),NULL,
+        (SELECT @SettingKey SettingKey,@ValueType ValueType,@SettingValue SettingValue FOR JSON PATH,WITHOUT_ARRAY_WRAPPER),@IpAddress,LEFT(@UserAgent,500),@CorrelationId,SYSUTCDATETIME();
+    COMMIT TRANSACTION;
+    SELECT Id,TenantId,StoreId,SettingKey,ValueType,SettingValue,Description,UpdatedByUserId,CreatedUtc,UpdatedUtc,
+        CASE WHEN StoreId IS NOT NULL THEN N'Store' WHEN TenantId IS NOT NULL THEN N'Tenant' ELSE N'Platform' END SourceScope
+    FROM dbo.SystemSettings WHERE Id=@Id;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.WorkerHeartbeat_Upsert
+    @InstanceId NVARCHAR(100),@WorkerName NVARCHAR(100),@Status TINYINT,@StartedUtc DATETIME2(7),
+    @LastSuccessfulCycleUtc DATETIME2(7)=NULL,@LastError NVARCHAR(1000)=NULL,@MetadataJson NVARCHAR(2000)=NULL
+AS
+BEGIN
+    SET NOCOUNT ON; SET XACT_ABORT ON;
+    SET @InstanceId=LTRIM(RTRIM(@InstanceId)); SET @WorkerName=LTRIM(RTRIM(@WorkerName));
+    IF @InstanceId=N'' OR @WorkerName=N'' OR @Status NOT BETWEEN 1 AND 3 OR @StartedUtc>SYSUTCDATETIME() OR (@MetadataJson IS NOT NULL AND ISJSON(@MetadataJson)<>1)
+        THROW 55010,'Worker heartbeat is invalid.',1;
+    MERGE dbo.WorkerHeartbeats WITH(HOLDLOCK) target
+    USING(SELECT @InstanceId InstanceId) source ON source.InstanceId=target.InstanceId
+    WHEN MATCHED THEN UPDATE SET WorkerName=@WorkerName,Status=@Status,LastHeartbeatUtc=SYSUTCDATETIME(),
+        LastSuccessfulCycleUtc=COALESCE(@LastSuccessfulCycleUtc,target.LastSuccessfulCycleUtc),LastErrorUtc=CASE WHEN @LastError IS NULL THEN target.LastErrorUtc ELSE SYSUTCDATETIME() END,
+        LastError=LEFT(@LastError,1000),MetadataJson=@MetadataJson
+    WHEN NOT MATCHED THEN INSERT(InstanceId,WorkerName,Status,StartedUtc,LastHeartbeatUtc,LastSuccessfulCycleUtc,LastErrorUtc,LastError,MetadataJson)
+        VALUES(@InstanceId,@WorkerName,@Status,@StartedUtc,SYSUTCDATETIME(),@LastSuccessfulCycleUtc,CASE WHEN @LastError IS NULL THEN NULL ELSE SYSUTCDATETIME() END,LEFT(@LastError,1000),@MetadataJson);
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.AuditLog_Search
+    @TenantId BIGINT=NULL,@AllowedStoreIdsJson NVARCHAR(MAX)=NULL,@TenantWide BIT=0,@StoreId BIGINT=NULL,@Action NVARCHAR(100)=NULL,
+    @EntityType NVARCHAR(100)=NULL,@FromUtc DATETIME2(7)=NULL,@ToUtc DATETIME2(7)=NULL,@PageNumber INT=1,@PageSize INT=50
+AS
+BEGIN
+    SET NOCOUNT ON; SET XACT_ABORT ON;
+    IF @TenantId IS NOT NULL AND (@AllowedStoreIdsJson IS NULL OR ISJSON(@AllowedStoreIdsJson)<>1) THROW 55020,'Authorized store scope is required.',1;
+    IF @PageNumber<1 OR @PageSize<1 OR @PageSize>200 OR (@FromUtc IS NOT NULL AND @ToUtc IS NOT NULL AND @FromUtc>=@ToUtc) THROW 55021,'Audit search parameters are invalid.',1;
+    DECLARE @Stores TABLE(Id BIGINT PRIMARY KEY);
+    IF @TenantId IS NOT NULL INSERT @Stores SELECT DISTINCT TRY_CONVERT(BIGINT,[value]) FROM OPENJSON(@AllowedStoreIdsJson) WHERE TRY_CONVERT(BIGINT,[value])>0;
+    ;WITH Scoped AS
+    (
+        SELECT a.Id,a.TenantId,a.StoreId,a.UserId,a.ActorType,a.Action,a.EntityType,a.EntityId,a.IpAddress,a.CorrelationId,a.CreatedUtc
+        FROM dbo.AuditLogs a
+        WHERE (@TenantId IS NULL OR (a.TenantId=@TenantId AND (@TenantWide=1 OR EXISTS(SELECT 1 FROM @Stores s WHERE s.Id=a.StoreId))))
+          AND (@StoreId IS NULL OR a.StoreId=@StoreId) AND (@Action IS NULL OR a.Action=@Action) AND (@EntityType IS NULL OR a.EntityType=@EntityType)
+          AND (@FromUtc IS NULL OR a.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR a.CreatedUtc<@ToUtc)
+    )
+    SELECT *,COUNT_BIG(*) OVER() TotalCount FROM Scoped ORDER BY CreatedUtc DESC,Id DESC
+    OFFSET (@PageNumber-1)*@PageSize ROWS FETCH NEXT @PageSize ROWS ONLY;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.SystemHealth_Get
+    @WorkerWarningSeconds INT=120
+AS
+BEGIN
+    SET NOCOUNT ON; SET XACT_ABORT ON;
+    IF @WorkerWarningSeconds<30 OR @WorkerWarningSeconds>3600 THROW 55030,'Worker warning threshold is invalid.',1;
+    SELECT DB_NAME() DatabaseName,CONVERT(NVARCHAR(128),SERVERPROPERTY('ServerName')) ServerName,
+        CONVERT(NVARCHAR(128),SERVERPROPERTY('ProductVersion')) ProductVersion,SYSUTCDATETIME() CheckedUtc,N'Healthy' Status;
+    SELECT InstanceId,WorkerName,Status,StartedUtc,LastHeartbeatUtc,LastSuccessfulCycleUtc,LastErrorUtc,LastError,
+        CASE WHEN Status=2 OR LastHeartbeatUtc<DATEADD(SECOND,-@WorkerWarningSeconds,SYSUTCDATETIME()) THEN N'Offline' WHEN Status=3 OR LastErrorUtc>LastSuccessfulCycleUtc THEN N'Warning' ELSE N'Healthy' END HealthStatus
+    FROM dbo.WorkerHeartbeats ORDER BY WorkerName,InstanceId;
+    SELECT
+      (SELECT COUNT_BIG(*) FROM dbo.ReportExportJobs WHERE Status IN(1,2)) ReportQueueDepth,
+      (SELECT COUNT_BIG(*) FROM dbo.IntegrationOutbox WHERE Status IN(1,2)) WebhookQueueDepth,
+      (SELECT COUNT_BIG(*) FROM dbo.NotificationOutbox WHERE Status IN(1,2)) NotificationQueueDepth,
+      (SELECT COUNT_BIG(*) FROM dbo.ReportExportEvents WHERE DeliveredUtc IS NULL) ReportEventBacklog;
+    SELECT COUNT_BIG(*) TotalCameras,COALESCE(SUM(CASE WHEN Status=2 AND IsActive=1 THEN CONVERT(BIGINT,1) ELSE 0 END),0) OnlineCameras,
+      COALESCE(SUM(CASE WHEN Status<>2 OR IsActive=0 THEN CONVERT(BIGINT,1) ELSE 0 END),0) NonOnlineCameras FROM dbo.Cameras;
+END;
+GO
+
+/* Expiry is retryable: the opaque key remains until the Worker confirms file deletion. */
+CREATE OR ALTER PROCEDURE dbo.ReportExportJob_Expire @Take INT=100
+AS
+BEGIN
+    SET NOCOUNT ON; SET XACT_ABORT ON;
+    IF @Take<1 SET @Take=1; IF @Take>1000 SET @Take=1000;
+    DECLARE @Expired TABLE(Id BIGINT PRIMARY KEY,TenantId BIGINT NULL,RequestedByUserId BIGINT,StorageReference NVARCHAR(500));
+    ;WITH Due AS
+    (
+        SELECT TOP(@Take) * FROM dbo.ReportExportJobs WITH(UPDLOCK,READPAST,ROWLOCK)
+        WHERE (Status=3 AND ExpiresUtc<=SYSUTCDATETIME()) OR (Status=5 AND StorageReference IS NOT NULL)
+        ORDER BY ExpiresUtc,Id
+    )
+    UPDATE Due SET Status=5,LeaseToken=NULL
+    OUTPUT inserted.Id,inserted.TenantId,inserted.RequestedByUserId,inserted.StorageReference INTO @Expired;
+    INSERT dbo.ReportExportEvents(ReportExportJobId,TenantId,RequestedByUserId,EventType,JobStatus,ProgressPercent,CreatedUtc)
+    SELECT e.Id,e.TenantId,e.RequestedByUserId,N'ReportExportExpired',5,100,SYSUTCDATETIME() FROM @Expired e
+    WHERE NOT EXISTS(SELECT 1 FROM dbo.ReportExportEvents x WHERE x.ReportExportJobId=e.Id AND x.EventType=N'ReportExportExpired' AND x.ProgressPercent=100);
+    SELECT Id,StorageReference FROM @Expired WHERE StorageReference IS NOT NULL ORDER BY Id;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.ReportExportJob_ArtifactDeleted @JobId BIGINT,@StorageReference NVARCHAR(500)
+AS
+BEGIN
+    SET NOCOUNT ON; SET XACT_ABORT ON;
+    IF @JobId<=0 OR NULLIF(LTRIM(RTRIM(@StorageReference)),N'') IS NULL THROW 55040,'Artifact cleanup acknowledgement is invalid.',1;
+    UPDATE dbo.ReportExportJobs SET StorageReference=NULL WHERE Id=@JobId AND Status=5 AND StorageReference=@StorageReference;
+    IF @@ROWCOUNT<>1 THROW 55041,'The expired artifact cleanup target is no longer valid.',1;
+END;
+GO
+
+/* Privacy cleanup is bounded and preserves relational integrity/audit evidence. */
+CREATE OR ALTER PROCEDURE dbo.OperationalRetention_Run @BatchSize INT=100,@RecognitionMetadataRetentionDays INT=30
+AS
+BEGIN
+    SET NOCOUNT ON; SET XACT_ABORT ON;
+    IF @BatchSize<1 OR @BatchSize>1000 OR @RecognitionMetadataRetentionDays<0 OR @RecognitionMetadataRetentionDays>3650 THROW 55050,'Retention options are invalid.',1;
+    DECLARE @Now DATETIME2(7)=SYSUTCDATETIME(),@TemplatesDisabled INT=0,@TemplatesDeleted INT=0,@VisitorsDeleted INT=0;
+    DECLARE @DisabledTemplates TABLE(TenantId BIGINT); DECLARE @DeletedTemplates TABLE(TenantId BIGINT);
+    BEGIN TRANSACTION;
+
+    ;WITH Due AS
+    (
+        SELECT TOP(@BatchSize) t.* FROM dbo.BiometricTemplates t WITH(UPDLOCK,READPAST,ROWLOCK)
+        JOIN dbo.CustomerRecognitionConsents c ON c.Id=t.ConsentId AND c.TenantId=t.TenantId
+        WHERE t.Status=1 AND c.WithdrawnUtc IS NULL AND c.ExpiresUtc<=@Now
+        ORDER BY c.ExpiresUtc,t.Id
+    )
+    UPDATE Due SET EncryptedTemplate=0x,Nonce=0x,AuthenticationTag=0x,Status=2,DisabledUtc=@Now,RetentionUntilUtc=DATEADD(DAY,@RecognitionMetadataRetentionDays,@Now)
+    OUTPUT inserted.TenantId INTO @DisabledTemplates;
+    SET @TemplatesDisabled=@@ROWCOUNT;
+    ;WITH Due AS
+    (
+        SELECT TOP(@BatchSize) * FROM dbo.BiometricTemplates WITH(UPDLOCK,READPAST,ROWLOCK)
+        WHERE Status=2 AND RetentionUntilUtc<=@Now ORDER BY RetentionUntilUtc,Id
+    )
+    UPDATE Due SET Status=3,DeletedUtc=@Now OUTPUT inserted.TenantId INTO @DeletedTemplates;
+    SET @TemplatesDeleted=@@ROWCOUNT;
+    DECLARE @Visitors TABLE(Id BIGINT PRIMARY KEY,TenantId BIGINT,StoreId BIGINT);
+    ;WITH EffectiveRetention AS
+    (
+        SELECT v.Id,v.TenantId,v.StoreId,v.LastSeenUtc,
+          COALESCE(TRY_CONVERT(INT,ss.SettingValue),TRY_CONVERT(INT,ts.SettingValue),TRY_CONVERT(INT,ps.SettingValue),30) RetentionDays
+        FROM dbo.AnonymousVisitors v
+        LEFT JOIN dbo.SystemSettings ss ON ss.TenantId=v.TenantId AND ss.StoreId=v.StoreId AND ss.SettingKey=N'AnonymousVisitorRetentionDays'
+        LEFT JOIN dbo.SystemSettings ts ON ts.TenantId=v.TenantId AND ts.StoreId IS NULL AND ts.SettingKey=N'AnonymousVisitorRetentionDays'
+        LEFT JOIN dbo.SystemSettings ps ON ps.TenantId IS NULL AND ps.StoreId IS NULL AND ps.SettingKey=N'AnonymousVisitorRetentionDays'
+        WHERE v.ConvertedCustomerId IS NULL
+    ), Due AS
+    (
+        SELECT TOP(@BatchSize) * FROM EffectiveRetention
+        WHERE RetentionDays BETWEEN 1 AND 3650 AND LastSeenUtc<DATEADD(DAY,-RetentionDays,@Now)
+        ORDER BY LastSeenUtc,Id
+    )
+    INSERT @Visitors SELECT Id,TenantId,StoreId FROM Due;
+    DELETE m FROM dbo.VisitPartyMembers m JOIN @Visitors v ON v.Id=m.AnonymousVisitorId AND v.TenantId=m.TenantId AND v.StoreId=m.StoreId;
+    DELETE a FROM dbo.AnonymousVisitors a JOIN @Visitors v ON v.Id=a.Id AND v.TenantId=a.TenantId AND v.StoreId=a.StoreId;
+    SET @VisitorsDeleted=@@ROWCOUNT;
+
+    INSERT dbo.AuditLogs(TenantId,StoreId,UserId,ActorType,Action,EntityType,EntityId,BeforeJson,AfterJson,IpAddress,UserAgent,CorrelationId,CreatedUtc)
+    SELECT TenantId,StoreId,NULL,N'Worker',N'AnonymousVisitorRetentionDeleted',N'AnonymousVisitor',NULL,NULL,
+      CONCAT(N'{"deletedCount":',COUNT_BIG(*),N'}'),NULL,NULL,CONCAT('retention-',CONVERT(VARCHAR(36),NEWID())),@Now
+    FROM @Visitors GROUP BY TenantId,StoreId;
+    ;WITH Tenants AS(SELECT TenantId FROM @DisabledTemplates UNION SELECT TenantId FROM @DeletedTemplates)
+    INSERT dbo.AuditLogs(TenantId,StoreId,UserId,ActorType,Action,EntityType,EntityId,BeforeJson,AfterJson,IpAddress,UserAgent,CorrelationId,CreatedUtc)
+    SELECT x.TenantId,NULL,NULL,N'Worker',N'RecognitionRetentionApplied',N'BiometricTemplate',NULL,NULL,
+      CONCAT(N'{"templatesDisabled":',(SELECT COUNT(*) FROM @DisabledTemplates d WHERE d.TenantId=x.TenantId),N',"templatesMarkedDeleted":',(SELECT COUNT(*) FROM @DeletedTemplates d WHERE d.TenantId=x.TenantId),N'}'),
+      NULL,NULL,CONCAT('retention-',CONVERT(VARCHAR(36),NEWID())),@Now FROM Tenants x;
+    COMMIT TRANSACTION;
+    SELECT @TemplatesDisabled TemplatesDisabled,@TemplatesDeleted TemplatesMarkedDeleted,@VisitorsDeleted AnonymousVisitorsDeleted;
+END;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.15.0')
+    INSERT dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy)
+    VALUES(N'V1.15.0',N'Phase 16 operational settings, audit search, worker heartbeat and system health',SYSUTCDATETIME(),SUSER_SNAME());
+GO
+IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.15.0')<>1 THROW 55090,'V1.15.0 must exist exactly once.',1;
+IF OBJECT_ID(N'dbo.SystemSettings',N'U') IS NULL OR OBJECT_ID(N'dbo.WorkerHeartbeats',N'U') IS NULL THROW 55091,'Phase 16 operational tables are missing.',1;
+IF OBJECT_ID(N'dbo.SystemSetting_List',N'P') IS NULL OR OBJECT_ID(N'dbo.SystemSetting_Upsert',N'P') IS NULL OR OBJECT_ID(N'dbo.WorkerHeartbeat_Upsert',N'P') IS NULL OR OBJECT_ID(N'dbo.AuditLog_Search',N'P') IS NULL OR OBJECT_ID(N'dbo.SystemHealth_Get',N'P') IS NULL OR OBJECT_ID(N'dbo.ReportExportJob_ArtifactDeleted',N'P') IS NULL OR OBJECT_ID(N'dbo.OperationalRetention_Run',N'P') IS NULL THROW 55092,'Phase 16 procedures are incomplete.',1;
+GO
+
+
+-- ============================================================
+-- PHASE 18 - REVIEWABLE RETAIL SECURITY
+-- VERSION: V1.16.0
+-- ============================================================
+/* CustSearch AI Phase 18 - reviewable retail-security foundation. */
+USE [CustSearch_AI];
+GO
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+IF OBJECT_ID(N'dbo.DatabaseVersions',N'U') IS NULL
+   OR NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.15.0')
+    THROW 56000,'Phase 16 V1.15.0 must be installed before Phase 18.',1;
+GO
+
+IF OBJECT_ID(N'dbo.SecurityRules',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.SecurityRules(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SecurityRules PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NULL,
+  RuleCode NVARCHAR(100) NOT NULL,Name NVARCHAR(200) NOT NULL,IsEnabled BIT NOT NULL,Severity TINYINT NOT NULL,
+  ConfigurationJson NVARCHAR(4000) NOT NULL,Version INT NOT NULL,CreatedByUserId BIGINT NULL,CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SecurityRules_Created DEFAULT SYSUTCDATETIME(),UpdatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SecurityRules_Updated DEFAULT SYSUTCDATETIME(),RowVersion ROWVERSION NOT NULL,
+  CONSTRAINT FK_SecurityRules_Tenant FOREIGN KEY(TenantId) REFERENCES dbo.Tenants(Id),CONSTRAINT FK_SecurityRules_Store FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),CONSTRAINT FK_SecurityRules_User FOREIGN KEY(CreatedByUserId) REFERENCES dbo.Users(Id),
+  CONSTRAINT CK_SecurityRules_Severity CHECK(Severity BETWEEN 1 AND 5),CONSTRAINT CK_SecurityRules_Version CHECK(Version>0),CONSTRAINT CK_SecurityRules_Json CHECK(ISJSON(ConfigurationJson)=1));
+END;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityRules') AND name=N'UX_SecurityRules_Tenant_Default') CREATE UNIQUE INDEX UX_SecurityRules_Tenant_Default ON dbo.SecurityRules(TenantId,RuleCode,Version) WHERE StoreId IS NULL;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityRules') AND name=N'UX_SecurityRules_Store') CREATE UNIQUE INDEX UX_SecurityRules_Store ON dbo.SecurityRules(TenantId,StoreId,RuleCode,Version) WHERE StoreId IS NOT NULL;
+GO
+
+IF OBJECT_ID(N'dbo.SecurityIngestionRequests',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.SecurityIngestionRequests(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SecurityIngestionRequests PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,CameraId BIGINT NOT NULL,
+  ServiceKeyId NVARCHAR(100) NOT NULL,IdempotencyKey NVARCHAR(128) NOT NULL,NonceHash BINARY(32) NOT NULL,BodyHash BINARY(32) NOT NULL,SignedUtc DATETIME2(7) NOT NULL,ReceivedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SecurityIngestion_Received DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT FK_SecurityIngestion_Camera FOREIGN KEY(TenantId,StoreId,CameraId) REFERENCES dbo.Cameras(TenantId,StoreId,Id),CONSTRAINT CK_SecurityIngestion_Time CHECK(SignedUtc<=DATEADD(MINUTE,5,ReceivedUtc) AND SignedUtc>=DATEADD(MINUTE,-5,ReceivedUtc)));
+END;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityIngestionRequests') AND name=N'UX_SecurityIngestion_Idempotency') CREATE UNIQUE INDEX UX_SecurityIngestion_Idempotency ON dbo.SecurityIngestionRequests(ServiceKeyId,IdempotencyKey);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityIngestionRequests') AND name=N'UX_SecurityIngestion_Nonce') CREATE UNIQUE INDEX UX_SecurityIngestion_Nonce ON dbo.SecurityIngestionRequests(ServiceKeyId,NonceHash);
+GO
+
+/* Composite candidate key lets child FKs prove that a zone belongs to the same tenant/store/camera. */
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.CameraZoneConfigurations') AND name=N'UX_CameraZones_Tenant_Store_Camera_Id')
+ CREATE UNIQUE INDEX UX_CameraZones_Tenant_Store_Camera_Id ON dbo.CameraZoneConfigurations(TenantId,StoreId,CameraId,Id);
+GO
+
+IF OBJECT_ID(N'dbo.SecurityObservations',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.SecurityObservations(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SecurityObservations PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,CameraId BIGINT NOT NULL,IngestionRequestId BIGINT NOT NULL,
+  VisitId BIGINT NULL,PersonTrackSessionId BIGINT NULL,PersonTrackId NVARCHAR(200) NULL,ObservationType TINYINT NOT NULL,OccurredUtc DATETIME2(7) NOT NULL,ZoneId BIGINT NULL,ProductId BIGINT NULL,ProductCategoryId BIGINT NULL,
+  Confidence DECIMAL(5,4) NOT NULL,CorrelationId NVARCHAR(64) NOT NULL,ModelVersion NVARCHAR(100) NOT NULL,MetadataJson NVARCHAR(4000) NULL,CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SecurityObservations_Created DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT FK_SecurityObservations_Ingestion FOREIGN KEY(IngestionRequestId) REFERENCES dbo.SecurityIngestionRequests(Id),CONSTRAINT FK_SecurityObservations_Camera FOREIGN KEY(TenantId,StoreId,CameraId) REFERENCES dbo.Cameras(TenantId,StoreId,Id),
+  CONSTRAINT FK_SecurityObservations_Visit FOREIGN KEY(TenantId,StoreId,VisitId) REFERENCES dbo.CustomerVisits(TenantId,StoreId,Id),CONSTRAINT FK_SecurityObservations_Track FOREIGN KEY(TenantId,StoreId,PersonTrackSessionId) REFERENCES dbo.PersonTrackSessions(TenantId,StoreId,Id),
+  CONSTRAINT FK_SecurityObservations_Zone FOREIGN KEY(TenantId,StoreId,CameraId,ZoneId) REFERENCES dbo.CameraZoneConfigurations(TenantId,StoreId,CameraId,Id),CONSTRAINT FK_SecurityObservations_Product FOREIGN KEY(TenantId,ProductId) REFERENCES dbo.Products(TenantId,Id),
+  CONSTRAINT CK_SecurityObservations_Type CHECK(ObservationType BETWEEN 1 AND 10),CONSTRAINT CK_SecurityObservations_Confidence CHECK(Confidence BETWEEN 0 AND 1),CONSTRAINT CK_SecurityObservations_Metadata CHECK(MetadataJson IS NULL OR (ISJSON(MetadataJson)=1 AND DATALENGTH(MetadataJson)<=8000)));
+END;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityObservations') AND name=N'IX_SecurityObservations_ScopeTrackTime') CREATE INDEX IX_SecurityObservations_ScopeTrackTime ON dbo.SecurityObservations(TenantId,StoreId,PersonTrackId,OccurredUtc DESC) INCLUDE(ObservationType,Confidence,ProductId,ZoneId);
+GO
+
+IF OBJECT_ID(N'dbo.SecurityIncidents',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.SecurityIncidents(
+  Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SecurityIncidents PRIMARY KEY,IncidentNumber NVARCHAR(100) NOT NULL,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,VisitId BIGINT NULL,PersonTrackSessionId BIGINT NULL,PersonTrackId NVARCHAR(200) NULL,CustomerId BIGINT NULL,
+  IncidentType TINYINT NOT NULL,Severity TINYINT NOT NULL,RiskScore DECIMAL(6,3) NOT NULL,RuleCode NVARCHAR(100) NOT NULL,RuleVersion INT NOT NULL,Status TINYINT NOT NULL,FirstObservedUtc DATETIME2(7) NOT NULL,ExitObservedUtc DATETIME2(7) NULL,
+  EstimatedLossAmount DECIMAL(19,2) NULL,Currency CHAR(3) NOT NULL,AssignedUserId BIGINT NULL,ResolutionCode NVARCHAR(100) NULL,ResolutionNotes NVARCHAR(2000) NULL,ConfirmedByUserId BIGINT NULL,ConfirmedUtc DATETIME2(7) NULL,CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SecurityIncidents_Created DEFAULT SYSUTCDATETIME(),UpdatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SecurityIncidents_Updated DEFAULT SYSUTCDATETIME(),RowVersion ROWVERSION NOT NULL,
+  CONSTRAINT UX_SecurityIncidents_Tenant_Store_Id UNIQUE(TenantId,StoreId,Id),CONSTRAINT UX_SecurityIncidents_Tenant_Number UNIQUE(TenantId,IncidentNumber),CONSTRAINT FK_SecurityIncidents_Store FOREIGN KEY(TenantId,StoreId) REFERENCES dbo.Stores(TenantId,Id),
+  CONSTRAINT FK_SecurityIncidents_Visit FOREIGN KEY(TenantId,StoreId,VisitId) REFERENCES dbo.CustomerVisits(TenantId,StoreId,Id),CONSTRAINT FK_SecurityIncidents_Track FOREIGN KEY(TenantId,StoreId,PersonTrackSessionId) REFERENCES dbo.PersonTrackSessions(TenantId,StoreId,Id),CONSTRAINT FK_SecurityIncidents_Customer FOREIGN KEY(TenantId,CustomerId) REFERENCES dbo.Customers(TenantId,Id),CONSTRAINT FK_SecurityIncidents_Assigned FOREIGN KEY(AssignedUserId) REFERENCES dbo.Users(Id),CONSTRAINT FK_SecurityIncidents_Confirmed FOREIGN KEY(ConfirmedByUserId) REFERENCES dbo.Users(Id),
+  CONSTRAINT CK_SecurityIncidents_Type CHECK(IncidentType=1),CONSTRAINT CK_SecurityIncidents_Severity CHECK(Severity BETWEEN 1 AND 5),CONSTRAINT CK_SecurityIncidents_Risk CHECK(RiskScore BETWEEN 0 AND 100),CONSTRAINT CK_SecurityIncidents_Status CHECK(Status BETWEEN 1 AND 9),CONSTRAINT CK_SecurityIncidents_Confirmed CHECK((Status<>6 AND ConfirmedByUserId IS NULL AND ConfirmedUtc IS NULL) OR (Status=6 AND ConfirmedByUserId IS NOT NULL AND ConfirmedUtc IS NOT NULL AND ResolutionCode IS NOT NULL)));
+END;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityIncidents') AND name=N'IX_SecurityIncidents_ScopeStatusTime') CREATE INDEX IX_SecurityIncidents_ScopeStatusTime ON dbo.SecurityIncidents(TenantId,StoreId,Status,CreatedUtc DESC,Id DESC) INCLUDE(Severity,RiskScore,IncidentNumber,AssignedUserId);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityIncidents') AND name=N'IX_SecurityIncidents_TrackOpen') CREATE INDEX IX_SecurityIncidents_TrackOpen ON dbo.SecurityIncidents(TenantId,StoreId,PersonTrackId,UpdatedUtc DESC) WHERE Status<6;
+GO
+
+/* Archived incidents retain confirmed-loss provenance; other non-confirmed states cannot fabricate it. */
+IF OBJECT_ID(N'dbo.CK_SecurityIncidents_Confirmed',N'C') IS NOT NULL ALTER TABLE dbo.SecurityIncidents DROP CONSTRAINT CK_SecurityIncidents_Confirmed;
+ALTER TABLE dbo.SecurityIncidents WITH CHECK ADD CONSTRAINT CK_SecurityIncidents_Confirmed CHECK((ConfirmedByUserId IS NULL AND ConfirmedUtc IS NULL) OR (Status IN(6,9) AND ConfirmedByUserId IS NOT NULL AND ConfirmedUtc IS NOT NULL AND ResolutionCode IS NOT NULL));
+GO
+
+IF OBJECT_ID(N'dbo.SecurityIncidentItems',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.SecurityIncidentItems(Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SecurityIncidentItems PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,SecurityIncidentId BIGINT NOT NULL,ProductId BIGINT NULL,ProductCategoryId BIGINT NULL,DisplayDescription NVARCHAR(400) NOT NULL,Quantity DECIMAL(18,4) NULL,UnitValue DECIMAL(19,2) NULL,ProductConfidence DECIMAL(5,4) NULL,PaymentMatchStatus TINYINT NOT NULL,CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SecurityIncidentItems_Created DEFAULT SYSUTCDATETIME(),CONSTRAINT FK_SecurityIncidentItems_Incident FOREIGN KEY(TenantId,StoreId,SecurityIncidentId) REFERENCES dbo.SecurityIncidents(TenantId,StoreId,Id),CONSTRAINT FK_SecurityIncidentItems_Product FOREIGN KEY(TenantId,ProductId) REFERENCES dbo.Products(TenantId,Id),CONSTRAINT CK_SecurityIncidentItems_Quantity CHECK(Quantity IS NULL OR Quantity>0),CONSTRAINT CK_SecurityIncidentItems_Confidence CHECK(ProductConfidence IS NULL OR ProductConfidence BETWEEN 0 AND 1),CONSTRAINT CK_SecurityIncidentItems_Payment CHECK(PaymentMatchStatus BETWEEN 1 AND 5));
+END;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityIncidentItems') AND name=N'IX_SecurityIncidentItems_Incident') CREATE INDEX IX_SecurityIncidentItems_Incident ON dbo.SecurityIncidentItems(TenantId,StoreId,SecurityIncidentId,Id);
+GO
+
+IF OBJECT_ID(N'dbo.SecurityIncidentEvidence',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.SecurityIncidentEvidence(Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SecurityIncidentEvidence PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,SecurityIncidentId BIGINT NOT NULL,EvidenceType TINYINT NOT NULL,CameraId BIGINT NULL,CapturedUtc DATETIME2(7) NOT NULL,StorageObjectKey NVARCHAR(500) NOT NULL,ContentHash BINARY(32) NOT NULL,StartUtc DATETIME2(7) NULL,EndUtc DATETIME2(7) NULL,RetentionUntilUtc DATETIME2(7) NOT NULL,IsRestricted BIT NOT NULL CONSTRAINT DF_SecurityEvidence_Restricted DEFAULT(1),DeletedUtc DATETIME2(7) NULL,CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SecurityEvidence_Created DEFAULT SYSUTCDATETIME(),CONSTRAINT FK_SecurityEvidence_Incident FOREIGN KEY(TenantId,StoreId,SecurityIncidentId) REFERENCES dbo.SecurityIncidents(TenantId,StoreId,Id),CONSTRAINT FK_SecurityEvidence_Camera FOREIGN KEY(TenantId,StoreId,CameraId) REFERENCES dbo.Cameras(TenantId,StoreId,Id),CONSTRAINT CK_SecurityEvidence_Key CHECK(StorageObjectKey<>N'' AND StorageObjectKey NOT LIKE N'%..%' AND StorageObjectKey NOT LIKE N'%:%' AND LEFT(StorageObjectKey,1) NOT IN(N'/',N'\')),CONSTRAINT CK_SecurityEvidence_Clip CHECK((StartUtc IS NULL AND EndUtc IS NULL) OR (StartUtc IS NOT NULL AND EndUtc>=StartUtc)),CONSTRAINT CK_SecurityEvidence_Retention CHECK(RetentionUntilUtc>=CapturedUtc));
+END;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityIncidentEvidence') AND name=N'IX_SecurityEvidence_Retention') CREATE INDEX IX_SecurityEvidence_Retention ON dbo.SecurityIncidentEvidence(RetentionUntilUtc,DeletedUtc,Id) INCLUDE(TenantId,StoreId,SecurityIncidentId,StorageObjectKey);
+GO
+
+IF OBJECT_ID(N'dbo.SecurityIncidentActions',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.SecurityIncidentActions(Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SecurityIncidentActions PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,SecurityIncidentId BIGINT NOT NULL,ActionType NVARCHAR(100) NOT NULL,FromStatus TINYINT NULL,ToStatus TINYINT NULL,UserId BIGINT NULL,ActorType NVARCHAR(50) NOT NULL,ReasonCode NVARCHAR(100) NULL,Notes NVARCHAR(2000) NULL,OccurredUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SecurityActions_Occurred DEFAULT SYSUTCDATETIME(),CorrelationId NVARCHAR(64) NOT NULL,CONSTRAINT FK_SecurityActions_Incident FOREIGN KEY(TenantId,StoreId,SecurityIncidentId) REFERENCES dbo.SecurityIncidents(TenantId,StoreId,Id),CONSTRAINT FK_SecurityActions_User FOREIGN KEY(UserId) REFERENCES dbo.Users(Id),CONSTRAINT CK_SecurityActions_Status CHECK((FromStatus IS NULL OR FromStatus BETWEEN 1 AND 9) AND (ToStatus IS NULL OR ToStatus BETWEEN 1 AND 9)));
+END;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityIncidentActions') AND name=N'IX_SecurityActions_Timeline') CREATE INDEX IX_SecurityActions_Timeline ON dbo.SecurityIncidentActions(TenantId,StoreId,SecurityIncidentId,OccurredUtc,Id);
+GO
+
+IF OBJECT_ID(N'dbo.SecurityNotificationDeliveries',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.SecurityNotificationDeliveries(Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SecurityNotificationDeliveries PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,SecurityIncidentId BIGINT NOT NULL,Channel NVARCHAR(30) NOT NULL,RecipientUserId BIGINT NULL,DestinationReference NVARCHAR(200) NULL,Status TINYINT NOT NULL,AttemptCount INT NOT NULL CONSTRAINT DF_SecurityDelivery_Attempts DEFAULT(0),QueuedUtc DATETIME2(7) NOT NULL,NextAttemptUtc DATETIME2(7) NOT NULL,SentUtc DATETIME2(7) NULL,AcknowledgedUtc DATETIME2(7) NULL,ProviderMessageId NVARCHAR(200) NULL,FailureCode NVARCHAR(100) NULL,IdempotencyKey NVARCHAR(200) NOT NULL,CONSTRAINT FK_SecurityDelivery_Incident FOREIGN KEY(TenantId,StoreId,SecurityIncidentId) REFERENCES dbo.SecurityIncidents(TenantId,StoreId,Id),CONSTRAINT FK_SecurityDelivery_User FOREIGN KEY(RecipientUserId) REFERENCES dbo.Users(Id),CONSTRAINT CK_SecurityDelivery_Status CHECK(Status BETWEEN 1 AND 5),CONSTRAINT CK_SecurityDelivery_Attempts CHECK(AttemptCount>=0));
+END;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityNotificationDeliveries') AND name=N'UX_SecurityDelivery_Idempotency') CREATE UNIQUE INDEX UX_SecurityDelivery_Idempotency ON dbo.SecurityNotificationDeliveries(IdempotencyKey);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityNotificationDeliveries') AND name=N'IX_SecurityDelivery_Work') CREATE INDEX IX_SecurityDelivery_Work ON dbo.SecurityNotificationDeliveries(Status,NextAttemptUtc,Id);
+GO
+
+IF OBJECT_ID(N'dbo.SecurityPaymentCorrelations',N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.SecurityPaymentCorrelations(Id BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SecurityPaymentCorrelations PRIMARY KEY,TenantId BIGINT NOT NULL,StoreId BIGINT NOT NULL,SecurityIncidentId BIGINT NOT NULL,InvoiceId BIGINT NULL,TransactionReference NVARCHAR(200) NULL,MatchType TINYINT NOT NULL,MatchScore DECIMAL(5,4) NOT NULL,MatchedUtc DATETIME2(7) NOT NULL,Notes NVARCHAR(1000) NULL,CreatedUtc DATETIME2(7) NOT NULL CONSTRAINT DF_SecurityPayment_Created DEFAULT SYSUTCDATETIME(),CONSTRAINT FK_SecurityPayment_Incident FOREIGN KEY(TenantId,StoreId,SecurityIncidentId) REFERENCES dbo.SecurityIncidents(TenantId,StoreId,Id),CONSTRAINT FK_SecurityPayment_Invoice FOREIGN KEY(TenantId,StoreId,InvoiceId) REFERENCES dbo.RetailInvoices(TenantId,StoreId,Id),CONSTRAINT CK_SecurityPayment_Type CHECK(MatchType BETWEEN 1 AND 5),CONSTRAINT CK_SecurityPayment_Score CHECK(MatchScore BETWEEN 0 AND 1));
+END;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.SecurityPaymentCorrelations') AND name=N'IX_SecurityPayment_Incident') CREATE INDEX IX_SecurityPayment_Incident ON dbo.SecurityPaymentCorrelations(TenantId,StoreId,SecurityIncidentId,MatchedUtc DESC);
+GO
+
+DECLARE @Permissions TABLE(Name NVARCHAR(150),Description NVARCHAR(300));
+INSERT @Permissions VALUES
+(N'Security.Incidents.View',N'View store-scoped security incidents.'),(N'Security.Incidents.Acknowledge',N'Acknowledge security incidents.'),(N'Security.Incidents.Assign',N'Assign incident reviewers.'),(N'Security.Incidents.Review',N'Review security incidents.'),(N'Security.Incidents.ConfirmLoss',N'Confirm a reviewed loss with reason.'),(N'Security.Incidents.Resolve',N'Resolve security incidents.'),(N'Security.Evidence.View',N'View restricted incident evidence.'),(N'Security.Evidence.Export',N'Export restricted incident evidence.'),(N'Security.Settings.View',N'View security settings.'),(N'Security.Settings.Manage',N'Manage security settings.'),(N'Security.Rules.View',N'View versioned security rules.'),(N'Security.Rules.Manage',N'Manage versioned security rules.'),(N'Security.Reports.View',N'View security reports.');
+INSERT dbo.Permissions(Scope,Name,Description,IsActive,CreatedUtc) SELECT 2,p.Name,p.Description,1,SYSUTCDATETIME() FROM @Permissions p WHERE NOT EXISTS(SELECT 1 FROM dbo.Permissions x WHERE x.Scope=2 AND x.Name=p.Name);
+GO
+
+DECLARE @Defaults TABLE(SettingKey NVARCHAR(100),ValueType TINYINT,SettingValue NVARCHAR(1000),Description NVARCHAR(500));
+INSERT @Defaults VALUES
+(N'SecurityMonitoringEnabled',1,N'false',N'Shadow-mode security observation processing.'),(N'UnpaidExitDetectionEnabled',1,N'false',N'Reviewable unpaid-exit candidate generation.'),(N'RealtimeSecurityAlertsEnabled',1,N'false',N'Real-time security notifications after store acceptance.'),(N'EvidenceClipEnabled',1,N'false',N'Protected evidence clip capture.'),(N'SecurityMinimumConfidence',3,N'0.70',N'Minimum normalized observation confidence.'),(N'CriticalAlertMinimumConfidence',3,N'0.92',N'Minimum critical multi-signal confidence.'),(N'ExitGracePeriodSeconds',2,N'15',N'Grace period before evaluating exit.'),(N'CheckoutCorrelationWindowMinutes',2,N'30',N'POS correlation window.'),(N'IncidentDeduplicationWindowSeconds',2,N'120',N'Open incident duplicate suppression window.'),(N'EvidencePreEventSeconds',2,N'10',N'Evidence before event.'),(N'EvidencePostEventSeconds',2,N'20',N'Evidence after event.'),(N'UnreviewedEvidenceRetentionDays',2,N'14',N'Unreviewed evidence retention.'),(N'FalsePositiveEvidenceRetentionDays',2,N'7',N'False-positive evidence retention.'),(N'ConfirmedIncidentRetentionDays',2,N'365',N'Confirmed incident retention pending policy review.');
+INSERT dbo.SystemSettings(TenantId,StoreId,SettingKey,ValueType,SettingValue,Description,UpdatedByUserId,CreatedUtc,UpdatedUtc) SELECT NULL,NULL,d.SettingKey,d.ValueType,d.SettingValue,d.Description,NULL,SYSUTCDATETIME(),SYSUTCDATETIME() FROM @Defaults d WHERE NOT EXISTS(SELECT 1 FROM dbo.SystemSettings s WHERE s.TenantId IS NULL AND s.StoreId IS NULL AND s.SettingKey=d.SettingKey);
+GO
+
+CREATE OR ALTER PROCEDURE dbo.SecurityObservation_Ingest
+ @TenantId BIGINT,@StoreId BIGINT,@CameraId BIGINT,@ServiceKeyId NVARCHAR(100),@IdempotencyKey NVARCHAR(128),@NonceHash BINARY(32),@BodyHash BINARY(32),@SignedUtc DATETIME2(7),
+ @VisitId BIGINT=NULL,@PersonTrackSessionId BIGINT=NULL,@PersonTrackId NVARCHAR(200)=NULL,@ObservationType TINYINT,@OccurredUtc DATETIME2(7),@ZoneId BIGINT=NULL,@ProductId BIGINT=NULL,@ProductCategoryId BIGINT=NULL,@Confidence DECIMAL(5,4),@CorrelationId NVARCHAR(64),@ModelVersion NVARCHAR(100),@MetadataJson NVARCHAR(4000)=NULL
+AS
+BEGIN SET NOCOUNT ON;SET XACT_ABORT ON;
+ IF @TenantId<=0 OR @StoreId<=0 OR @CameraId<=0 OR NULLIF(@ServiceKeyId,N'') IS NULL OR NULLIF(@IdempotencyKey,N'') IS NULL OR @NonceHash IS NULL OR @BodyHash IS NULL THROW 56001,'Signed ingestion identity is incomplete.',1;
+ IF ABS(DATEDIFF(SECOND,@SignedUtc,SYSUTCDATETIME()))>300 THROW 56002,'Signed ingestion timestamp is expired or outside allowed clock skew.',1;
+ IF @ObservationType NOT BETWEEN 1 AND 10 OR @Confidence NOT BETWEEN 0 AND 1 OR @OccurredUtc>DATEADD(MINUTE,1,SYSUTCDATETIME()) THROW 56003,'Observation values are invalid.',1;
+ IF @MetadataJson IS NOT NULL AND (ISJSON(@MetadataJson)<>1 OR DATALENGTH(@MetadataJson)>8000) THROW 56004,'Observation metadata is invalid or too large.',1;
+ IF NOT EXISTS(SELECT 1 FROM dbo.Cameras WHERE TenantId=@TenantId AND StoreId=@StoreId AND Id=@CameraId AND IsActive=1) THROW 56005,'Camera is inactive or outside the signed tenant/store scope.',1;
+ BEGIN TRY BEGIN TRAN;
+  DECLARE @RequestId BIGINT;
+  SELECT @RequestId=Id FROM dbo.SecurityIngestionRequests WITH(UPDLOCK,HOLDLOCK) WHERE ServiceKeyId=@ServiceKeyId AND IdempotencyKey=@IdempotencyKey;
+  IF @RequestId IS NOT NULL
+  BEGIN
+   IF NOT EXISTS(SELECT 1 FROM dbo.SecurityIngestionRequests WHERE Id=@RequestId AND TenantId=@TenantId AND StoreId=@StoreId AND CameraId=@CameraId AND BodyHash=@BodyHash AND NonceHash=@NonceHash) THROW 56006,'Idempotency key replayed with different signed content.',1;
+   SELECT o.Id,o.IngestionRequestId,CAST(1 AS BIT) WasDuplicate FROM dbo.SecurityObservations o WHERE o.IngestionRequestId=@RequestId ORDER BY o.Id;COMMIT;RETURN;
+  END;
+  IF EXISTS(SELECT 1 FROM dbo.SecurityIngestionRequests WITH(UPDLOCK,HOLDLOCK) WHERE ServiceKeyId=@ServiceKeyId AND NonceHash=@NonceHash) THROW 56007,'Signed nonce was already used.',1;
+  INSERT dbo.SecurityIngestionRequests(TenantId,StoreId,CameraId,ServiceKeyId,IdempotencyKey,NonceHash,BodyHash,SignedUtc,ReceivedUtc) VALUES(@TenantId,@StoreId,@CameraId,@ServiceKeyId,@IdempotencyKey,@NonceHash,@BodyHash,@SignedUtc,SYSUTCDATETIME());SET @RequestId=SCOPE_IDENTITY();
+  INSERT dbo.SecurityObservations(TenantId,StoreId,CameraId,IngestionRequestId,VisitId,PersonTrackSessionId,PersonTrackId,ObservationType,OccurredUtc,ZoneId,ProductId,ProductCategoryId,Confidence,CorrelationId,ModelVersion,MetadataJson) VALUES(@TenantId,@StoreId,@CameraId,@RequestId,@VisitId,@PersonTrackSessionId,@PersonTrackId,@ObservationType,@OccurredUtc,@ZoneId,@ProductId,@ProductCategoryId,@Confidence,@CorrelationId,@ModelVersion,@MetadataJson);
+  SELECT Id,IngestionRequestId,CAST(0 AS BIT) WasDuplicate FROM dbo.SecurityObservations WHERE Id=SCOPE_IDENTITY();COMMIT;
+ END TRY BEGIN CATCH IF @@TRANCOUNT>0 ROLLBACK;THROW;END CATCH
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.SecurityRule_List @TenantId BIGINT,@StoreId BIGINT=NULL
+AS BEGIN SET NOCOUNT ON;SET XACT_ABORT ON;
+ IF @StoreId IS NOT NULL AND NOT EXISTS(SELECT 1 FROM dbo.Stores WHERE TenantId=@TenantId AND Id=@StoreId) THROW 56008,'Store is outside the authorized tenant.',1;
+ ;WITH Ranked AS(SELECT r.*,ROW_NUMBER() OVER(PARTITION BY RuleCode ORDER BY CASE WHEN StoreId=@StoreId THEN 0 ELSE 1 END,Version DESC) rn FROM dbo.SecurityRules r WHERE TenantId=@TenantId AND (StoreId IS NULL OR StoreId=@StoreId))
+ SELECT Id,TenantId,StoreId,RuleCode,Name,IsEnabled,Severity,ConfigurationJson,Version,CreatedByUserId,CreatedUtc,UpdatedUtc,RowVersion FROM Ranked WHERE rn=1 ORDER BY RuleCode;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.SecurityRule_CreateVersion @TenantId BIGINT,@StoreId BIGINT=NULL,@RuleCode NVARCHAR(100),@Name NVARCHAR(200),@IsEnabled BIT,@Severity TINYINT,@ConfigurationJson NVARCHAR(4000),@UserId BIGINT,@CorrelationId NVARCHAR(64)
+AS BEGIN SET NOCOUNT ON;SET XACT_ABORT ON;BEGIN TRY BEGIN TRAN;
+ IF @StoreId IS NOT NULL AND NOT EXISTS(SELECT 1 FROM dbo.Stores WHERE TenantId=@TenantId AND Id=@StoreId) THROW 56009,'Store is outside the authorized tenant.',1;
+ IF @Severity NOT BETWEEN 1 AND 5 OR ISJSON(@ConfigurationJson)<>1 OR DATALENGTH(@ConfigurationJson)>8000 THROW 56012,'Rule configuration is invalid.',1;
+ DECLARE @Version INT;SELECT @Version=ISNULL(MAX(Version),0)+1 FROM dbo.SecurityRules WITH(UPDLOCK,HOLDLOCK) WHERE TenantId=@TenantId AND ((StoreId=@StoreId) OR (StoreId IS NULL AND @StoreId IS NULL)) AND RuleCode=@RuleCode;
+ INSERT dbo.SecurityRules(TenantId,StoreId,RuleCode,Name,IsEnabled,Severity,ConfigurationJson,Version,CreatedByUserId) VALUES(@TenantId,@StoreId,@RuleCode,@Name,@IsEnabled,@Severity,@ConfigurationJson,@Version,@UserId);
+ DECLARE @Id BIGINT=SCOPE_IDENTITY();INSERT dbo.AuditLogs(TenantId,StoreId,UserId,ActorType,Action,EntityType,EntityId,BeforeJson,AfterJson,IpAddress,UserAgent,CorrelationId,CreatedUtc) VALUES(@TenantId,@StoreId,@UserId,N'User',N'SecurityRule.VersionCreated',N'SecurityRule',CONVERT(NVARCHAR(50),@Id),NULL,JSON_OBJECT(N'RuleCode':@RuleCode,N'Version':@Version,N'Enabled':@IsEnabled),NULL,NULL,@CorrelationId,SYSUTCDATETIME());
+ COMMIT;SELECT Id,TenantId,StoreId,RuleCode,Name,IsEnabled,Severity,ConfigurationJson,Version,RowVersion FROM dbo.SecurityRules WHERE Id=@Id;
+END TRY BEGIN CATCH IF @@TRANCOUNT>0 ROLLBACK;THROW;END CATCH END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.SecurityIncident_Search @TenantId BIGINT,@AuthorizedStoreIdsJson NVARCHAR(MAX),@Status TINYINT=NULL,@MinimumSeverity TINYINT=NULL,@FromUtc DATETIME2(7)=NULL,@ToUtc DATETIME2(7)=NULL,@PageNumber INT=1,@PageSize INT=50 AS
+BEGIN SET NOCOUNT ON;SET XACT_ABORT ON;
+ IF @TenantId<=0 OR ISJSON(@AuthorizedStoreIdsJson)<>1 OR @PageNumber<1 OR @PageSize NOT BETWEEN 1 AND 200 THROW 56010,'Invalid incident search scope or paging.',1;
+ DECLARE @Stores TABLE(Id BIGINT PRIMARY KEY);INSERT @Stores SELECT DISTINCT TRY_CONVERT(BIGINT,[value]) FROM OPENJSON(@AuthorizedStoreIdsJson) WHERE TRY_CONVERT(BIGINT,[value]) IS NOT NULL;
+ IF EXISTS(SELECT 1 FROM @Stores a WHERE NOT EXISTS(SELECT 1 FROM dbo.Stores s WHERE s.TenantId=@TenantId AND s.Id=a.Id)) THROW 56011,'An authorized store is outside the tenant.',1;
+ SELECT i.Id,i.IncidentNumber,i.StoreId,i.IncidentType,i.Severity,i.RiskScore,i.Status,i.FirstObservedUtc,i.ExitObservedUtc,i.EstimatedLossAmount,i.Currency,i.AssignedUserId,i.ResolutionCode,i.CreatedUtc,i.UpdatedUtc,COUNT_BIG(*) OVER() TotalCount
+ FROM dbo.SecurityIncidents i JOIN @Stores a ON a.Id=i.StoreId WHERE i.TenantId=@TenantId AND (@Status IS NULL OR i.Status=@Status) AND (@MinimumSeverity IS NULL OR i.Severity>=@MinimumSeverity) AND (@FromUtc IS NULL OR i.CreatedUtc>=@FromUtc) AND (@ToUtc IS NULL OR i.CreatedUtc<@ToUtc)
+ ORDER BY i.CreatedUtc DESC,i.Id DESC OFFSET (@PageNumber-1)*@PageSize ROWS FETCH NEXT @PageSize ROWS ONLY;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.SecurityIncident_Get @TenantId BIGINT,@AuthorizedStoreIdsJson NVARCHAR(MAX),@IncidentId BIGINT AS
+BEGIN SET NOCOUNT ON;SET XACT_ABORT ON;
+ DECLARE @Stores TABLE(Id BIGINT PRIMARY KEY);INSERT @Stores SELECT DISTINCT TRY_CONVERT(BIGINT,[value]) FROM OPENJSON(@AuthorizedStoreIdsJson) WHERE TRY_CONVERT(BIGINT,[value]) IS NOT NULL;
+ SELECT i.* FROM dbo.SecurityIncidents i JOIN @Stores a ON a.Id=i.StoreId WHERE i.TenantId=@TenantId AND i.Id=@IncidentId;
+ SELECT x.* FROM dbo.SecurityIncidentItems x JOIN @Stores a ON a.Id=x.StoreId WHERE x.TenantId=@TenantId AND x.SecurityIncidentId=@IncidentId ORDER BY x.Id;
+ SELECT e.Id,e.SecurityIncidentId,e.EvidenceType,e.CameraId,e.CapturedUtc,e.ContentHash,e.StartUtc,e.EndUtc,e.RetentionUntilUtc,e.IsRestricted,e.DeletedUtc,e.CreatedUtc FROM dbo.SecurityIncidentEvidence e JOIN @Stores a ON a.Id=e.StoreId WHERE e.TenantId=@TenantId AND e.SecurityIncidentId=@IncidentId ORDER BY e.CapturedUtc,e.Id;
+ SELECT a.Id,a.ActionType,a.FromStatus,a.ToStatus,a.UserId,a.ActorType,a.ReasonCode,a.Notes,a.OccurredUtc,a.CorrelationId FROM dbo.SecurityIncidentActions a JOIN @Stores s ON s.Id=a.StoreId WHERE a.TenantId=@TenantId AND a.SecurityIncidentId=@IncidentId ORDER BY a.OccurredUtc,a.Id;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.SecurityIncident_Transition @TenantId BIGINT,@StoreId BIGINT,@IncidentId BIGINT,@ToStatus TINYINT,@UserId BIGINT,@ReasonCode NVARCHAR(100)=NULL,@Notes NVARCHAR(2000)=NULL,@ExpectedRowVersion BINARY(8),@CorrelationId NVARCHAR(64) AS
+BEGIN SET NOCOUNT ON;SET XACT_ABORT ON;BEGIN TRY BEGIN TRAN;
+ DECLARE @From TINYINT;SELECT @From=Status FROM dbo.SecurityIncidents WITH(UPDLOCK,HOLDLOCK) WHERE TenantId=@TenantId AND StoreId=@StoreId AND Id=@IncidentId AND RowVersion=@ExpectedRowVersion;
+ IF @From IS NULL THROW 56020,'Incident not found in scope or was modified.',1;
+ IF NOT ((@From=3 AND @ToStatus=4) OR (@From IN(3,4) AND @ToStatus=5) OR (@From=5 AND @ToStatus IN(6,7,8)) OR (@From IN(6,7,8) AND @ToStatus=9) OR (@From=4 AND @ToStatus=8)) THROW 56021,'Invalid incident state transition.',1;
+ IF @ToStatus IN(6,7) AND NULLIF(LTRIM(RTRIM(@ReasonCode)),N'') IS NULL THROW 56022,'Confirmed loss and false positive require a reason.',1;
+ UPDATE dbo.SecurityIncidents SET Status=@ToStatus,ResolutionCode=CASE WHEN @ToStatus IN(6,7,8) THEN @ReasonCode ELSE ResolutionCode END,ResolutionNotes=CASE WHEN @ToStatus IN(6,7,8) THEN @Notes ELSE ResolutionNotes END,ConfirmedByUserId=CASE WHEN @ToStatus=6 THEN @UserId WHEN @ToStatus=9 THEN ConfirmedByUserId ELSE NULL END,ConfirmedUtc=CASE WHEN @ToStatus=6 THEN SYSUTCDATETIME() WHEN @ToStatus=9 THEN ConfirmedUtc ELSE NULL END,UpdatedUtc=SYSUTCDATETIME() WHERE TenantId=@TenantId AND StoreId=@StoreId AND Id=@IncidentId;
+ INSERT dbo.SecurityIncidentActions(TenantId,StoreId,SecurityIncidentId,ActionType,FromStatus,ToStatus,UserId,ActorType,ReasonCode,Notes,OccurredUtc,CorrelationId) VALUES(@TenantId,@StoreId,@IncidentId,N'StatusChanged',@From,@ToStatus,@UserId,N'Human',@ReasonCode,@Notes,SYSUTCDATETIME(),@CorrelationId);
+ INSERT dbo.AuditLogs(TenantId,StoreId,UserId,ActorType,Action,EntityType,EntityId,BeforeJson,AfterJson,IpAddress,UserAgent,CorrelationId,CreatedUtc) VALUES(@TenantId,@StoreId,@UserId,N'User',N'SecurityIncident.StatusChanged',N'SecurityIncident',CONVERT(NVARCHAR(50),@IncidentId),JSON_OBJECT(N'Status':@From),JSON_OBJECT(N'Status':@ToStatus,N'ReasonCode':@ReasonCode),NULL,NULL,@CorrelationId,SYSUTCDATETIME());
+ COMMIT;SELECT Id,Status,RowVersion,UpdatedUtc FROM dbo.SecurityIncidents WHERE Id=@IncidentId;
+END TRY BEGIN CATCH IF @@TRANCOUNT>0 ROLLBACK;THROW;END CATCH END;
+GO
+
+IF NOT EXISTS(SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.16.0') INSERT dbo.DatabaseVersions(VersionNumber,Description,AppliedUtc,AppliedBy) VALUES(N'V1.16.0',N'Phase 18 reviewable tenant/store retail-security foundation',SYSUTCDATETIME(),SUSER_SNAME());
+IF (SELECT COUNT(*) FROM dbo.DatabaseVersions WHERE VersionNumber=N'V1.16.0')<>1 THROW 56090,'V1.16.0 must exist exactly once.',1;
 GO

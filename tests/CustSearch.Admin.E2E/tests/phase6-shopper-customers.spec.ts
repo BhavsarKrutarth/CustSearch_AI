@@ -96,7 +96,7 @@ test('customer search and create use tenant-safe API without browser TenantId',a
 test('smart profile edits factual CRM fields and customer store visibility',async({page})=>{
   const state=await mockPhaseSixApi(page);await signIn(page);await openDashboardLink(page,'Customers');
   await page.getByRole('link',{name:'CUST-001',exact:true}).click();await expect(page.getByRole('heading',{name:'Smart Customer Profile'})).toBeVisible();
-  await expect(page.getByText('Purchase history (Phase 8)',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Available now'})).toBeVisible();
   await page.getByPlaceholder('First name').fill('Priya Updated');await page.getByRole('button',{name:'Save profile'}).click();await expect(page.getByText('Customer profile saved.',{exact:true})).toBeVisible();
   await page.getByPlaceholder('Store IDs comma separated').fill('101');await page.getByPlaceholder('Primary store ID').fill('101');await page.getByRole('button',{name:'Save stores'}).click();await expect(page.getByText('Customer store visibility saved.',{exact:true})).toBeVisible();
   await expect.poll(()=>state.customers[0].firstName).toBe('Priya Updated');

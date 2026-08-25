@@ -3,69 +3,34 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CustSearch.Infrastructure.Persistence;
 
-/// <summary>
-/// EF Core unit-of-work for normal CustSearch CRUD operations.
-/// </summary>
-/// <remarks>
-/// Database schema deployment is intentionally external to this context. Do not call
-/// Database.Migrate() or EnsureCreated(); use the versioned scripts under /database.
-/// </remarks>
-public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> options) : DbContext(options)
+/// <summary>EF Core unit-of-work for normal CustSearch CRUD operations. Database deployment remains script-based.</summary>
+public sealed class CustSearchDbContext(DbContextOptions<CustSearchDbContext> options):DbContext(options)
 {
-    public DbSet<DatabaseVersion> DatabaseVersions => Set<DatabaseVersion>();
-    public DbSet<Tenant> Tenants => Set<Tenant>();
-    public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
-    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
-    public DbSet<AuthenticationEvent> AuthenticationEvents => Set<AuthenticationEvent>();
-    public DbSet<Role> Roles => Set<Role>();
-    public DbSet<Permission> Permissions => Set<Permission>();
-    public DbSet<UserRole> UserRoles => Set<UserRole>();
-    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
-    public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
-    public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
-    public DbSet<TenantUsageSnapshot> TenantUsageSnapshots => Set<TenantUsageSnapshot>();
-    public DbSet<TenantQuotaOverride> TenantQuotaOverrides => Set<TenantQuotaOverride>();
-    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<DatabaseVersion> DatabaseVersions=>Set<DatabaseVersion>(); public DbSet<Tenant> Tenants=>Set<Tenant>(); public DbSet<UserAccount> UserAccounts=>Set<UserAccount>(); public DbSet<RefreshToken> RefreshTokens=>Set<RefreshToken>(); public DbSet<AuthenticationEvent> AuthenticationEvents=>Set<AuthenticationEvent>(); public DbSet<Role> Roles=>Set<Role>(); public DbSet<Permission> Permissions=>Set<Permission>(); public DbSet<UserRole> UserRoles=>Set<UserRole>(); public DbSet<RolePermission> RolePermissions=>Set<RolePermission>(); public DbSet<SubscriptionPlan> SubscriptionPlans=>Set<SubscriptionPlan>(); public DbSet<TenantSubscription> TenantSubscriptions=>Set<TenantSubscription>(); public DbSet<TenantUsageSnapshot> TenantUsageSnapshots=>Set<TenantUsageSnapshot>(); public DbSet<TenantQuotaOverride> TenantQuotaOverrides=>Set<TenantQuotaOverride>(); public DbSet<AuditLog> AuditLogs=>Set<AuditLog>();
+    public DbSet<Store> Stores=>Set<Store>(); public DbSet<UserStoreAssignment> UserStoreAssignments=>Set<UserStoreAssignment>(); public DbSet<StaffProfile> StaffProfiles=>Set<StaffProfile>(); public DbSet<StaffShift> StaffShifts=>Set<StaffShift>(); public DbSet<StaffPresenceSession> StaffPresenceSessions=>Set<StaffPresenceSession>(); public DbSet<ProductCategory> ProductCategories=>Set<ProductCategory>(); public DbSet<StoreVoiceCommandSetting> StoreVoiceCommandSettings=>Set<StoreVoiceCommandSetting>(); public DbSet<StoreVoiceCommandAlias> StoreVoiceCommandAliases=>Set<StoreVoiceCommandAlias>();
+    public DbSet<Customer> Customers=>Set<Customer>(); public DbSet<CustomerStoreAssignment> CustomerStoreAssignments=>Set<CustomerStoreAssignment>(); public DbSet<AnonymousVisitor> AnonymousVisitors=>Set<AnonymousVisitor>();
+    public DbSet<Household> Households=>Set<Household>(); public DbSet<HouseholdMember> HouseholdMembers=>Set<HouseholdMember>(); public DbSet<VisitParty> VisitParties=>Set<VisitParty>(); public DbSet<VisitPartyMember> VisitPartyMembers=>Set<VisitPartyMember>(); public DbSet<CustomerVisit> CustomerVisits=>Set<CustomerVisit>();
 
-    /// <summary>Phase 5C — tenant store master.</summary>
-    public DbSet<Store> Stores => Set<Store>();
-    /// <summary>Phase 5B — authoritative user/store access grants.</summary>
-    public DbSet<UserStoreAssignment> UserStoreAssignments => Set<UserStoreAssignment>();
-    /// <summary>Phase 5D — staff profiles linked to tenant users.</summary>
-    public DbSet<StaffProfile> StaffProfiles => Set<StaffProfile>();
-    /// <summary>Phase 5D — operational staff shifts.</summary>
-    public DbSet<StaffShift> StaffShifts => Set<StaffShift>();
-    /// <summary>Phase 5D — optional staff presence signals.</summary>
-    public DbSet<StaffPresenceSession> StaffPresenceSessions => Set<StaffPresenceSession>();
-    /// <summary>Phase 5E — tenant/store product-category taxonomy.</summary>
-    public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
-    /// <summary>Phase 5F — dynamic per-store voice-command configuration.</summary>
-    public DbSet<StoreVoiceCommandSetting> StoreVoiceCommandSettings => Set<StoreVoiceCommandSetting>();
-    /// <summary>Phase 5F — optional trigger aliases.</summary>
-    public DbSet<StoreVoiceCommandAlias> StoreVoiceCommandAliases => Set<StoreVoiceCommandAlias>();
+    // Phase 8 Retail Billing — shop-customer purchase domain only.
+    public DbSet<Product> Products=>Set<Product>(); public DbSet<ProductStoreAvailability> ProductStoreAvailabilities=>Set<ProductStoreAvailability>(); public DbSet<RetailInvoice> RetailInvoices=>Set<RetailInvoice>(); public DbSet<RetailInvoiceItem> RetailInvoiceItems=>Set<RetailInvoiceItem>(); public DbSet<RetailInvoicePayment> RetailInvoicePayments=>Set<RetailInvoicePayment>(); public DbSet<RetailInvoiceParticipant> RetailInvoiceParticipants=>Set<RetailInvoiceParticipant>(); public DbSet<RetailInvoiceItemAttribution> RetailInvoiceItemAttributions=>Set<RetailInvoiceItemAttribution>();
 
-    /// <summary>Phase 6A — tenant-owned shopper customers.</summary>
-    public DbSet<Customer> Customers => Set<Customer>();
-    /// <summary>Phase 6G — authoritative customer-to-store visibility assignments.</summary>
-    public DbSet<CustomerStoreAssignment> CustomerStoreAssignments => Set<CustomerStoreAssignment>();
-    /// <summary>Phase 6B — store-bound anonymous visitors that remain unidentified until explicit conversion.</summary>
-    public DbSet<AnonymousVisitor> AnonymousVisitors => Set<AnonymousVisitor>();
+    // Phase 9 Platform Billing — CustSearch subscription domain, deliberately separate from Retail Billing.
+    public DbSet<PlatformInvoice> PlatformInvoices=>Set<PlatformInvoice>(); public DbSet<PlatformInvoiceItem> PlatformInvoiceItems=>Set<PlatformInvoiceItem>(); public DbSet<PlatformPayment> PlatformPayments=>Set<PlatformPayment>();
 
-    /// <summary>Phase 7A — tenant-owned verified households.</summary>
-    public DbSet<Household> Households => Set<Household>();
-    /// <summary>Phase 7B — explicit verified customer-to-household relationships.</summary>
-    public DbSet<HouseholdMember> HouseholdMembers => Set<HouseholdMember>();
-    /// <summary>Phase 7C — store-bound co-visit parties that do not imply family.</summary>
-    public DbSet<VisitParty> VisitParties => Set<VisitParty>();
-    /// <summary>Phase 7C — separately identified customer/visitor participants in a co-visit party.</summary>
-    public DbSet<VisitPartyMember> VisitPartyMembers => Set<VisitPartyMember>();
-    /// <summary>Phase 7D — factual customer visit history.</summary>
-    public DbSet<CustomerVisit> CustomerVisits => Set<CustomerVisit>();
+    // Phase 10 Preferences & Voice — factual signals, derived scores, category aliases and confirmation-controlled voice sessions.
+    public DbSet<CustomerPreferenceSignal> CustomerPreferenceSignals=>Set<CustomerPreferenceSignal>(); public DbSet<CustomerPreferenceScore> CustomerPreferenceScores=>Set<CustomerPreferenceScore>(); public DbSet<HouseholdPreferenceTag> HouseholdPreferenceTags=>Set<HouseholdPreferenceTag>(); public DbSet<PreferenceWeightVersion> PreferenceWeightVersions=>Set<PreferenceWeightVersion>(); public DbSet<StoreVoiceCommandRuntimeSetting> StoreVoiceCommandRuntimeSettings=>Set<StoreVoiceCommandRuntimeSetting>(); public DbSet<VoiceCommandSession> VoiceCommandSessions=>Set<VoiceCommandSession>(); public DbSet<ProductCategoryAlias> ProductCategoryAliases=>Set<ProductCategoryAlias>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        ArgumentNullException.ThrowIfNull(modelBuilder);
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(CustSearchDbContext).Assembly);
-        base.OnModelCreating(modelBuilder);
-    }
+    // Phase 11 Alerts & Real-Time — authoritative alerts, durable recovery cursor and transactional notification outbox.
+    public DbSet<Alert> Alerts=>Set<Alert>(); public DbSet<RealtimeEvent> RealtimeEvents=>Set<RealtimeEvent>(); public DbSet<NotificationOutboxMessage> NotificationOutbox=>Set<NotificationOutboxMessage>();
+
+    // Phase 12 Integrations — secret-reference configuration, inbound receipts, outbound outbox and payload-free delivery audit.
+    public DbSet<IntegrationConfiguration> IntegrationConfigurations=>Set<IntegrationConfiguration>(); public DbSet<IntegrationInboundEvent> IntegrationInboundEvents=>Set<IntegrationInboundEvent>(); public DbSet<IntegrationOutboxMessage> IntegrationOutbox=>Set<IntegrationOutboxMessage>(); public DbSet<IntegrationDeliveryLog> IntegrationDeliveryLogs=>Set<IntegrationDeliveryLog>();
+
+    // Phase 13 Cameras & Tracking — configuration references, versioned zones and anonymous-first operational tracks.
+    public DbSet<Camera> Cameras=>Set<Camera>(); public DbSet<CameraZoneConfiguration> CameraZoneConfigurations=>Set<CameraZoneConfiguration>(); public DbSet<PersonTrackSession> PersonTrackSessions=>Set<PersonTrackSession>(); public DbSet<CameraTrackHandoff> CameraTrackHandoffs=>Set<CameraTrackHandoff>(); public DbSet<CameraOperationalEvent> CameraOperationalEvents=>Set<CameraOperationalEvent>();
+
+    // Phase 14 Consent-Based Recognition — purpose consent, encrypted derived templates and human-reviewed candidates.
+    public DbSet<CustomerRecognitionConsent> CustomerRecognitionConsents=>Set<CustomerRecognitionConsent>(); public DbSet<BiometricTemplate> BiometricTemplates=>Set<BiometricTemplate>(); public DbSet<RecognitionCandidate> RecognitionCandidates=>Set<RecognitionCandidate>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder){ArgumentNullException.ThrowIfNull(modelBuilder);modelBuilder.ApplyConfigurationsFromAssembly(typeof(CustSearchDbContext).Assembly);base.OnModelCreating(modelBuilder);}
 }

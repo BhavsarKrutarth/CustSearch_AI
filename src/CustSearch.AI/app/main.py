@@ -2,14 +2,16 @@
 
 import logging
 import re
+import secrets
 from time import perf_counter
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import Response
 
 from app.config import get_settings
 from app.logging_config import configure_logging, correlation_id_context
+from app.tracking import NormalizedEvent, NormalizeRequest, deterministic_demo_events, normalize
 
 CORRELATION_HEADER = "X-Correlation-ID"
 CORRELATION_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
@@ -54,3 +56,41 @@ async def live_health() -> dict[str, str | bool]:
         "environment": settings.environment,
         "demoMode": settings.demo_mode,
     }
+
+
+def require_api_key(value: str | None) -> None:
+    """Authenticate the Python boundary without logging or returning configured credentials."""
+
+    configured = settings.api_key.get_secret_value()
+    if not configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI API key is not configured",
+        )
+    if value is None or not secrets.compare_digest(value, configured):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid service credential",
+        )
+
+
+@app.post("/v1/cctv/events/normalize", response_model=list[NormalizedEvent], tags=["CCTV"])
+async def normalize_events(
+    request: NormalizeRequest, x_custsearch_ai_key: str | None = Header(default=None)
+) -> list[NormalizedEvent]:
+    """Normalize anonymous detector metadata; this endpoint never receives SQL credentials."""
+
+    require_api_key(x_custsearch_ai_key)
+    return normalize(request)
+
+
+@app.get("/v1/cctv/demo/events", response_model=list[NormalizedEvent], tags=["CCTV"])
+async def demo_events(
+    x_custsearch_ai_key: str | None = Header(default=None),
+) -> list[NormalizedEvent]:
+    """Return deterministic CI fixtures only when Demo Mode is explicitly enabled."""
+
+    require_api_key(x_custsearch_ai_key)
+    if not settings.demo_mode:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo Mode is disabled")
+    return deterministic_demo_events()

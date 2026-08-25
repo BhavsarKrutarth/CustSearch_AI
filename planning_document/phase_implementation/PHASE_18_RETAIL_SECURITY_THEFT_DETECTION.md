@@ -1,6 +1,6 @@
 # Phase 18 — Retail Security / Suspected Unpaid Product Exit Detection
 
-Status: Not Started
+Status: In Progress
 
 ## Objective
 
@@ -303,4 +303,4 @@ Phase 18 is complete only when:
 
 ## Done Summary
 
-Pending approval, implementation and validation.
+V1.16.0 database foundation installed and validated on 2026-08-25: versioned rules, replay-safe signed observation receipts, normalized observations, reviewable incidents/items/opaque evidence/actions/notification deliveries/payment correlations, granular permissions and disabled shadow-safe settings. Live runner/verifier/rollback tests and canonical fresh install pass with zero synthetic residue. Application/API/Worker/Python/Angular implementation and production environment gates remain pending; Phase 18 is not complete.

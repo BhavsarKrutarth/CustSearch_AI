@@ -1,0 +1,101 @@
+name: Phase 9 SQL Only Validate
+
+on:
+  push:
+    branches: [phase9-platform-billing]
+    paths:
+      - 'database/**'
+      - '.github/workflows/phase9-sql-validate.yml'
+  pull_request:
+    branches: [AIMainBranch]
+    paths:
+      - 'database/**'
+      - '.github/workflows/phase9-sql-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sql-server-2022:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SA_PASSWORD: 'CustSearch_Phase9_SQL_2026!'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare validated V1.7 baseline
+        shell: bash
+        run: |
+          git show origin/AIMainBranch:database/CustSearchAi.sql > /tmp/phase8.raw
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/phase8.raw').read_bytes()
+          enc='utf-16' if raw.startswith(b'\xff\xfe') else ('utf-8-sig' if raw.startswith(b'\xef\xbb\xbf') else 'utf-8')
+          text=raw.decode(enc)
+          if "VersionNumber=N'V1.7.0'" not in text:
+              raise SystemExit('AIMainBranch canonical must contain V1.7.0.')
+          Path('/tmp/phase8.sql').write_text(text,encoding='utf-8')
+          PY
+
+      - name: Start SQL Server 2022
+        shell: bash
+        run: |
+          docker run -d --name phase9-sql-only \
+            -e ACCEPT_EULA=Y \
+            -e MSSQL_SA_PASSWORD="$SA_PASSWORD" \
+            -p 14339:1433 \
+            mcr.microsoft.com/mssql/server:2022-latest
+          for i in {1..60}; do
+            if docker exec phase9-sql-only /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then
+              exit 0
+            fi
+            if [ "$i" = 60 ]; then
+              docker logs phase9-sql-only
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Install validated Phase 8 baseline
+        shell: bash
+        run: |
+          docker cp /tmp/phase8.sql phase9-sql-only:/tmp/phase8.sql
+          docker exec phase9-sql-only /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "$SA_PASSWORD" -C -b \
+            -i /tmp/phase8.sql
+
+      - name: Run Phase 9 manual installer first time
+        shell: bash
+        run: |
+          docker cp database/run-phase9.sql phase9-sql-only:/tmp/run-phase9.sql
+          docker exec phase9-sql-only /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "$SA_PASSWORD" -C -b \
+            -d CustSearch_AI -i /tmp/run-phase9.sql
+
+      - name: Run Phase 9 manual installer second time
+        shell: bash
+        run: |
+          docker exec phase9-sql-only /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "$SA_PASSWORD" -C -b \
+            -d CustSearch_AI -i /tmp/run-phase9.sql
+
+      - name: Run standalone Phase 9 verifier
+        shell: bash
+        run: |
+          docker cp database/verify-phase9.sql phase9-sql-only:/tmp/verify-phase9.sql
+          docker exec phase9-sql-only /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "$SA_PASSWORD" -C -b \
+            -d CustSearch_AI -i /tmp/verify-phase9.sql
+
+      - name: Run local DB acceptance verifier through Phase 9
+        shell: bash
+        run: |
+          docker cp database/verify-local-db-through-phase9.sql phase9-sql-only:/tmp/verify-local-db-through-phase9.sql
+          docker exec phase9-sql-only /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "$SA_PASSWORD" -C -b \
+            -d CustSearch_AI -i /tmp/verify-local-db-through-phase9.sql
