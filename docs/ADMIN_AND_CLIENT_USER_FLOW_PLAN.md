@@ -1,6 +1,6 @@
 # Admin and Client User Flow Plan
 
-Last verified: 2026-08-26  
+Last verified: 2026-08-26
 Applies to: Angular Admin + ASP.NET Core API on the current Phase 16/17 audit branch
 
 ## 1. Purpose and user definitions
