@@ -11,6 +11,7 @@ using CustSearch.Application.PlatformBilling;
 using CustSearch.Application.PlatformTenancy;
 using CustSearch.Application.PreferencesVoice;
 using CustSearch.Application.RetailBilling;
+using CustSearch.Application.Security;
 using CustSearch.Application.ShopperCustomers;
 using CustSearch.Application.Tenancy;
 using CustSearch.Application.TenantOperations;
@@ -61,6 +62,7 @@ public static class DependencyInjection
         services.AddScoped<IRecognitionService,RecognitionService>();services.AddSingleton<IRecognitionTemplateProtector,AesGcmRecognitionTemplateProtector>();
         services.AddScoped<IReportQueryRepository,DapperReportQueryRepository>();services.AddScoped<IReportsExportsService,ReportsExportsService>();services.AddScoped<IExportJobProcessor,ExportJobProcessor>();services.AddSingleton<IExportFileStore,LocalExportFileStore>();services.AddSingleton<IExportDownloadTokenService,ExportDownloadTokenService>();
         services.AddScoped<IOperationalPlatformService,OperationalPlatformService>();services.AddScoped<IWorkerRuntimeGate,WorkerRuntimeGate>();services.AddScoped<IRetentionProcessor,OperationalRetentionProcessor>();
+        services.AddScoped<ISecurityPlatformService,SecurityPlatformService>();services.AddScoped<ISecurityMaintenanceProcessor,SecurityMaintenanceProcessor>();services.TryAddSingleton<ISecurityRealtimePublisher,NullSecurityRealtimePublisher>();services.AddSingleton<ISecurityEvidenceTokenService,SecurityEvidenceTokenService>();services.AddSingleton<ISecurityEvidenceStore,LocalEncryptedSecurityEvidenceStore>();
         return services;
     }
 }

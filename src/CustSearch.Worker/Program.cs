@@ -4,6 +4,7 @@ using CustSearch.Integrations;
 using CustSearch.Application.ReportsExports;
 using CustSearch.Application.Authentication;
 using CustSearch.Application.AlertsRealtime;
+using CustSearch.Application.Security;
 using CustSearch.Infrastructure.Operations;
 using Microsoft.Extensions.Options;
 using Serilog;
@@ -35,10 +36,12 @@ try
     builder.Services.AddOptions<ReportsExportsOptions>().Bind(builder.Configuration.GetSection(ReportsExportsOptions.SectionName)).Validate(x=>x.IsValid(false),"ReportsExports settings are invalid.").ValidateOnStart();
     builder.Services.AddOptions<ExportWorkerOptions>().Bind(builder.Configuration.GetSection(ExportWorkerOptions.SectionName)).Validate(x=>x.PollIntervalSeconds is>=1 and<=60&&x.BatchSize is>=1 and<=50,"ExportWorker settings are invalid.").ValidateOnStart();
     builder.Services.AddOptions<OperationalPlatformOptions>().Bind(builder.Configuration.GetSection(OperationalPlatformOptions.SectionName)).Validate(x=>x.IsValid(),"OperationalPlatform settings are invalid.").ValidateOnStart();
+    builder.Services.AddOptions<SecurityEvidenceOptions>().Bind(builder.Configuration.GetSection(SecurityEvidenceOptions.SectionName)).Validate(x=>x.IsValid(true),"SecurityEvidence requires production secrets.").ValidateOnStart();
     builder.Services.AddHostedService<Worker>();
     builder.Services.AddHostedService<IntegrationOutboxHostedService>();
     builder.Services.AddHostedService<ExportJobsHostedService>();
-    builder.Services.AddHostedService<OperationalRetentionHostedService>();
+builder.Services.AddHostedService<OperationalRetentionHostedService>();
+builder.Services.AddHostedService<SecurityMaintenanceHostedService>();
     builder.Services.AddHostedService<OperationalHeartbeatHostedService>();
 
     var host = builder.Build();

@@ -22,6 +22,11 @@ from app.camera_source import (
 from app.config import get_settings
 from app.logging_config import configure_logging, correlation_id_context
 from app.tracking import NormalizedEvent, NormalizeRequest, deterministic_demo_events, normalize
+from app.security_observations import (
+    NormalizedSecurityObservation,
+    SecurityNormalizeRequest,
+    normalize_security,
+)
 
 CORRELATION_HEADER = "X-Correlation-ID"
 CORRELATION_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
@@ -92,6 +97,21 @@ async def normalize_events(
 
     require_api_key(x_custsearch_ai_key)
     return normalize(request)
+
+
+@app.post(
+    "/v1/security/observations/normalize",
+    response_model=list[NormalizedSecurityObservation],
+    tags=["Retail Security"],
+)
+async def normalize_security_observations(
+    request: SecurityNormalizeRequest,
+    x_custsearch_ai_key: str | None = Header(default=None),
+) -> list[NormalizedSecurityObservation]:
+    """Emit normalized observations only; ASP.NET owns POS correlation and risk decisions."""
+
+    require_api_key(x_custsearch_ai_key)
+    return normalize_security(request)
 
 
 @app.post("/v1/cctv/cameras/probe", response_model=CameraProbeResult, tags=["CCTV"])

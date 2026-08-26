@@ -3,6 +3,7 @@ using CustSearch.Application.Authentication;
 using CustSearch.Application.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using CustSearch.Application.Security;
 
 namespace CustSearch.API.AlertsRealtime;
 
@@ -25,6 +26,7 @@ public interface IAlertClient
 {
     Task AlertEvent(AlertRealtimeEventV1 message);
     Task RealtimeReady(AlertRealtimeReadyV1 message);
+    Task SecurityEvent(SecurityRealtimeEvent message)=>Task.CompletedTask;
 }
 
 public sealed record AlertRealtimeReadyV1(int ContractVersion,string ConnectionId,DateTime ConnectedUtc);
