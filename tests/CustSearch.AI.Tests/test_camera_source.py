@@ -1,9 +1,12 @@
 """Dynamic RTSP source resolution and authenticated probe boundary tests."""
 
+from datetime import UTC, datetime
+
 import httpx
 import numpy as np
 import pytest
 from app.camera_source import (
+    CameraPreviewFrame,
     CameraProbeResult,
     CameraSourceConfigurationError,
     probe_camera,
@@ -79,4 +82,34 @@ async def test_probe_endpoint_is_authenticated_and_does_not_return_reference(mon
     assert denied.status_code == 401
     assert accepted.status_code == 200
     assert accepted.json() == expected.model_dump(mode="json")
+    assert "configuration_reference" not in accepted.text
+
+
+@pytest.mark.asyncio
+async def test_latest_frame_endpoint_is_authenticated_and_never_returns_reference(monkeypatch) -> None:
+    settings.api_key = SecretStr("camera-frame-key")
+    expected = CameraPreviewFrame(
+        content=b"safe-jpeg",
+        width=640,
+        height=360,
+        captured_utc=datetime(2026, 8, 26, 7, 0, tzinfo=UTC),
+    )
+    monkeypatch.setattr("app.main.preview_manager.get_latest", lambda _reference, _age: expected)
+    payload = {"configuration_reference": "env:CUSTSEARCH_CAMERA_DYNAMIC_RTSP", "max_age_seconds": 5}
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        denied = await client.post("/v1/cctv/cameras/frame", json=payload)
+        accepted = await client.post(
+            "/v1/cctv/cameras/frame",
+            json=payload,
+            headers={"X-CustSearch-AI-Key": "camera-frame-key"},
+        )
+
+    assert denied.status_code == 401
+    assert accepted.status_code == 200
+    assert accepted.content == b"safe-jpeg"
+    assert accepted.headers["content-type"] == "image/jpeg"
+    assert accepted.headers["x-frame-width"] == "640"
     assert "configuration_reference" not in accepted.text

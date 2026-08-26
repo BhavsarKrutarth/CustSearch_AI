@@ -31,11 +31,13 @@ Detailed per-requirement status is maintained in `../ALL_PHASE_IMPLEMENTATION_MA
 
 ## Phase 13/17 Local Camera UAT Addendum
 
-- Status: IMPLEMENTED — PHYSICAL FRAME TESTING PENDING
-- Completed: dynamic camera metadata, opaque secret reference, CameraOperator users, JWT tenant/store
-  isolation, authenticated Python one-frame probe, API negative test and real Chrome UAT.
-- Pending: set the authorized RTSP URL in the Python server environment and observe one real frame;
-  then implement continuous reconnect/detection/event publishing separately.
+- Status: SECURE USER-WISE PREVIEW IMPLEMENTED — PHYSICAL FRAME TESTING PENDING
+- Completed: V1.16.2 preview grants/sessions applied to live SQL; office CameraOperator grant; tenant/store/user
+  isolation; short-lived API preview sessions; Python continuous RTSP capture/reconnect/latest-frame endpoint;
+  Angular Start/Stop live preview and grant management; three-profile authorization regression.
+- Pending: set the authorized RTSP URL in the Python server environment, restart API/Python and observe
+  one real preview frame; continuous ONNX detection and HMAC event publishing remain separate work.
+- Tracker: `../CAMERA_LIVE_PREVIEW_IMPLEMENTATION_TRACKER.md`.
 - Security: no camera IP, username, password or raw RTSP URL is stored in application source or SQL.
 
 ## Phase 18

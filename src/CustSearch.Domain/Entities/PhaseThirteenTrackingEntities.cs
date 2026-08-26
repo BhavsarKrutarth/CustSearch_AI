@@ -70,3 +70,28 @@ public sealed class CameraOperationalEvent
     private static string Required(string value,int max){ArgumentException.ThrowIfNullOrWhiteSpace(value);var v=value.Trim();return v.Length<=max?v:throw new ArgumentOutOfRangeException(nameof(value));}
     private static DateTime Utc(DateTime value)=>value.Kind==DateTimeKind.Utc?value:throw new ArgumentException("Timestamp must be UTC.",nameof(value));
 }
+
+/// <summary>An explicit user-to-camera preview grant. The grant never contains media credentials.</summary>
+public sealed class CameraUserPreviewGrant
+{
+    private CameraUserPreviewGrant() { }
+    private CameraUserPreviewGrant(long tenantId,long storeId,long cameraId,long userId,bool canViewTracking,bool canControl,DateTime?validUntilUtc,long assignedByUserId,DateTime utcNow)
+    {ArgumentOutOfRangeException.ThrowIfNegativeOrZero(tenantId);ArgumentOutOfRangeException.ThrowIfNegativeOrZero(storeId);ArgumentOutOfRangeException.ThrowIfNegativeOrZero(cameraId);ArgumentOutOfRangeException.ThrowIfNegativeOrZero(userId);ArgumentOutOfRangeException.ThrowIfNegativeOrZero(assignedByUserId);TenantId=tenantId;StoreId=storeId;CameraId=cameraId;UserId=userId;CanViewLive=true;CanViewTracking=canViewTracking;CanControl=canControl;ValidUntilUtc=validUntilUtc is null?null:Utc(validUntilUtc.Value);AssignedByUserId=assignedByUserId;CreatedUtc=Utc(utcNow);UpdatedUtc=CreatedUtc;IsActive=true;}
+    public long Id{get;private set;} public long TenantId{get;private set;} public long StoreId{get;private set;} public long CameraId{get;private set;} public long UserId{get;private set;} public bool CanViewLive{get;private set;} public bool CanViewTracking{get;private set;} public bool CanControl{get;private set;} public DateTime?ValidUntilUtc{get;private set;} public bool IsActive{get;private set;} public long AssignedByUserId{get;private set;} public DateTime CreatedUtc{get;private set;} public DateTime UpdatedUtc{get;private set;} public byte[]?RowVersion{get;private set;}
+    public static CameraUserPreviewGrant Create(long tenantId,long storeId,long cameraId,long userId,bool canViewTracking,bool canControl,DateTime?validUntilUtc,long assignedByUserId,DateTime utcNow)=>new(tenantId,storeId,cameraId,userId,canViewTracking,canControl,validUntilUtc,assignedByUserId,utcNow);
+    public void Update(bool canViewLive,bool canViewTracking,bool canControl,DateTime?validUntilUtc,bool isActive,DateTime utcNow){CanViewLive=canViewLive;CanViewTracking=canViewTracking;CanControl=canControl;ValidUntilUtc=validUntilUtc is null?null:Utc(validUntilUtc.Value);IsActive=isActive;UpdatedUtc=Utc(utcNow);}
+    private static DateTime Utc(DateTime value)=>value.Kind==DateTimeKind.Utc?value:throw new ArgumentException("Timestamp must be UTC.",nameof(value));
+}
+
+/// <summary>Short-lived audited preview session. Media secrets and frames are never persisted.</summary>
+public sealed class CameraPreviewSession
+{
+    private CameraPreviewSession() { }
+    private CameraPreviewSession(Guid id,long tenantId,long storeId,long cameraId,long userId,DateTime createdUtc,DateTime expiresUtc)
+    {if(id==Guid.Empty)throw new ArgumentException("Session id is required.",nameof(id));ArgumentOutOfRangeException.ThrowIfNegativeOrZero(tenantId);ArgumentOutOfRangeException.ThrowIfNegativeOrZero(storeId);ArgumentOutOfRangeException.ThrowIfNegativeOrZero(cameraId);ArgumentOutOfRangeException.ThrowIfNegativeOrZero(userId);Id=id;TenantId=tenantId;StoreId=storeId;CameraId=cameraId;UserId=userId;CreatedUtc=Utc(createdUtc);ExpiresUtc=Utc(expiresUtc);if(ExpiresUtc<=CreatedUtc)throw new ArgumentOutOfRangeException(nameof(expiresUtc));LastAccessedUtc=CreatedUtc;Status=CameraPreviewSessionStatus.Active;}
+    public Guid Id{get;private set;} public long TenantId{get;private set;} public long StoreId{get;private set;} public long CameraId{get;private set;} public long UserId{get;private set;} public DateTime CreatedUtc{get;private set;} public DateTime ExpiresUtc{get;private set;} public DateTime LastAccessedUtc{get;private set;} public DateTime?EndedUtc{get;private set;} public CameraPreviewSessionStatus Status{get;private set;}
+    public static CameraPreviewSession Start(long tenantId,long storeId,long cameraId,long userId,DateTime createdUtc,TimeSpan lifetime)=>new(Guid.NewGuid(),tenantId,storeId,cameraId,userId,createdUtc,createdUtc.Add(lifetime));
+    public void Touch(DateTime utcNow){var now=Utc(utcNow);if(Status!=CameraPreviewSessionStatus.Active||now>=ExpiresUtc){Status=CameraPreviewSessionStatus.Expired;throw new InvalidOperationException("Preview session has expired.");}LastAccessedUtc=now;}
+    public void End(DateTime utcNow){if(Status==CameraPreviewSessionStatus.Active){EndedUtc=Utc(utcNow);LastAccessedUtc=EndedUtc.Value;Status=CameraPreviewSessionStatus.Ended;}}
+    private static DateTime Utc(DateTime value)=>value.Kind==DateTimeKind.Utc?value:throw new ArgumentException("Timestamp must be UTC.",nameof(value));
+}

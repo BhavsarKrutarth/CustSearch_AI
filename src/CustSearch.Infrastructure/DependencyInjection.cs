@@ -57,7 +57,7 @@ public static class DependencyInjection
         services.AddScoped<IRetailBillingRepository,RetailBillingRepository>();services.AddScoped<IRetailBillingService,RetailBillingService>();services.AddScoped<IPreferencesVoiceService,PreferencesVoiceService>();
         services.AddSingleton<AlertDeduplicationCoordinator>();services.AddScoped<IAlertsRealtimeService,AlertsRealtimeService>();services.AddScoped<INotificationOutboxProcessor,NotificationOutboxProcessor>();
         services.AddScoped<IIntegrationManagementService,IntegrationManagementService>();services.AddScoped<IInboundIntegrationService,InboundIntegrationService>();services.AddScoped<IIntegrationOutboxProcessor,IntegrationOutboxProcessor>();
-        services.AddScoped<ICameraTrackingService,CameraTrackingService>();
+        services.AddScoped<ICameraTrackingService,CameraTrackingService>();services.AddScoped<ICameraPreviewService,CameraPreviewService>();
         services.AddScoped<IRecognitionService,RecognitionService>();services.AddSingleton<IRecognitionTemplateProtector,AesGcmRecognitionTemplateProtector>();
         services.AddScoped<IReportQueryRepository,DapperReportQueryRepository>();services.AddScoped<IReportsExportsService,ReportsExportsService>();services.AddScoped<IExportJobProcessor,ExportJobProcessor>();services.AddSingleton<IExportFileStore,LocalExportFileStore>();services.AddSingleton<IExportDownloadTokenService,ExportDownloadTokenService>();
         services.AddScoped<IOperationalPlatformService,OperationalPlatformService>();services.AddScoped<IWorkerRuntimeGate,WorkerRuntimeGate>();services.AddScoped<IRetentionProcessor,OperationalRetentionProcessor>();

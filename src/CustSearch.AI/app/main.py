@@ -11,9 +11,12 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 
 from app.camera_source import (
+    CameraFrameRequest,
+    CameraFrameUnavailableError,
     CameraProbeRequest,
     CameraProbeResult,
     CameraSourceConfigurationError,
+    preview_manager,
     probe_camera,
 )
 from app.config import get_settings
@@ -107,6 +110,40 @@ async def probe_camera_source(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exception)
         ) from exception
+
+
+@app.post("/v1/cctv/cameras/frame", tags=["CCTV"])
+async def latest_camera_frame(
+    request: CameraFrameRequest,
+    x_custsearch_ai_key: str | None = Header(default=None),
+) -> Response:
+    """Return one recent in-memory JPEG to the authenticated .NET preview proxy."""
+
+    require_api_key(x_custsearch_ai_key)
+    try:
+        frame = await run_in_threadpool(
+            preview_manager.get_latest,
+            request.configuration_reference,
+            request.max_age_seconds,
+        )
+    except CameraSourceConfigurationError as exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exception)
+        ) from exception
+    except CameraFrameUnavailableError as exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exception)
+        ) from exception
+    return Response(
+        content=frame.content,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "no-store, no-cache, max-age=0",
+            "X-Frame-Width": str(frame.width),
+            "X-Frame-Height": str(frame.height),
+            "X-Frame-Captured-Utc": frame.captured_utc.isoformat().replace("+00:00", "Z"),
+        },
+    )
 
 
 @app.get("/v1/cctv/demo/events", response_model=list[NormalizedEvent], tags=["CCTV"])

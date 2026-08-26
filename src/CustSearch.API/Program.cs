@@ -19,6 +19,7 @@ using CustSearch.Infrastructure;
 using CustSearch.Infrastructure.Security;
 using CustSearch.Infrastructure.Persistence;
 using CustSearch.Infrastructure.Operations;
+using CustSearch.Infrastructure.CamerasTracking;
 using CustSearch.Integrations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -224,6 +225,8 @@ try
     builder.Services.AddOptions<IntegrationSecurityOptions>().Bind(builder.Configuration.GetSection(IntegrationSecurityOptions.SectionName)).Validate(x=>x.AllowedClockSkewSeconds is>=30 and<=900,"IntegrationSecurity:AllowedClockSkewSeconds must be between 30 and 900.").Validate(x=>x.MaximumInboundBodyBytes is>=1024 and<=1048576,"IntegrationSecurity:MaximumInboundBodyBytes must be between 1024 and 1048576.").ValidateOnStart();
     builder.Services.AddOptions<AlertsRealtimeOptions>().Bind(builder.Configuration.GetSection(AlertsRealtimeOptions.SectionName)).Validate(x=>x.PollIntervalSeconds is>=1 and<=60,"AlertsRealtime:PollIntervalSeconds must be between 1 and 60.").Validate(x=>x.BatchSize is>=1 and<=200,"AlertsRealtime:BatchSize must be between 1 and 200.").ValidateOnStart();
     builder.Services.AddOptions<CctvSecurityOptions>().Bind(builder.Configuration.GetSection(CctvSecurityOptions.SectionName)).Validate(x=>x.AllowedClockSkewSeconds is>=30 and<=900,"CctvSecurity:AllowedClockSkewSeconds must be between 30 and 900.").Validate(x=>x.MaximumBodyBytes is>=1024 and<=1048576,"CctvSecurity:MaximumBodyBytes must be between 1024 and 1048576.").ValidateOnStart();
+    builder.Services.AddOptions<CctvPreviewOptions>().Bind(builder.Configuration.GetSection(CctvPreviewOptions.SectionName)).Validate(x=>x.IsValid(),"CctvPreview settings are invalid.").ValidateOnStart();
+    builder.Services.AddHttpClient<ICameraFrameSource,PythonCameraFrameSource>((services,client)=>{var value=services.GetRequiredService<IOptions<CctvPreviewOptions>>().Value;client.BaseAddress=new Uri(value.AiServiceBaseUrl.TrimEnd('/')+"/",UriKind.Absolute);client.Timeout=TimeSpan.FromSeconds(value.RequestTimeoutSeconds);});
     builder.Services.AddOptions<RecognitionSecurityOptions>().Bind(builder.Configuration.GetSection(RecognitionSecurityOptions.SectionName)).Validate(x=>x.MinimumConfidence is>=0 and<=1&&x.MinimumQuality is>=0 and<=1&&x.AmbiguityDelta is>=0 and<=1,"Recognition thresholds must be between 0 and 1.").Validate(x=>x.RetentionDaysAfterWithdrawal is>=0 and<=3650,"Recognition retention must be between 0 and 3650 days.").Validate(x=>x.HasValidEncryptionConfiguration(),"Enabled recognition requires a secret-supplied 256-bit Base64 encryption key and an opaque key reference.").ValidateOnStart();
     builder.Services.AddOptions<ReportsExportsOptions>().Bind(builder.Configuration.GetSection(ReportsExportsOptions.SectionName)).Validate(x=>x.IsValid(false),"ReportsExports settings are invalid.").ValidateOnStart();
     if(builder.Environment.IsProduction()&&builder.Configuration.GetValue<bool>("CctvRuntime:DemoMode"))throw new InvalidOperationException("CCTV Demo Mode cannot be enabled in Production.");

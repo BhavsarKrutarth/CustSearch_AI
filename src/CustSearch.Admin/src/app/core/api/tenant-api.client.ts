@@ -9,6 +9,7 @@ export class TenantApiClient {
   private readonly http = inject(HttpClient);
 
   get<T>(relativePath: string): Observable<T> { return this.http.get<T>(this.tenantUrl(relativePath)); }
+  getBlob(relativePath: string): Observable<Blob> { return this.http.get(this.tenantUrl(relativePath), { responseType: 'blob' }); }
   post<T>(relativePath: string, body: unknown = {}): Observable<T> { return this.http.post<T>(this.tenantUrl(relativePath), body); }
   put<T>(relativePath: string, body: unknown): Observable<T> { return this.http.put<T>(this.tenantUrl(relativePath), body); }
   delete<T>(relativePath: string): Observable<T> { return this.http.delete<T>(this.tenantUrl(relativePath)); }
