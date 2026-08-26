@@ -13,6 +13,7 @@ export const routes:Routes=[
   {path:'login',title:'Sign in | CustSearch AI',loadComponent:()=>import('./features/auth/login-page').then(m=>m.LoginPage)},
   {path:'',pathMatch:'full',redirectTo:'login'},
   {path:'access-denied',title:'Access denied | CustSearch AI',loadComponent:()=>import('./features/auth/access-denied-page').then(m=>m.AccessDeniedPage)},
+  {path:'account/change-password',title:'Change password | CustSearch AI',canActivate:[authGuard],loadComponent:()=>import('./features/auth/change-password-page').then(m=>m.ChangePasswordPage)},
   {path:'customer-admin',pathMatch:'full',redirectTo:'customer-admin/dashboard'},
   {path:'customer-admin/dashboard',title:'Customer Admin | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantDashboardView])],loadComponent:()=>import('./features/customer-admin/phase-five-dashboard-page').then(m=>m.PhaseFiveDashboardPage)},
   {path:'customer-admin/stores',title:'Stores | CustSearch AI',data:{mode:'stores',title:'Stores'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantStoresView])],loadComponent:phase5Page},

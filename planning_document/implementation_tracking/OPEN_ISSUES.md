@@ -22,7 +22,12 @@
 - Physical RTSP frame capture remains blocked until an authorized stream URL is set only in the
   Python server environment. The dynamic authenticated one-frame probe is implemented/tested; continuous
   reconnect/detection/HMAC publishing and production ONNX calibration remain pending. Demo Mode remains available.
+- Production account recovery still needs a recipient-owned, short-lived, single-use forgot-password/
+  invitation token and verified notification delivery. Self-service change password and authorized tenant-admin
+  reset are implemented; no hash decoding or committed default credential is permitted.
+- Platform tenant creation provisions tenant roles but does not yet create/invite the first Tenant Admin.
+  Implement this together with the one-time invitation flow rather than accepting a reusable bootstrap password.
 
 ## Low
 
-- Angular production build reports the existing admin-shell style budget exceeded by 61 bytes.
+- Angular production build reports the admin-shell style budget exceeded by 151 bytes; build still passes.

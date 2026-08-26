@@ -20,6 +20,7 @@ export class PhaseFiveApiService {
   updateUser(id:number,body:unknown):Observable<TenantUser>{return this.api.put(`users/${id}`,body);}
   setUserRoles(id:number,roles:string[]):Observable<TenantUser>{return this.api.put(`users/${id}/roles`,{roles});}
   setUserStores(id:number,storeIds:number[],primaryStoreId?:number|null):Observable<TenantUser>{return this.api.put(`users/${id}/stores`,{storeIds,primaryStoreId:primaryStoreId??null});}
+  resetUserPassword(id:number,newPassword:string,confirmNewPassword:string):Observable<TenantUser>{return this.api.put(`users/${id}/password`,{newPassword,confirmNewPassword});}
   stores():Observable<Store[]>{return this.api.get('stores');}
   createStore(body:unknown):Observable<Store>{return this.api.post('stores',body);}
   updateStore(id:number,body:unknown):Observable<Store>{return this.api.put(`stores/${id}`,body);}

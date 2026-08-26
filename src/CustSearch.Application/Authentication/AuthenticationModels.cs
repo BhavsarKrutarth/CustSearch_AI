@@ -7,6 +7,17 @@ public sealed record LoginCommand(
     string? IpAddress,
     string CorrelationId);
 
+/// <summary>
+/// Carries a self-service password change. UserId is derived from the validated access token;
+/// neither tenant nor store scope is accepted from the browser.
+/// </summary>
+public sealed record ChangePasswordCommand(
+    long UserId,
+    string CurrentPassword,
+    string NewPassword,
+    string? IpAddress,
+    string CorrelationId);
+
 public sealed record AuthenticatedUser(
     long UserId,
     long? TenantId,

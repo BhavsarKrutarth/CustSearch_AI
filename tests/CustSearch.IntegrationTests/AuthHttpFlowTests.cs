@@ -84,6 +84,57 @@ public sealed class AuthHttpFlowTests : IClassFixture<RealAuthApiFactory>, IAsyn
     }
 
     [Fact]
+    public async Task ChangePasswordEndpointRevokesAllSessionsAndAcceptsOnlyNewCredential()
+    {
+        const string userName = "password.change.user";
+        await _factory.SeedTenantUserAsync(userName, "CurrentPassword1");
+        using var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            tenantCode = "SHOP-HTTP",
+            userName,
+            password = "CurrentPassword1",
+        });
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        var loginPayload = JsonDocument.Parse(await loginResponse.Content.ReadAsStringAsync());
+        var accessToken = loginPayload.RootElement.GetProperty("accessToken").GetString()!;
+        var refreshCookie = GetRefreshCookie(loginResponse);
+
+        using var changeRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/change-password")
+        {
+            Content = JsonContent.Create(new
+            {
+                currentPassword = "CurrentPassword1",
+                newPassword = "NewPassword123",
+                confirmNewPassword = "NewPassword123",
+            }),
+        };
+        changeRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        changeRequest.Headers.Add("Cookie", refreshCookie);
+        using var changeResponse = await _client.SendAsync(changeRequest);
+        Assert.Equal(HttpStatusCode.NoContent, changeResponse.StatusCode);
+        var deletionCookie = Assert.Single(changeResponse.Headers.GetValues("Set-Cookie"));
+        Assert.Contains("custsearch_refresh=", deletionCookie, StringComparison.Ordinal);
+        Assert.Contains("expires=", deletionCookie, StringComparison.OrdinalIgnoreCase);
+
+        using var staleSession = await SendBearerAsync("/api/authorization/probe/customers", accessToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, staleSession.StatusCode);
+        using var oldPassword = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            tenantCode = "SHOP-HTTP",
+            userName,
+            password = "CurrentPassword1",
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, oldPassword.StatusCode);
+        using var newPassword = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            tenantCode = "SHOP-HTTP",
+            userName,
+            password = "NewPassword123",
+        });
+        Assert.Equal(HttpStatusCode.OK, newPassword.StatusCode);
+    }
+
+    [Fact]
     public async Task PermissionAndScopePoliciesReturn401Or403AndAcceptOnlyMatchingIdentity()
     {
         using var anonymous = await _client.GetAsync("/api/authorization/probe/customers");

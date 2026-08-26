@@ -171,5 +171,9 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             string? ipAddress,
             string correlationId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task ChangePasswordAsync(
+            ChangePasswordCommand command,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

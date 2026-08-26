@@ -94,6 +94,58 @@ public sealed class PhaseFiveSecurityDecoratorTests
         Assert.Contains("own stores", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task TenantAdministratorPasswordResetRehashesAndAuditsWithoutCredentialMaterial()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var actor = await fixture.AddUserAsync("owner", "owner@example.test", active: true);
+        var target = await fixture.AddUserAsync("cashier", "cashier@example.test", active: true);
+        fixture.SetCurrentUser(
+            actor.Id,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TenantAdmin" },
+            new HashSet<long>());
+        var before = target.PasswordHash;
+
+        await fixture.CreateService().ResetUserPasswordAsync(
+            target.Id,
+            new ResetTenantUserPasswordCommand("ResetPassword123"),
+            Fixture.Audit(actor.Id));
+
+        fixture.Db.ChangeTracker.Clear();
+        var changed = await fixture.Db.UserAccounts.AsNoTracking().SingleAsync(x => x.Id == target.Id);
+        Assert.NotEqual(before, changed.PasswordHash);
+        Assert.Equal(
+            PasswordVerificationResult.Success,
+            new PasswordHasher<UserAccount>().VerifyHashedPassword(changed, changed.PasswordHash, "ResetPassword123"));
+        var audit = await fixture.Db.AuditLogs.AsNoTracking()
+            .SingleAsync(x => x.Action == "TenantUserPasswordReset"
+                && x.EntityId == target.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Assert.DoesNotContain("ResetPassword123", audit.AfterJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("SessionsRevoked", audit.AfterJson ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StoreScopedAdministratorCannotResetPasswordOutsideOwnStore()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var actor = await fixture.AddUserAsync("storeadmin", "storeadmin@example.test", active: true);
+        var target = await fixture.AddUserAsync("otherstore", "otherstore@example.test", active: true);
+        var allowedStore = await fixture.AddStoreAsync("SURAT-02", "Surat Store Two");
+        var forbiddenStore = await fixture.AddStoreAsync("AMD-02", "Ahmedabad Store Two");
+        await fixture.AssignStoreAsync(actor.Id, allowedStore.Id, actor.Id);
+        await fixture.AssignStoreAsync(target.Id, forbiddenStore.Id, actor.Id);
+        fixture.SetCurrentUser(
+            actor.Id,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "StoreAdmin" },
+            new HashSet<long> { allowedStore.Id });
+
+        await Assert.ThrowsAsync<TenantResourceNotFoundException>(() =>
+            fixture.CreateService().ResetUserPasswordAsync(
+                target.Id,
+                new ResetTenantUserPasswordCommand("ResetPassword123"),
+                Fixture.Audit(actor.Id)));
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

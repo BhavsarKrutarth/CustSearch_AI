@@ -18,3 +18,8 @@ no matching source ancestry, so it must not be marked complete.
 Latest Phase 13/17 UAT addendum (2026-08-26): dynamic server-side camera registration, two-user
 tenant/store isolation, real Chrome flow and authenticated Python one-frame probe are locally verified.
 An authorized RTSP runtime secret and physical frame remain pending; no static camera endpoint was added.
+
+Authentication/UI hardening addendum (2026-08-26): Platform and Tenant users now have an authenticated
+self-service change-password page. Tenant administrators with `TenantUsers.Edit` can reset another visible,
+in-scope user's password from the Users page. Both flows use Identity one-way hashes, revoke sessions and
+avoid password/hash values in audits. Pinned .NET 8 tests are 104 unit + 230 integration; Angular is 82/82.

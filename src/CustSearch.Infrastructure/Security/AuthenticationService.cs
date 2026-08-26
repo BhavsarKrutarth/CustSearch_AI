@@ -416,6 +416,78 @@ public sealed class AuthenticationService(
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Changes the authenticated user's own password after verifying the current credential.
+    /// The new Identity hash, security-stamp rotation, session revocation and audit event are
+    /// persisted together so every previous browser/device must authenticate again.
+    /// </summary>
+    public async Task ChangePasswordAsync(
+        ChangePasswordCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(command.UserId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(command.CurrentPassword);
+        ArgumentException.ThrowIfNullOrWhiteSpace(command.NewPassword);
+        ArgumentException.ThrowIfNullOrWhiteSpace(command.CorrelationId);
+        ValidateNewPassword(command.NewPassword);
+
+        var utcNow = timeProvider.GetUtcNow().UtcDateTime;
+        var user = await dbContext.UserAccounts
+            .Include(candidate => candidate.Tenant)
+            .SingleOrDefaultAsync(candidate => candidate.Id == command.UserId, cancellationToken)
+            .ConfigureAwait(false);
+        if (user is null)
+        {
+            throw new AuthenticationFailureException(AuthenticationFailure.SessionRevoked);
+        }
+
+        if (GetAvailabilityFailure(user) is { } availabilityFailure)
+        {
+            throw new AuthenticationFailureException(availabilityFailure);
+        }
+
+        var currentResult = passwordHasher.VerifyHashedPassword(user, user.PasswordHash, command.CurrentPassword);
+        if (currentResult == PasswordVerificationResult.Failed)
+        {
+            dbContext.AuthenticationEvents.Add(AuthenticationEvent.Record(
+                user.Id,
+                user.TenantId,
+                "PasswordChangeFailed",
+                false,
+                "InvalidCurrentPassword",
+                utcNow,
+                command.IpAddress,
+                command.CorrelationId));
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            throw new PasswordChangeException("InvalidCurrentPassword", "The current password is incorrect.");
+        }
+
+        if (passwordHasher.VerifyHashedPassword(user, user.PasswordHash, command.NewPassword)
+            != PasswordVerificationResult.Failed)
+        {
+            throw new PasswordChangeException("PasswordUnchanged", "The new password must be different from the current password.");
+        }
+
+        user.SetPasswordHash(passwordHasher.HashPassword(user, command.NewPassword));
+        await RevokeAllUserSessionsAsync(
+            user.Id,
+            utcNow,
+            "PasswordChanged",
+            command.IpAddress,
+            cancellationToken).ConfigureAwait(false);
+        dbContext.AuthenticationEvents.Add(AuthenticationEvent.Record(
+            user.Id,
+            user.TenantId,
+            "PasswordChanged",
+            true,
+            null,
+            utcNow,
+            command.IpAddress,
+            command.CorrelationId));
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<AuthenticatedUser> GetCurrentUserAsync(
         long userId,
         string securityStamp,
@@ -576,6 +648,19 @@ public sealed class AuthenticationService(
         }
 
         return null;
+    }
+
+    private static void ValidateNewPassword(string value)
+    {
+        if (value.Length is < 10 or > 500
+            || !value.Any(char.IsUpper)
+            || !value.Any(char.IsLower)
+            || !value.Any(char.IsDigit))
+        {
+            throw new PasswordChangeException(
+                "PasswordPolicyViolation",
+                "Password must be 10-500 characters and contain upper-case, lower-case and numeric characters.");
+        }
     }
 
     private async Task<AuthorizationProfile> LoadAuthorizationProfileAsync(

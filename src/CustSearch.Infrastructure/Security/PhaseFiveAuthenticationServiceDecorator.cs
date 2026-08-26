@@ -38,6 +38,11 @@ public sealed class PhaseFiveAuthenticationServiceDecorator(
         CancellationToken cancellationToken = default) =>
         inner.LogoutAsync(refreshToken, ipAddress, correlationId, cancellationToken);
 
+    public Task ChangePasswordAsync(
+        ChangePasswordCommand command,
+        CancellationToken cancellationToken = default) =>
+        inner.ChangePasswordAsync(command, cancellationToken);
+
     public async Task<AuthenticatedUser> GetCurrentUserAsync(
         long userId,
         string securityStamp,

@@ -45,3 +45,16 @@ Detailed per-requirement status is maintained in `../ALL_PHASE_IMPLEMENTATION_MA
 - Completed: planning read and live-object inventory only.
 - Pending: review/integrate recovered V1.16 SQL, then implement application/worker/UI/Python flows.
 - Known issue: SQL/verifier exist only at divergent AIMain commit `055b052`; no selected-chain app implementation.
+
+## Phase 2/5/17 Authentication UI Hardening Addendum
+
+- Status: COMPLETE_AND_VERIFIED locally.
+- Completed: live auth/user table inventory; self-service current-password verification; Identity rehash;
+  tenant-admin in-scope reset; security-stamp rotation; all-session revocation; safe auth/business audits;
+  Angular account-security and tenant-user reset UI; detailed support documentation.
+- Security: TenantId/UserId are server-derived, store-scoped administrators cannot reset users outside their
+  store visibility, administrators cannot use reset to bypass current-password verification for themselves,
+  and no hash/plaintext credential is returned or logged.
+- Testing: pinned .NET 8 build 0 warnings/errors; 104/104 unit; 230/230 integration/API; Angular lint;
+  82/82 Angular; production build PASS.
+- Pending production enhancement: recipient-owned, one-time invitation/forgot-password delivery flow.

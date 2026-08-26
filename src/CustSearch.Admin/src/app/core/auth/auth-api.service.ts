@@ -15,4 +15,13 @@ export class AuthApiService {
       tap(response => this.session.setCurrentUser(response.user)),
     );
   }
+
+  /** Changes only the authenticated user's credential; successful completion revokes every session. */
+  changePassword(currentPassword: string, newPassword: string, confirmNewPassword: string): Observable<void> {
+    return this.http.post<void>('/api/auth/change-password', {
+      currentPassword,
+      newPassword,
+      confirmNewPassword,
+    }, { withCredentials: true });
+  }
 }

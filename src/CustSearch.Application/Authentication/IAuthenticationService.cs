@@ -19,6 +19,10 @@ public interface IAuthenticationService
         string correlationId,
         CancellationToken cancellationToken = default);
 
+    Task ChangePasswordAsync(
+        ChangePasswordCommand command,
+        CancellationToken cancellationToken = default);
+
     Task<AuthenticatedUser> GetCurrentUserAsync(
         long userId,
         string securityStamp,

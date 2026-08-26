@@ -146,6 +146,45 @@ public sealed class TenantOperationsService(
         return await MapUserAsync(tenantId, user, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Allows an authorized tenant administrator to set a new password for an in-scope user.
+    /// Password material is never included in audit JSON; the security stamp and every refresh
+    /// session are revoked so the target must authenticate again on all devices.
+    /// </summary>
+    public async Task<TenantUserDetail> ResetUserPasswordAsync(
+        long userId,
+        ResetTenantUserPasswordCommand command,
+        TenantAuditContext audit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ValidateAudit(audit);
+        ValidatePassword(command.NewPassword);
+        if (userId == audit.ActorUserId)
+        {
+            throw new TenantBusinessRuleException("Use the authenticated Change password page to change your own password.");
+        }
+
+        var tenantId = RequireTenantId();
+        var user = await repository.GetUserAsync(tenantId, userId, true, cancellationToken).ConfigureAwait(false)
+            ?? throw new TenantResourceNotFoundException("User");
+        var now = UtcNow();
+        user.SetPasswordHash(passwordHasher.HashPassword(user, command.NewPassword));
+        await RevokeSessionsAsync(user.Id, now, cancellationToken).ConfigureAwait(false);
+        RecordAudit(
+            tenantId,
+            null,
+            audit,
+            "TenantUserPasswordReset",
+            "User",
+            user.Id,
+            null,
+            new { SessionsRevoked = true },
+            now);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return await MapUserAsync(tenantId, user, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<StoreView>> ListStoresAsync(CancellationToken cancellationToken = default)
     {
         var stores = await repository.ListStoresAsync(RequireTenantId(), cancellationToken).ConfigureAwait(false);
@@ -480,7 +519,7 @@ public sealed class TenantOperationsService(
     private bool CanAccessStore(Store store) => CanAccessStoreId(store.Id);
     private bool CanAccessStoreId(long storeId) => IsTenantWide() || currentUser.StoreIds.Contains(storeId);
     private void EnsureStoreAccess(long storeId) { if (!CanAccessStoreId(storeId)) throw new TenantBusinessRuleException("The authenticated user is not assigned to this store."); }
-    private void EnsureAnyStoreAccess(IReadOnlyCollection<long> storeIds) { if (!IsTenantWide() && storeIds.Count > 0 && !storeIds.Any(currentUser.StoreIds.Contains)) throw new TenantBusinessRuleException("The authenticated user cannot access this staff member."); }
+    private void EnsureAnyStoreAccess(long[] storeIds) { if (!IsTenantWide() && storeIds.Length > 0 && !storeIds.Any(currentUser.StoreIds.Contains)) throw new TenantBusinessRuleException("The authenticated user cannot access this staff member."); }
     private async Task<Tenant> RequireTenantAsync(long tenantId, CancellationToken cancellationToken) => await repository.GetTenantAsync(tenantId, cancellationToken).ConfigureAwait(false) ?? throw new TenantResourceNotFoundException("Tenant");
 
     private async Task<Store> RequireStoreAsync(long storeId, bool tracked, CancellationToken cancellationToken)

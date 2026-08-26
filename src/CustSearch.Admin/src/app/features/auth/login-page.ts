@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthResponse } from '../../core/auth/auth.models';
 import { AuthSessionService } from '../../core/auth/auth-session.service';
@@ -18,9 +18,14 @@ export class LoginPage {
   private readonly http = inject(HttpClient);
   private readonly session = inject(AuthSessionService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly theme = inject(ThemeService);
   protected readonly busy = signal(false);
   protected readonly error = signal('');
+  protected readonly message = signal(
+    this.route.snapshot.queryParamMap.get('passwordChanged') === '1'
+      ? 'Password changed successfully. Sign in with your new password.'
+      : '');
   protected tenantCode = '';
   protected username = '';
   protected password = '';
@@ -33,6 +38,7 @@ export class LoginPage {
     if (this.busy()) return;
     this.busy.set(true);
     this.error.set('');
+    this.message.set('');
     this.http.post<AuthResponse>('/api/auth/login', {
       tenantCode: this.tenantCode.trim() || null,
       username: this.username.trim(),

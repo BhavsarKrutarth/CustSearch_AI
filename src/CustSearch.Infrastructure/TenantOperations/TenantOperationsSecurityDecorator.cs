@@ -62,6 +62,16 @@ public sealed class TenantOperationsSecurityDecorator(
         return await inner.SetUserStoresAsync(userId, command, audit, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<TenantUserDetail> ResetUserPasswordAsync(
+        long userId,
+        ResetTenantUserPasswordCommand command,
+        TenantAuditContext audit,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await GetUserAsync(userId, cancellationToken).ConfigureAwait(false);
+        return await inner.ResetUserPasswordAsync(userId, command, audit, cancellationToken).ConfigureAwait(false);
+    }
+
     public Task<IReadOnlyList<StoreView>> ListStoresAsync(CancellationToken cancellationToken = default) => inner.ListStoresAsync(cancellationToken);
     public Task<StoreView> GetStoreAsync(long storeId, CancellationToken cancellationToken = default) => inner.GetStoreAsync(storeId, cancellationToken);
     public Task<StoreView> CreateStoreAsync(SaveStoreCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default) => inner.CreateStoreAsync(command, audit, cancellationToken);

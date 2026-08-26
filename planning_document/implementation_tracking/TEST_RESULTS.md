@@ -6,8 +6,8 @@ Observed run: `CUSTSEARCH_SMOKE_20260825_001`
 |---:|---|---|---|---|---|
 | 1-17 | Release build | clean build | 0 warnings/errors | PASS | nine projects |
 | 1-17 | Unit | all pass | 104/104 | PASS | executed |
-| 1-17 | Integration/API | all pass | 225/225 | PASS | executed |
-| 1-17 | Angular | lint/unit/build pass | lint; 78/78; build | PASS | existing style budget warning |
+| 1-17 | Integration/API | all pass | 230/230 | PASS | pinned .NET 8.0.424; executed |
+| 1-17 | Angular | lint/unit/build pass | lint; 82/82; production build | PASS | existing admin-shell style budget warning (151 bytes) |
 | 1-17 | Playwright | Chromium suite passes | 49/49 | PASS | after 1.55.1 patch |
 | 13-17 | Python | Ruff and pytest pass | Ruff; 7/7 | PASS | Demo Mode |
 | 16 | SQL | runner repeatable and schema valid | twice + verifier + DBCC | PASS | live database |
@@ -25,3 +25,7 @@ Observed run: `CUSTSEARCH_SMOKE_20260825_001`
 | 13/17 | Headed Chrome camera UAT | isolated Platform/Office/Random sessions | three independent browser contexts and screenshots | PASS | actual Google Chrome |
 | 13/17 | Python dynamic source probe | authenticated allow-listed env resolver; no secret output | Ruff; pytest 10/10; missing runtime secret returns expected 422 | PASS | physical frame still blocked by credential |
 | 13/17 | Physical RTSP frame | connected and frame received | authorized runtime stream credential absent | BLOCKED | exact recovery command in camera guide |
+| 2/5/17 | Self change-password service/API | wrong current rejected; hash changed; old password/session rejected; new password accepted; audit safe | all positive/negative conditions observed | PASS | SQLite integration plus real HTTP in-process API; no live UAT password changed |
+| 5/17 | Tenant-admin password reset | in-scope reset succeeds; hash verifies; audit excludes password; cross-store reset denied | expected success and tenant/store denial | PASS | focused integration tests included in 230/230 |
+| 2/5/17 | Password UI | confirmation/policy validation; correct API routes; session clear and login redirect | 4 new Angular tests pass | PASS | full Angular 82/82 and lint PASS |
+| 2/5/17 | Release build while manual API is running | compile without touching locked runtime binaries | isolated `OutDir` build 0 warnings/errors | PASS | exact pinned SDK `8.0.424`; user process PID 7560 not stopped |

@@ -124,6 +124,60 @@ public sealed class AuthenticationServiceTests
             audit => audit.EventType == "RefreshFailed" && audit.FailureCode == "SessionRevoked");
     }
 
+    [Fact]
+    public async Task ChangePasswordRejectsWrongCurrentPasswordAndAuditsFailure()
+    {
+        await using var fixture = await AuthFixture.CreateAsync();
+        var userId = (await fixture.Context.UserAccounts.SingleAsync()).Id;
+
+        var exception = await Assert.ThrowsAsync<PasswordChangeException>(() =>
+            fixture.Service.ChangePasswordAsync(new(
+                userId,
+                "wrong-password",
+                "NewPassword123",
+                "127.0.0.1",
+                "password-change-failed")));
+
+        Assert.Equal("InvalidCurrentPassword", exception.Code);
+        Assert.Contains(
+            await fixture.Context.AuthenticationEvents.ToListAsync(),
+            audit => audit.EventType == "PasswordChangeFailed"
+                && audit.FailureCode == "InvalidCurrentPassword"
+                && !audit.IsSuccess);
+    }
+
+    [Fact]
+    public async Task ChangePasswordRehashesCredentialRevokesSessionsAndRequiresNewPassword()
+    {
+        await using var fixture = await AuthFixture.CreateAsync();
+        var login = await fixture.Service.LoginAsync(AuthFixture.CreateLoginCommand());
+        var user = await fixture.Context.UserAccounts.SingleAsync();
+
+        await fixture.Service.ChangePasswordAsync(new(
+            user.Id,
+            "correct-password",
+            "NewPassword123",
+            "127.0.0.1",
+            "password-change-success"));
+
+        Assert.Equal(0, await fixture.Context.RefreshTokens.CountAsync(token => token.RevokedUtc == null));
+        Assert.All(
+            await fixture.Context.RefreshTokens.ToListAsync(),
+            token => Assert.Equal("PasswordChanged", token.RevokedReason));
+        Assert.Contains(
+            await fixture.Context.AuthenticationEvents.ToListAsync(),
+            audit => audit.EventType == "PasswordChanged" && audit.IsSuccess);
+        var refreshFailure = await Assert.ThrowsAsync<AuthenticationFailureException>(() =>
+            fixture.Service.RefreshAsync(login.RefreshToken, null, "old-session"));
+        Assert.Equal(AuthenticationFailure.ReusedRefreshToken, refreshFailure.Failure);
+
+        await Assert.ThrowsAsync<AuthenticationFailureException>(() =>
+            fixture.Service.LoginAsync(AuthFixture.CreateLoginCommand()));
+        var newLogin = await fixture.Service.LoginAsync(
+            AuthFixture.CreateLoginCommand() with { Password = "NewPassword123" });
+        Assert.False(string.IsNullOrWhiteSpace(newLogin.AccessToken));
+    }
+
     private sealed class AuthFixture : IAsyncDisposable
     {
         private AuthFixture(

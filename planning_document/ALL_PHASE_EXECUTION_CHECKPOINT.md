@@ -60,3 +60,17 @@
 - Phase 17 IIS/HTTPS/WebSocket execution plan now defines same-origin ARR routing, trusted TLS, WSS
   101, tenant isolation, reconnect/REST recovery, token-log review, evidence and rollback gates.
   Deployment remains blocked until a UAT host, certificate and service identities are provided.
+
+## Authentication and user-flow addendum — 2026-08-26
+
+- Live `KRUTARTH-BHAVSA/CustSearch_AI` account IDs, roles and store assignments were inventoried without
+  reading or exposing password hashes.
+- Added `POST /api/auth/change-password` and Angular `/account/change-password` for Platform/Tenant users.
+- Added `PUT /api/tenant/users/{id}/password` and Tenant Users reset UI protected by `TenantUsers.Edit`,
+  authoritative tenant/store visibility and a self-reset denial.
+- Both flows use `IPasswordHasher<UserAccount>`, rotate `SecurityStamp`, revoke every refresh session and
+  keep password material out of authentication/business audit payloads.
+- Pinned SDK `8.0.424` isolated Release build: 0 warnings/errors. Unit 104/104 and Integration/API 230/230 PASS.
+- Angular lint PASS, 82/82 PASS, production build PASS (existing style-budget warning: 151 bytes).
+- No live account password was changed during automated validation; integration tests use isolated SQLite.
+- Runtime note: the manually running API process must be restarted before the new endpoints appear in Swagger/UI.

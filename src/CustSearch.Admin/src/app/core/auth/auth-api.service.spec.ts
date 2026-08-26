@@ -21,4 +21,24 @@ describe('AuthApiService', () => {
     expect(TestBed.inject(AuthSessionService).hasPermission('TenantDashboard.View')).toBe(true);
     controller.verify();
   });
+
+  it('sends password changes to the secure auth boundary without persisting credentials', async () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    const api = TestBed.inject(AuthApiService);
+    const controller = TestBed.inject(HttpTestingController);
+
+    const result = firstValueFrom(api.changePassword('CurrentPassword1', 'NewPassword123', 'NewPassword123'));
+    const request = controller.expectOne('/api/auth/change-password');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.withCredentials).toBe(true);
+    expect(request.request.body).toEqual({
+      currentPassword: 'CurrentPassword1',
+      newPassword: 'NewPassword123',
+      confirmNewPassword: 'NewPassword123',
+    });
+    request.flush(null);
+
+    await expect(result).resolves.toBeNull();
+    controller.verify();
+  });
 });

@@ -3,6 +3,7 @@ using CustSearch.API.Security;
 using CustSearch.Application.Authentication;
 using CustSearch.Application.Authorization;
 using CustSearch.Application.TenantOperations;
+using CustSearch.Contracts.Common;
 using CustSearch.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -42,6 +43,21 @@ public sealed class TenantOperationsController(ITenantOperationsService service,
     [HttpPut("users/{userId:long}/stores")]
     [HasPermission(PermissionCatalog.Tenant.UsersEdit)]
     public Task<TenantUserDetail> SetStores(long userId, SetTenantUserStoresRequest request, CancellationToken ct) => service.SetUserStoresAsync(userId, new(request.StoreIds, request.PrimaryStoreId), Audit(), ct);
+
+    [HttpPut("users/{userId:long}/password")]
+    [HasPermission(PermissionCatalog.Tenant.UsersEdit)]
+    public async Task<ActionResult<TenantUserDetail>> ResetUserPassword(long userId, ResetTenantUserPasswordRequest request, CancellationToken ct)
+    {
+        if (!string.Equals(request.NewPassword, request.ConfirmNewPassword, StringComparison.Ordinal))
+        {
+            return BadRequest(new ApiErrorResponse(
+                "PasswordConfirmationMismatch",
+                "New password and confirmation do not match.",
+                HttpContext.TraceIdentifier));
+        }
+
+        return Ok(await service.ResetUserPasswordAsync(userId, new(request.NewPassword), Audit(), ct).ConfigureAwait(false));
+    }
 
     [HttpGet("stores")]
     [HasPermission(PermissionCatalog.Tenant.StoresView)]
@@ -155,6 +171,9 @@ public sealed record UpdateTenantUserRequest(
 
 public sealed record SetTenantUserRolesRequest(IReadOnlyList<string> Roles);
 public sealed record SetTenantUserStoresRequest(IReadOnlyList<long> StoreIds, long? PrimaryStoreId);
+public sealed record ResetTenantUserPasswordRequest(
+    [param: Required, MinLength(10), MaxLength(500)] string NewPassword,
+    [param: Required, MinLength(10), MaxLength(500)] string ConfirmNewPassword);
 
 public sealed record SaveStoreRequest(
     [param: StringLength(30)] string? StoreCode,

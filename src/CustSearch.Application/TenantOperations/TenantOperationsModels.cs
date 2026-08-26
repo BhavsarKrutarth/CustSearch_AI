@@ -14,6 +14,7 @@ public sealed record CreateTenantUserCommand(string UserName, string Email, stri
 public sealed record UpdateTenantUserCommand(string Email, string DisplayName, bool IsActive);
 public sealed record SetTenantUserRolesCommand(IReadOnlyList<string> Roles);
 public sealed record SetTenantUserStoresCommand(IReadOnlyList<long> StoreIds, long? PrimaryStoreId);
+public sealed record ResetTenantUserPasswordCommand(string NewPassword);
 
 public sealed record StoreView(long Id, string StoreCode, string StoreName, string AddressLine1, string? AddressLine2, string? Landmark, string City, string? District, string StateOrProvince, string PostalCode, string CountryCode, decimal? Latitude, decimal? Longitude, decimal? GeoFenceRadiusMeters, string? ExternalPlaceId, StoreLocationSource LocationSource, bool IsLocationVerified, DateTime? LocationVerifiedUtc, string TimeZone, string? ContactEmail, string? ContactMobile, bool IsActive, DateTime CreatedUtc, DateTime UpdatedUtc);
 public sealed record SaveStoreCommand(string? StoreCode, string StoreName, string AddressLine1, string? AddressLine2, string? Landmark, string City, string? District, string StateOrProvince, string PostalCode, string CountryCode, decimal? Latitude, decimal? Longitude, decimal? GeoFenceRadiusMeters, string? ExternalPlaceId, StoreLocationSource LocationSource, string TimeZone, string? ContactEmail, string? ContactMobile);

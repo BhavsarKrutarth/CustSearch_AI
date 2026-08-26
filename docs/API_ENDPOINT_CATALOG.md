@@ -2,13 +2,13 @@
 
 | Area | Base route | Scope/security |
 |---|---|---|
-| Authentication | `/api/auth` | anonymous login/refresh/logout; authorized `/me`; rotating secure cookie |
+| Authentication | `/api/auth` | anonymous login/refresh/logout; authorized `/me` and `/change-password`; rotating secure cookie and all-session revocation |
 | System/health | `/api/system`, `/health/live`, `/health/ready` | public operational metadata is minimal; readiness probes dependencies |
 | Platform tenancy | `/api/platform` | platform policy plus exact tenant/plan/audit permissions |
 | Platform operations | `/api/platform/operations` | platform operations view/manage permissions |
 | Platform reports | `/api/platform/reports` | platform report/export permission and requester binding |
 | Platform billing | `/api/platform/billing` | platform billing permissions; separate financial domain |
-| Tenant setup | `/api/tenant` via `TenantOperationsController` | current tenant and authoritative stores |
+| Tenant setup | `/api/tenant` via `TenantOperationsController` | current tenant and authoritative stores; user password reset requires `TenantUsers.Edit` plus target visibility |
 | Customers/visitors | `/api/tenant/customers`, `/api/tenant/visitors` | tenant/store scoped; TenantId rejected from payload |
 | Households/visits | `/api/tenant/households`, visits, visit-parties | explicit relationship/privacy rules |
 | Retail | `/api/tenant/products`, retail invoice/payment/report routes | server totals and store authorization |

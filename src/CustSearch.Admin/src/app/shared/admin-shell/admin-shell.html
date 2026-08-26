@@ -15,7 +15,7 @@
     </nav>
     <div class="sidebar-footer">
       <span class="avatar" aria-hidden="true">{{ adminType() === 'platform' ? 'PA' : 'CA' }}</span>
-      <span><b>{{ session.currentUser()?.displayName ?? (adminType() === 'platform' ? 'Platform Admin' : 'Customer Admin') }}</b><small>Active session</small></span>
+      <span><b>{{ session.currentUser()?.displayName ?? (adminType() === 'platform' ? 'Platform Admin' : 'Customer Admin') }}</b><small>Active session · <a routerLink="/account/change-password">Change password</a></small></span>
     </div>
   </aside>
   <section class="workspace">
@@ -28,6 +28,7 @@
             @for (option of themes; track option) { <option [value]="option">{{ option }}</option> }
           </select>
         </label>
+        <a class="icon-button" routerLink="/account/change-password" aria-label="Account security and change password">&#128273;</a>
         @if(adminType()==='customer'&&session.hasPermission('Alerts.View')){<a class="icon-button" routerLink="/customer-admin/alerts" aria-label="Notifications">♢<span class="notification-dot"></span></a>}@else{<button class="icon-button" aria-label="Notifications" disabled>♢</button>}
       </div>
     </header>

@@ -10,6 +10,7 @@ public interface ITenantOperationsService
     Task<TenantUserDetail> UpdateUserAsync(long userId, UpdateTenantUserCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default);
     Task<TenantUserDetail> SetUserRolesAsync(long userId, SetTenantUserRolesCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default);
     Task<TenantUserDetail> SetUserStoresAsync(long userId, SetTenantUserStoresCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default);
+    Task<TenantUserDetail> ResetUserPasswordAsync(long userId, ResetTenantUserPasswordCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<StoreView>> ListStoresAsync(CancellationToken cancellationToken = default);
     Task<StoreView> GetStoreAsync(long storeId, CancellationToken cancellationToken = default);

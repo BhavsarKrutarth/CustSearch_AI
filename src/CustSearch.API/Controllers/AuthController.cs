@@ -97,6 +97,50 @@ public sealed class AuthController(
         return NoContent();
     }
 
+    [HttpPost("change-password")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(request.NewPassword, request.ConfirmNewPassword, StringComparison.Ordinal))
+        {
+            return BadRequest(new ApiErrorResponse(
+                "PasswordConfirmationMismatch",
+                "New password and confirmation do not match.",
+                HttpContext.TraceIdentifier));
+        }
+
+        try
+        {
+            await authenticationService.ChangePasswordAsync(
+                new ChangePasswordCommand(
+                    currentUser.UserId,
+                    request.CurrentPassword,
+                    request.NewPassword,
+                    HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    HttpContext.TraceIdentifier),
+                cancellationToken).ConfigureAwait(false);
+            DeleteRefreshCookie();
+            return NoContent();
+        }
+        catch (PasswordChangeException exception)
+        {
+            return BadRequest(new ApiErrorResponse(
+                exception.Code,
+                exception.Message,
+                HttpContext.TraceIdentifier));
+        }
+        catch (AuthenticationFailureException exception)
+        {
+            DeleteRefreshCookie();
+            return AuthenticationError(exception.Failure);
+        }
+    }
+
     [HttpGet("me")]
     [Authorize]
     [DisableRateLimiting]
@@ -162,6 +206,11 @@ public sealed record LoginRequest(
     string? TenantCode,
     [param: Required, MinLength(1), MaxLength(100)] string UserName,
     [param: Required, MinLength(1), MaxLength(500)] string Password);
+
+public sealed record ChangePasswordRequest(
+    [param: Required, MinLength(1), MaxLength(500)] string CurrentPassword,
+    [param: Required, MinLength(10), MaxLength(500)] string NewPassword,
+    [param: Required, MinLength(10), MaxLength(500)] string ConfirmNewPassword);
 
 public sealed record AuthResponse(
     string AccessToken,

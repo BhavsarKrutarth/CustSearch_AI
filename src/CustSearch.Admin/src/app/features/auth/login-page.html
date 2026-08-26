@@ -4,6 +4,7 @@
     <p class="eyebrow">Retail intelligence platform</p>
     <h1 id="login-title">Welcome back</h1>
     <p class="intro">Sign in to continue to your secure admin workspace.</p>
+    @if (message()) { <p class="success" role="status">{{ message() }}</p> }
     <form (ngSubmit)="signIn()">
       <label>Tenant code <small>Optional for Platform Admin</small><input name="tenantCode" [(ngModel)]="tenantCode" autocomplete="organization" placeholder="e.g. acme-retail"></label>
       <label>Email or username<input name="username" [(ngModel)]="username" autocomplete="username" required></label>
