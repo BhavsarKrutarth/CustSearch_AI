@@ -1,5 +1,9 @@
 # IIS, Angular and SignalR Deployment
 
+The executable preparation, deployment, security, negative-test, evidence and rollback plan is in
+`planning_document/PHASE_17_IIS_HTTPS_WEBSOCKET_DEPLOYMENT_TEST_PLAN.md`. This short guide is not a
+replacement for that acceptance matrix.
+
 Reviewed templates are available at `deployment/iis/api.web.config` and
 `deployment/iis/admin.web.config`. Copy each as `web.config` only into its corresponding published
 site root; do not place both in one IIS application.

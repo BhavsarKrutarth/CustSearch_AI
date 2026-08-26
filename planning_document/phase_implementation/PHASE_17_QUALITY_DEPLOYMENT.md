@@ -21,7 +21,9 @@ configuration hardening, IIS SPA/WebSocket deployment and final security review.
 
 ## Remaining gates
 
-- Add/validate deployable IIS SPA rewrite artifact and perform an actual IIS/WebSocket smoke test.
+- Execute `../PHASE_17_IIS_HTTPS_WEBSOCKET_DEPLOYMENT_TEST_PLAN.md`, including the mandatory
+  same-origin `/api` + `/hubs` proxy decision, valid HTTPS, WSS 101, tenant isolation, reconnect/REST
+  recovery, token-log review and rollback rehearsal.
 - Validate on an actual SQL Server 2022 environment.
 - Validate Redis multi-node SignalR/backplane behavior.
 - Close remaining critical/high findings; divergent V1.16 SQL/application integration blocks Phase 18.

@@ -57,3 +57,6 @@
 - Camera 3 stores only `env:CUSTSEARCH_CAMERA_OFFICE_ENTRY01_RTSP`; no LAN IP or RTSP credential is in source/SQL.
 - Added authenticated Python dynamic one-frame probe. Ruff and pytest 10/10 passed; Python localhost health is Healthy.
 - Physical frame is `BLOCKED`, not failed: authorized RTSP runtime secret is not configured. Continuous capture/detection/publishing remains pending.
+- Phase 17 IIS/HTTPS/WebSocket execution plan now defines same-origin ARR routing, trusted TLS, WSS
+  101, tenant isolation, reconnect/REST recovery, token-log review, evidence and rollback gates.
+  Deployment remains blocked until a UAT host, certificate and service identities are provided.

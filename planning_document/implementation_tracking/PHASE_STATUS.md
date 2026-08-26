@@ -26,7 +26,8 @@ Detailed per-requirement status is maintained in `../ALL_PHASE_IMPLEMENTATION_MA
   full local regression and dependency audits.
 - Pending: deployed IIS/HTTPS/WebSocket smoke and external environment gates.
 - Files changed: see `CODE_CHANGE_LOG.md` and Git diff.
-- Next exact task: review, commit and push the audit checkpoint; then configure the deployment test host.
+- Next exact task: provision/identify the IIS UAT host, FQDN, trusted certificate and approved service
+  identities; execute Gate A of `../PHASE_17_IIS_HTTPS_WEBSOCKET_DEPLOYMENT_TEST_PLAN.md`.
 
 ## Phase 13/17 Local Camera UAT Addendum
 

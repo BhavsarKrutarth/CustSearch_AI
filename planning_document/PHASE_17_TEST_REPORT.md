@@ -15,7 +15,7 @@ Status: `BLOCKED` for deployment-environment gates; local regression is green.
 | Integration/API | `dotnet test ... --no-build` | 225 | 0 | PASS |
 | Angular lint/unit/build | repository scripts | 78 | 0 | PASS |
 | Chromium E2E | `npm test` | 49 | 0 | PASS |
-| Python | Ruff and pytest | 7 | 0 | PASS |
+| Python | Ruff and pytest | 10 | 0 | PASS |
 | Live SQL | runner twice, verifier, constraints | all checks | 0 | PASS |
 | NuGet vulnerability | `dotnet list ... --vulnerable --include-transitive` | 9 projects clean | 0 | PASS |
 | E2E npm audit | `npm audit --audit-level=high` | 0 vulnerabilities | 0 | PASS |
@@ -43,3 +43,10 @@ received 200 for its own customer. `DBCC CHECKCONSTRAINTS` returned no violation
 
 The remaining environment gates are recorded as `BLOCKED`, not passed. Phase 18 must not be declared
 implemented from live database objects alone.
+
+## Deployment execution plan
+
+The required host preparation, same-origin ARR routing, HTTPS, WSS 101, authentication/tenant
+isolation, reconnect/REST recovery, token-log inspection, evidence and rollback gates are defined in
+`PHASE_17_IIS_HTTPS_WEBSOCKET_DEPLOYMENT_TEST_PLAN.md`. Creation of this plan does not change the
+deployed smoke result from `BLOCKED`.

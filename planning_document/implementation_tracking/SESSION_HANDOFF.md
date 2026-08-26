@@ -1,10 +1,10 @@
 # Session Handoff
 
-- Last Updated: 2026-08-26 09:00 +05:30
+- Last Updated: 2026-08-26 09:41 +05:30
 - Current Branch: `audit/all-phases-database-smoke`
-- Current Commit Before This Checkpoint: `ffef36f`
-- Current Phase: Phase 17 local UAT / Phase 13 physical-camera boundary
-- Current Task: obtain the authorized RTSP stream credential through local secret configuration and execute the dynamic one-frame probe
+- Current Commit Before This Checkpoint: `c0124fe`
+- Current Phase: Phase 17 IIS/HTTPS/WebSocket deployment gate
+- Current Task: provision/identify the UAT IIS host, FQDN, trusted certificate and service identities, then execute Gate A preflight
 - Last Completed Phase: Phase 15 universally; Phase 16 locally passed with SQL Server 2022 certification pending
 
 ## Completed This Session
@@ -16,6 +16,8 @@
 5. Proved own-tenant camera count 1, isolation-tenant camera count 0, and direct cross-tenant camera access 404.
 6. Ran real Google Chrome in three isolated contexts: Platform Admin, Office Camera Operator and Random No Camera User.
 7. Added an authenticated Python dynamic RTSP one-frame probe with allow-listed environment resolution and secret-safe output.
+8. Created the executable Phase 17 IIS/HTTPS/WebSocket plan with same-origin proxy, WSS 101,
+   negative authorization, reconnect/recovery, token-log inspection, evidence and rollback gates.
 
 ## Database Changes
 
@@ -59,12 +61,13 @@
 
 ## Exact Next Step
 
-1. In the Python server terminal, set `CUSTSEARCH_CAMERA_OFFICE_ENTRY01_RTSP` to the authorized RTSP URL, restart Uvicorn, and call `POST /v1/cctv/cameras/probe`; require `connected=true` and `frame_received=true` without exposing the URL.
+1. Obtain the IIS UAT host, public FQDN, trusted certificate and approved API/Worker identities; then
+   execute Work Package A in `planning_document/PHASE_17_IIS_HTTPS_WEBSOCKET_DEPLOYMENT_TEST_PLAN.md`.
 
 ## Commands To Run Next
 
-1. `$env:CUSTSEARCH_CAMERA_OFFICE_ENTRY01_RTSP="rtsp://<authorized-user>:<password>@<camera-ip>:554/<stream-path>"`
-2. Follow the authenticated probe command in `docs/CAMERA_CONNECTION_AND_RTSP_GUIDE.md`.
+1. `Get-WindowsFeature Web-Server,Web-WebSockets,Web-Static-Content`
+2. `Import-Module WebAdministration; Get-WebGlobalModule | Where-Object Name -Match 'Rewrite|WebSocket|AspNetCoreModuleV2'`
 
 ## Important Context For Next AI Session
 

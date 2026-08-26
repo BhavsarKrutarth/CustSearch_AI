@@ -9,7 +9,9 @@
 
 ## High
 
-- Phase 17 IIS/HTTPS/WebSocket deployment has not been executed. Blocking Phase 17 completion.
+- Phase 17 IIS/HTTPS/WebSocket deployment has not been executed. The complete execution plan is in
+  `planning_document/PHASE_17_IIS_HTTPS_WEBSOCKET_DEPLOYMENT_TEST_PLAN.md`; an IIS UAT host, FQDN,
+  trusted certificate and approved service identities are required. Blocking Phase 17 completion.
 - Production Redis topology, authentication/TLS and sustained failover/load behavior remain deployment
   concerns; local two-API-node cross-node SignalR delivery is verified and no longer blocks Phase 16.
 

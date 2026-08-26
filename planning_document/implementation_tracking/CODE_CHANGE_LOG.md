@@ -19,3 +19,4 @@
 | 13/17 | SQL/Infrastructure role provisioning | completed CameraOperator grants, dashboard entry permission and live enum `tinyint` mappings | repair real SQL/API UAT defects without widening tenant scope | build; integration 225/225; SQL twice |
 | 13/17 | Python camera source boundary | added authenticated dynamic `env:` resolver and bounded one-frame RTSP probe | support server-side cameras without static IP/credentials | Ruff PASS; pytest 10/10 |
 | 13/17 | headed Chrome UAT script/docs | parameterized all runtime identities/camera names and documented dynamic secret setup | reproducible non-hard-coded manual validation | three-context Chrome PASS |
+| 17 | IIS/HTTPS/WebSocket deployment test plan | added host, ARR, TLS, WSS 101, authorization, recovery, logging, evidence and rollback gates | make the remaining environment validation executable and evidence-based | planning review only; deployment still BLOCKED |
