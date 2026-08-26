@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { AssignTenantSubscriptionRequest, CreateTenantRequest, PageResult, PlatformDashboardSummary, PlatformTenantDetail, PlatformTenantListItem, PlatformTenantSummary, SaveSubscriptionPlanRequest, SubscriptionPlanOption, TenantAuditItem, TenantListQuery, TenantUsageItem, UpdateTenantRequest } from './platform-tenant.models';
+import { AssignTenantSubscriptionRequest, CreateTenantRequest, PageResult, PlatformDashboardSummary, PlatformStoreListItem, PlatformTenantAdministrator, PlatformTenantDetail, PlatformTenantListItem, PlatformTenantSummary, PlatformTenantUserListItem, ResetTenantAdministratorPasswordRequest, SaveSubscriptionPlanRequest, SubscriptionPlanOption, TenantAuditItem, TenantListQuery, TenantUsageItem, UpdateTenantRequest } from './platform-tenant.models';
 
 /** Centralizes typed same-origin platform calls; the server remains the tenant and permission authority. */
 @Injectable({ providedIn: 'root' })
@@ -17,9 +17,13 @@ export class PlatformTenantApiService {
     if (query.planId) params = params.set('planId', query.planId);
     return this.http.get<PageResult<PlatformTenantListItem>>(this.baseUrl, { params });
   }
+  tenantUsers(page=1,pageSize=25,search='') { return this.http.get<PageResult<PlatformTenantUserListItem>>('/api/platform/tenant-users',{params:{page,pageSize,...(search?{search}:{})}}); }
+  stores(page=1,pageSize=25,search='') { return this.http.get<PageResult<PlatformStoreListItem>>('/api/platform/stores',{params:{page,pageSize,...(search?{search}:{})}}); }
   get(id: number) { return this.http.get<PlatformTenantDetail>(`${this.baseUrl}/${this.validId(id)}`); }
   create(request: CreateTenantRequest) { return this.http.post<PlatformTenantDetail>(this.baseUrl, request); }
   update(id: number, request: UpdateTenantRequest) { return this.http.put<PlatformTenantDetail>(`${this.baseUrl}/${this.validId(id)}`, request); }
+  administrator(id:number){return this.http.get<PlatformTenantAdministrator>(`${this.baseUrl}/${this.validId(id)}/administrator`);}
+  resetAdministratorPassword(id:number,request:ResetTenantAdministratorPasswordRequest){return this.http.put<PlatformTenantAdministrator>(`${this.baseUrl}/${this.validId(id)}/administrator/password`,request);}
   activate(id: number, expectedVersion: string) { return this.http.post<PlatformTenantDetail>(`${this.baseUrl}/${this.validId(id)}/activate`, { expectedVersion, reason: null }); }
   suspend(id: number, reason: string, expectedVersion: string) { return this.http.post<PlatformTenantDetail>(`${this.baseUrl}/${this.validId(id)}/suspend`, { expectedVersion, reason }); }
   summary(id: number) { return this.http.get<PlatformTenantSummary>(`${this.baseUrl}/${this.validId(id)}/summary`); }

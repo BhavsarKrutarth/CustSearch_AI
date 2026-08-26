@@ -298,6 +298,9 @@ public sealed class AuthHttpFlowTests : IClassFixture<RealAuthApiFactory>, IAsyn
                 countryCode = "IN",
                 timeZone = "Asia/Kolkata",
                 currencyCode = "INR",
+                adminUserName = "phase4.owner",
+                adminPassword = "InitialPass123",
+                confirmAdminPassword = "InitialPass123",
             }),
         };
         createRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);

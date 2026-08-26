@@ -13,6 +13,7 @@ internal sealed class TenantQuotaOverrideConfiguration : IEntityTypeConfiguratio
     {
         builder.ToTable("TenantQuotaOverrides", "dbo", table =>
         {
+            table.UseSqlOutputClause(false);
             table.HasCheckConstraint("CK_TenantQuotaOverrides_AnyLimit", "[MaxStores] IS NOT NULL OR [MaxUsers] IS NOT NULL OR [MaxCameras] IS NOT NULL OR [MaxMonthlyRecognitions] IS NOT NULL OR [MaxMonthlyApiCalls] IS NOT NULL");
             table.HasCheckConstraint("CK_TenantQuotaOverrides_Limits", "([MaxStores] IS NULL OR [MaxStores] > 0) AND ([MaxUsers] IS NULL OR [MaxUsers] > 0) AND ([MaxCameras] IS NULL OR [MaxCameras] > 0) AND ([MaxMonthlyRecognitions] IS NULL OR [MaxMonthlyRecognitions] > 0) AND ([MaxMonthlyApiCalls] IS NULL OR [MaxMonthlyApiCalls] > 0)");
             table.HasCheckConstraint("CK_TenantQuotaOverrides_Expiry", "[ExpiresUtc] IS NULL OR [ExpiresUtc] > [CreatedUtc]");

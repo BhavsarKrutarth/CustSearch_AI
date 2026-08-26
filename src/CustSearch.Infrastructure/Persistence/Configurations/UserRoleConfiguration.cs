@@ -11,7 +11,7 @@ internal sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
 {
     public void Configure(EntityTypeBuilder<UserRole> builder)
     {
-        builder.ToTable("UserRoles", "dbo");
+        builder.ToTable("UserRoles", "dbo", table => table.UseSqlOutputClause(false));
         builder.HasKey(userRole => new { userRole.UserId, userRole.RoleId });
         builder.Property(userRole => userRole.AssignedUtc).HasPrecision(7).IsRequired();
         builder.HasOne(userRole => userRole.User)

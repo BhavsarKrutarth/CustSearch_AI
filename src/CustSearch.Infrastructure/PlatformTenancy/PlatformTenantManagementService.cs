@@ -5,6 +5,7 @@ using CustSearch.Application.PlatformTenancy;
 using CustSearch.Domain.Entities;
 using CustSearch.Domain.Enums;
 using CustSearch.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace CustSearch.Infrastructure.PlatformTenancy;
@@ -14,7 +15,8 @@ namespace CustSearch.Infrastructure.PlatformTenancy;
 /// </summary>
 public sealed class PlatformTenantManagementService(
     CustSearchDbContext dbContext,
-    TimeProvider timeProvider) : IPlatformTenantManagementService
+    TimeProvider timeProvider,
+    IPasswordHasher<UserAccount> passwordHasher) : IPlatformTenantManagementService
 {
     private static readonly string[] DefaultTenantRoleNames =
     [
@@ -113,6 +115,91 @@ public sealed class PlatformTenantManagementService(
         return new PageResult<PlatformTenantListItem>(items, query.Page, query.PageSize, total);
     }
 
+    public async Task<PageResult<PlatformTenantUserListItem>> ListTenantUsersAsync(
+        PlatformResourceQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ValidatePage(query.Page, query.PageSize);
+        var users = dbContext.UserAccounts.AsNoTracking()
+            .Where(user => user.Scope == UserScope.Tenant && user.TenantId != null);
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            users = users.Where(user => user.UserName.Contains(search)
+                || user.DisplayName.Contains(search)
+                || user.Email.Contains(search)
+                || user.Tenant!.TenantCode.Contains(search)
+                || user.Tenant.DisplayName.Contains(search));
+        }
+
+        var total = await users.LongCountAsync(cancellationToken).ConfigureAwait(false);
+        var page = await users.OrderBy(user => user.Tenant!.TenantCode).ThenBy(user => user.UserName)
+            .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize)
+            .Select(user => new
+            {
+                user.Id, TenantId = user.TenantId!.Value, user.Tenant!.TenantCode,
+                TenantName = user.Tenant.DisplayName, user.UserName, user.DisplayName, user.Email,
+                user.IsActive, user.LastLoginUtc,
+            })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var ids = page.Select(user => user.Id).ToArray();
+        var roleRows = await dbContext.UserRoles.AsNoTracking().Where(value => ids.Contains(value.UserId))
+            .Select(value => new { value.UserId, RoleName = value.Role.Name })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var roles = roleRows.GroupBy(value => value.UserId)
+            .ToDictionary(group => group.Key, group => group.Select(value => value.RoleName).OrderBy(name => name).ToArray());
+        var stores = await dbContext.UserStoreAssignments.AsNoTracking().Where(value => ids.Contains(value.UserId))
+            .GroupBy(value => value.UserId)
+            .ToDictionaryAsync(group => group.Key, group => group.Count(), cancellationToken)
+            .ConfigureAwait(false);
+        var items = page.Select(user => new PlatformTenantUserListItem(
+            user.Id, user.TenantId, user.TenantCode, user.TenantName, user.UserName, user.DisplayName,
+            user.Email, user.IsActive, roles.GetValueOrDefault(user.Id) ?? [], stores.GetValueOrDefault(user.Id),
+            user.LastLoginUtc)).ToArray();
+        return new PageResult<PlatformTenantUserListItem>(items, query.Page, query.PageSize, total);
+    }
+
+    public async Task<PageResult<PlatformStoreListItem>> ListStoresAsync(
+        PlatformResourceQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ValidatePage(query.Page, query.PageSize);
+        var stores = dbContext.Stores.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            stores = stores.Where(store => store.StoreCode.Contains(search)
+                || store.StoreName.Contains(search)
+                || store.City.Contains(search)
+                || store.Tenant.TenantCode.Contains(search)
+                || store.Tenant.DisplayName.Contains(search));
+        }
+
+        var total = await stores.LongCountAsync(cancellationToken).ConfigureAwait(false);
+        var page = await stores.OrderBy(store => store.Tenant.TenantCode).ThenBy(store => store.StoreCode)
+            .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize)
+            .Select(store => new
+            {
+                store.Id, store.TenantId, store.Tenant.TenantCode, TenantName = store.Tenant.DisplayName,
+                store.StoreCode, store.StoreName, store.City, store.StateOrProvince, store.IsActive, store.UpdatedUtc,
+            })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var ids = page.Select(store => store.Id).ToArray();
+        var users = await dbContext.UserStoreAssignments.AsNoTracking().Where(value => ids.Contains(value.StoreId))
+            .GroupBy(value => value.StoreId)
+            .ToDictionaryAsync(group => group.Key, group => group.Count(), cancellationToken)
+            .ConfigureAwait(false);
+        var cameras = await dbContext.Cameras.AsNoTracking().Where(value => ids.Contains(value.StoreId))
+            .GroupBy(value => value.StoreId)
+            .ToDictionaryAsync(group => group.Key, group => group.Count(), cancellationToken)
+            .ConfigureAwait(false);
+        var items = page.Select(store => new PlatformStoreListItem(
+            store.Id, store.TenantId, store.TenantCode, store.TenantName, store.StoreCode, store.StoreName,
+            store.City, store.StateOrProvince, store.IsActive, users.GetValueOrDefault(store.Id),
+            cameras.GetValueOrDefault(store.Id), store.UpdatedUtc)).ToArray();
+        return new PageResult<PlatformStoreListItem>(items, query.Page, query.PageSize, total);
+    }
+
     public async Task<PlatformTenantDetail?> GetTenantAsync(
         long tenantId,
         CancellationToken cancellationToken = default)
@@ -133,6 +220,7 @@ public sealed class PlatformTenantManagementService(
         ArgumentNullException.ThrowIfNull(command);
         ValidateAudit(audit);
         ValidateTimeZone(command.TimeZone);
+        ValidatePassword(command.AdminPassword);
         var hasQuotaOverride = command.MaxStores.HasValue || command.MaxUsers.HasValue || command.MaxCameras.HasValue;
         if (hasQuotaOverride && string.IsNullOrWhiteSpace(command.AuditReason))
         {
@@ -181,6 +269,20 @@ public sealed class PlatformTenantManagementService(
             dbContext.Tenants.Add(tenant);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await ProvisionDefaultRolesAsync(tenant.Id, utcNow, cancellationToken).ConfigureAwait(false);
+            var tenantAdminRole = await dbContext.Roles.SingleAsync(
+                role => role.TenantId == tenant.Id && role.NormalizedName == "TENANTADMIN",
+                cancellationToken).ConfigureAwait(false);
+            var tenantAdmin = UserAccount.CreateTenant(
+                tenant.Id,
+                command.AdminUserName,
+                command.PrimaryEmail,
+                command.DisplayName,
+                "TEMP",
+                utcNow);
+            tenantAdmin.SetPasswordHash(passwordHasher.HashPassword(tenantAdmin, command.AdminPassword));
+            dbContext.UserAccounts.Add(tenantAdmin);
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            dbContext.UserRoles.Add(UserRole.Assign(tenantAdmin, tenantAdminRole, utcNow, audit.ActorUserId));
             if (plan is not null)
             {
                 tenant.ConfigureSubscription(
@@ -230,6 +332,47 @@ public sealed class PlatformTenantManagementService(
         await dbContext.Entry(tenant).Reference(candidate => candidate.SubscriptionPlan)
             .LoadAsync(cancellationToken).ConfigureAwait(false);
         return MapDetail(tenant);
+    }
+
+    public async Task<PlatformTenantAdministrator> GetTenantAdministratorAsync(
+        long tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireTenantExistsAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        return await FindTenantAdministratorAsync(tenantId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<PlatformTenantAdministrator> ResetTenantAdministratorPasswordAsync(
+        long tenantId,
+        ResetPlatformTenantAdminPasswordCommand command,
+        PlatformAuditContext audit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ValidateAudit(audit);
+        ValidatePassword(command.NewPassword);
+        await RequireTenantExistsAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        var administrator = await dbContext.UserAccounts
+            .Where(user => user.TenantId == tenantId && user.IsActive
+                && dbContext.UserRoles.Any(assignment => assignment.UserId == user.Id
+                    && assignment.Role.NormalizedName == "TENANTADMIN" && assignment.Role.IsActive))
+            .OrderBy(user => user.Id)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new PlatformResourceNotFoundException("Active tenant administrator");
+        var utcNow = UtcNow();
+        administrator.SetPasswordHash(passwordHasher.HashPassword(administrator, command.NewPassword));
+        var sessions = await dbContext.RefreshTokens
+            .Where(token => token.UserId == administrator.Id && token.RevokedUtc == null)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var session in sessions)
+        {
+            session.Revoke(utcNow, "PlatformAdminPasswordReset", audit.IpAddress);
+        }
+
+        RecordAudit(tenantId, audit, "TenantAdministratorPasswordReset", "User", administrator.Id,
+            null, new { administrator.UserName, SessionsRevoked = true }, utcNow);
+        await SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return MapAdministrator(administrator);
     }
 
     public async Task<PlatformTenantDetail> UpdateTenantAsync(
@@ -724,6 +867,19 @@ public sealed class PlatformTenantManagementService(
             : throw new PlatformResourceNotFoundException("Tenant");
     }
 
+    private async Task<PlatformTenantAdministrator> FindTenantAdministratorAsync(long tenantId, CancellationToken cancellationToken)
+    {
+        var administrator = await dbContext.UserAccounts.AsNoTracking()
+            .Where(user => user.TenantId == tenantId
+                && dbContext.UserRoles.Any(assignment => assignment.UserId == user.Id
+                    && assignment.Role.NormalizedName == "TENANTADMIN" && assignment.Role.IsActive))
+            .OrderByDescending(user => user.IsActive)
+            .ThenBy(user => user.Id)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new PlatformResourceNotFoundException("Tenant administrator");
+        return MapAdministrator(administrator);
+    }
+
     private async Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         try
@@ -853,6 +1009,9 @@ public sealed class PlatformTenantManagementService(
         tenant.UpdatedUtc,
         EncodeVersion(tenant.RowVersion));
 
+    private static PlatformTenantAdministrator MapAdministrator(UserAccount user) =>
+        new(user.Id, user.UserName, user.Email, user.DisplayName);
+
     private static SubscriptionPlanView MapPlan(SubscriptionPlan plan) => new(
         plan.Id,
         plan.PlanCode,
@@ -944,6 +1103,16 @@ public sealed class PlatformTenantManagementService(
         catch (InvalidTimeZoneException)
         {
             throw new PlatformBusinessRuleException("Time zone is invalid.");
+        }
+    }
+
+    private static void ValidatePassword(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length < 10 || value.Length > 500
+            || !value.Any(char.IsUpper) || !value.Any(char.IsLower) || !value.Any(char.IsDigit))
+        {
+            throw new PlatformBusinessRuleException(
+                "Password must be 10 to 500 characters and contain upper, lower and numeric characters.");
         }
     }
 

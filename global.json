@@ -1,6 +1,10 @@
 {
   "sdk": {
     "rollForward": "latestPatch",
-    "version": "8.0.424"
+    "version": "8.0.424",
+    "paths": [
+      ".dotnet",
+      "$host$"
+    ]
   }
 }

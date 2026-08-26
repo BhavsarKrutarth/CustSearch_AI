@@ -62,9 +62,13 @@ export const routes:Routes=[
     {path:':tenantId',title:'Tenant details | CustSearch AI',loadComponent:()=>import('./features/platform-tenants/tenant-detail-page').then(m=>m.TenantDetailPage)},
   ]},
   {path:'admin/subscription-plans',title:'Subscription plans | CustSearch AI',canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.subscriptionPlansView])],loadComponent:()=>import('./features/platform-tenants/subscription-plans-page').then(m=>m.SubscriptionPlansPage)},
+  {path:'admin/tenant-users',title:'Tenant users | CustSearch AI',data:{mode:'users'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.tenantsView])],loadComponent:()=>import('./features/platform-tenants/platform-resources-page').then(m=>m.PlatformResourcesPage)},
+  {path:'admin/stores',title:'Stores | CustSearch AI',data:{mode:'stores'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.tenantsView])],loadComponent:()=>import('./features/platform-tenants/platform-resources-page').then(m=>m.PlatformResourcesPage)},
+  {path:'admin/reports',title:'Platform reports | CustSearch AI',data:{scope:'platform'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformReportsView])],loadComponent:()=>import('./features/reports/reports-dashboard-page').then(m=>m.ReportsDashboardPage)},
   {path:'admin/operations',title:'Operational platform | CustSearch AI',canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformOperationsView])],loadComponent:()=>import('./features/operations/operations-dashboard-page').then(m=>m.OperationsDashboardPage)},
 
   // Exact Phase 9 platform-admin billing routes requested by the plan.
+  {path:'platform-admin/billing',pathMatch:'full',redirectTo:'platform-admin/billing/plans'},
   {path:'platform-admin/billing/plans',title:'Platform billing plans | CustSearch AI',data:{mode:'plans'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformBillingPlansView])],loadComponent:platformBillingPage},
   {path:'platform-admin/billing/subscriptions',title:'Tenant subscriptions | CustSearch AI',data:{mode:'subscriptions'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformBillingSubscriptionsView])],loadComponent:platformBillingPage},
   {path:'platform-admin/billing/invoices',title:'Platform invoices | CustSearch AI',data:{mode:'invoices'},canActivate:[authGuard,roleGuard(platformRoles),permissionGuard([PERMISSIONS.platformBillingInvoicesView])],loadComponent:platformBillingPage},

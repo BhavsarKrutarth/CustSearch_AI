@@ -24,4 +24,9 @@ export class AuthApiService {
       confirmNewPassword,
     }, { withCredentials: true });
   }
+
+  /** Revokes the HttpOnly refresh session; callers must also clear in-memory access state. */
+  logout(): Observable<void> {
+    return this.http.post<void>('/api/auth/logout', {}, { withCredentials: true });
+  }
 }

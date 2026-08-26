@@ -4,6 +4,7 @@ using CustSearch.Domain.Entities;
 using CustSearch.Domain.Enums;
 using CustSearch.Infrastructure.Persistence;
 using CustSearch.Infrastructure.PlatformTenancy;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,6 +47,13 @@ public sealed class PlatformTenantManagementServiceTests
         Assert.Contains(PermissionCatalog.Operations.CamerasView, cameraOperatorPermissions);
         Assert.DoesNotContain(cameraOperatorPermissions, permission => permission.StartsWith("Platform", StringComparison.Ordinal));
         Assert.Contains(await fixture.Context.AuditLogs.ToListAsync(), audit => audit.Action == "TenantCreated");
+        var administrator = await fixture.Context.UserAccounts.SingleAsync(user => user.TenantId == tenant.Id);
+        Assert.Equal("asha.owner", administrator.UserName);
+        Assert.Equal("New Retail", administrator.DisplayName);
+        Assert.Equal(PasswordVerificationResult.Success,
+            new PasswordHasher<UserAccount>().VerifyHashedPassword(administrator, administrator.PasswordHash, "InitialPass123"));
+        Assert.True(await fixture.Context.UserRoles.AnyAsync(assignment => assignment.UserId == administrator.Id
+            && assignment.Role.Name == "TenantAdmin"));
     }
 
     [Fact]
@@ -105,8 +113,27 @@ public sealed class PlatformTenantManagementServiceTests
             fixture.Audit);
 
         Assert.Equal(0, await fixture.Context.RefreshTokens.CountAsync(token => token.RevokedUtc == null));
-        Assert.True((await fixture.Context.UserAccounts.SingleAsync(user => user.Id > 0 && user.TenantId == created.Id)).IsActive);
+        Assert.True((await fixture.Context.UserAccounts.SingleAsync(user => user.TenantId == created.Id && user.UserName == "tenant.owner")).IsActive);
         Assert.Contains(await fixture.Context.AuditLogs.ToListAsync(), audit => audit.Action == "TenantSuspended");
+    }
+
+    [Fact]
+    public async Task PlatformAdminCanResetTenantAdministratorPasswordWithoutExposingIt()
+    {
+        await using var fixture = await Fixture.CreateAsync(seedPermissions: true);
+        var tenant = await fixture.Service.CreateTenantAsync(CreateCommand(), fixture.Audit);
+
+        var result = await fixture.Service.ResetTenantAdministratorPasswordAsync(
+            tenant.Id,
+            new ResetPlatformTenantAdminPasswordCommand("ReplacementPass456"),
+            fixture.Audit);
+
+        var administrator = await fixture.Context.UserAccounts.SingleAsync(user => user.Id == result.UserId);
+        Assert.Equal("asha.owner", result.UserName);
+        Assert.Equal(PasswordVerificationResult.Success,
+            new PasswordHasher<UserAccount>().VerifyHashedPassword(administrator, administrator.PasswordHash, "ReplacementPass456"));
+        Assert.Contains(await fixture.Context.AuditLogs.ToListAsync(), audit =>
+            audit.Action == "TenantAdministratorPasswordReset" && !audit.AfterJson!.Contains("ReplacementPass456", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -259,7 +286,9 @@ public sealed class PlatformTenantManagementServiceTests
         null,
         null,
         null,
-        null);
+        null,
+        "asha.owner",
+        "InitialPass123");
 
     private static UpdatePlatformTenantCommand UpdateCommand(string version, string displayName) => new(
         "New Retail Pvt Ltd",
@@ -311,7 +340,7 @@ public sealed class PlatformTenantManagementServiceTests
         {
             Connection = connection;
             Context = context;
-            Service = new PlatformTenantManagementService(context, new FixedTimeProvider(TestNow));
+            Service = new PlatformTenantManagementService(context, new FixedTimeProvider(TestNow), new PasswordHasher<UserAccount>());
             Audit = new PlatformAuditContext(actorId, "127.0.0.1", "Phase4Tests/1.0", "phase4-test");
         }
 

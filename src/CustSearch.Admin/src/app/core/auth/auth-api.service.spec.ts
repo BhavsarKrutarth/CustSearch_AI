@@ -41,4 +41,17 @@ describe('AuthApiService', () => {
     await expect(result).resolves.toBeNull();
     controller.verify();
   });
+
+  it('revokes the refresh-cookie session on logout', async () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    const api = TestBed.inject(AuthApiService);
+    const controller = TestBed.inject(HttpTestingController);
+    const result = firstValueFrom(api.logout());
+    const request = controller.expectOne('/api/auth/logout');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.withCredentials).toBe(true);
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await expect(result).resolves.toBeNull();
+    controller.verify();
+  });
 });

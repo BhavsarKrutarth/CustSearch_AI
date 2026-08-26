@@ -36,6 +36,24 @@ public sealed class PlatformTenantsController(
             new PlatformTenantQuery(page, pageSize, search, status, planId),
             cancellationToken);
 
+    [HttpGet("tenant-users")]
+    [HasPermission(PermissionCatalog.Platform.TenantsView)]
+    public Task<PageResult<PlatformTenantUserListItem>> ListTenantUsers(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default) =>
+        service.ListTenantUsersAsync(new PlatformResourceQuery(page, pageSize, search), cancellationToken);
+
+    [HttpGet("stores")]
+    [HasPermission(PermissionCatalog.Platform.TenantsView)]
+    public Task<PageResult<PlatformStoreListItem>> ListStores(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default) =>
+        service.ListStoresAsync(new PlatformResourceQuery(page, pageSize, search), cancellationToken);
+
     [HttpGet("tenants/{tenantId:long}")]
     [HasPermission(PermissionCatalog.Platform.TenantsView)]
     public async Task<PlatformTenantDetail> GetTenant(long tenantId, CancellationToken cancellationToken) =>
@@ -62,6 +80,20 @@ public sealed class PlatformTenantsController(
         UpdatePlatformTenantRequest request,
         CancellationToken cancellationToken) =>
         service.UpdateTenantAsync(tenantId, request.ToCommand(), CreateAuditContext(), cancellationToken);
+
+    [HttpGet("tenants/{tenantId:long}/administrator")]
+    [HasPermission(PermissionCatalog.Platform.TenantsView)]
+    public Task<PlatformTenantAdministrator> GetTenantAdministrator(long tenantId, CancellationToken cancellationToken) =>
+        service.GetTenantAdministratorAsync(tenantId, cancellationToken);
+
+    [HttpPut("tenants/{tenantId:long}/administrator/password")]
+    [HasPermission(PermissionCatalog.Platform.TenantsEdit)]
+    public Task<PlatformTenantAdministrator> ResetTenantAdministratorPassword(
+        long tenantId,
+        ResetPlatformTenantAdminPasswordRequest request,
+        CancellationToken cancellationToken) =>
+        service.ResetTenantAdministratorPasswordAsync(
+            tenantId, request.ToCommand(), CreateAuditContext(), cancellationToken);
 
     [HttpPost("tenants/{tenantId:long}/activate")]
     [HasPermission(PermissionCatalog.Platform.TenantsActivate)]
@@ -165,11 +197,39 @@ public sealed record CreatePlatformTenantRequest(
     [param: Range(1, int.MaxValue)] int? MaxStores,
     [param: Range(1, int.MaxValue)] int? MaxUsers,
     [param: Range(1, int.MaxValue)] int? MaxCameras,
-    [param: StringLength(500)] string? AuditReason)
+    [param: StringLength(500)] string? AuditReason,
+    [param: Required, StringLength(100)] string AdminUserName,
+    [param: Required, StringLength(500, MinimumLength = 10)] string AdminPassword,
+    [param: Required, StringLength(500, MinimumLength = 10)] string ConfirmAdminPassword)
 {
-    public CreatePlatformTenantCommand ToCommand() => new(
-        LegalName, DisplayName, TimeZone, PrimaryContactName, PrimaryEmail,
-        PrimaryMobile, CountryCode, CurrencyCode, PlanId, MaxStores, MaxUsers, MaxCameras, AuditReason);
+    public CreatePlatformTenantCommand ToCommand()
+    {
+        if (!string.Equals(AdminPassword, ConfirmAdminPassword, StringComparison.Ordinal))
+        {
+            throw new PlatformBusinessRuleException("Administrator password and confirmation do not match.");
+        }
+
+        return new CreatePlatformTenantCommand(
+            LegalName, DisplayName, TimeZone, PrimaryContactName, PrimaryEmail,
+            PrimaryMobile, CountryCode, CurrencyCode, PlanId, MaxStores, MaxUsers, MaxCameras,
+            AuditReason, AdminUserName, AdminPassword);
+    }
+}
+
+/// <summary>Validates a platform-initiated tenant administrator password reset.</summary>
+public sealed record ResetPlatformTenantAdminPasswordRequest(
+    [param: Required, StringLength(500, MinimumLength = 10)] string NewPassword,
+    [param: Required, StringLength(500, MinimumLength = 10)] string ConfirmNewPassword)
+{
+    public ResetPlatformTenantAdminPasswordCommand ToCommand()
+    {
+        if (!string.Equals(NewPassword, ConfirmNewPassword, StringComparison.Ordinal))
+        {
+            throw new PlatformBusinessRuleException("New password and confirmation do not match.");
+        }
+
+        return new ResetPlatformTenantAdminPasswordCommand(NewPassword);
+    }
 }
 
 /// <summary>Validates editable tenant profile values and its optimistic version token.</summary>

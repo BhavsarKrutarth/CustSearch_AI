@@ -15,6 +15,38 @@ public sealed record PlatformTenantQuery(
     string? Status,
     long? PlanId);
 
+/// <summary>Defines safe paging and search for cross-tenant platform resource overviews.</summary>
+public sealed record PlatformResourceQuery(int Page, int PageSize, string? Search);
+
+/// <summary>Provides a platform-safe tenant user row without credentials or security stamps.</summary>
+public sealed record PlatformTenantUserListItem(
+    long Id,
+    long TenantId,
+    string TenantCode,
+    string TenantName,
+    string UserName,
+    string DisplayName,
+    string Email,
+    bool IsActive,
+    IReadOnlyList<string> Roles,
+    int StoreCount,
+    DateTime? LastLoginUtc);
+
+/// <summary>Provides a platform-safe store row and aggregate assignment counts.</summary>
+public sealed record PlatformStoreListItem(
+    long Id,
+    long TenantId,
+    string TenantCode,
+    string TenantName,
+    string StoreCode,
+    string StoreName,
+    string City,
+    string StateOrProvince,
+    bool IsActive,
+    int UserCount,
+    int CameraCount,
+    DateTime UpdatedUtc);
+
 /// <summary>Provides the compact tenant data needed by the platform tenant table.</summary>
 public sealed record PlatformTenantListItem(
     long Id,
@@ -78,7 +110,15 @@ public sealed record CreatePlatformTenantCommand(
     int? MaxStores,
     int? MaxUsers,
     int? MaxCameras,
-    string? AuditReason);
+    string? AuditReason,
+    string AdminUserName,
+    string AdminPassword);
+
+/// <summary>Identifies the primary tenant administrator without exposing authentication secrets.</summary>
+public sealed record PlatformTenantAdministrator(long UserId, string UserName, string Email, string DisplayName);
+
+/// <summary>Contains a replacement password for a tenant administrator.</summary>
+public sealed record ResetPlatformTenantAdminPasswordCommand(string NewPassword);
 
 /// <summary>Contains editable tenant profile values plus the last version seen by the caller.</summary>
 public sealed record UpdatePlatformTenantCommand(

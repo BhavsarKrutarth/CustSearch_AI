@@ -13,6 +13,16 @@ export interface PlatformTenantListItem {
   lastActivityUtc: string | null; version: string;
 }
 
+export interface PlatformTenantUserListItem {
+  id:number;tenantId:number;tenantCode:string;tenantName:string;userName:string;displayName:string;
+  email:string;isActive:boolean;roles:string[];storeCount:number;lastLoginUtc:string|null;
+}
+
+export interface PlatformStoreListItem {
+  id:number;tenantId:number;tenantCode:string;tenantName:string;storeCode:string;storeName:string;
+  city:string;stateOrProvince:string;isActive:boolean;userCount:number;cameraCount:number;updatedUtc:string;
+}
+
 /** Mirrors the complete safe profile returned for one platform tenant. */
 export interface PlatformTenantDetail {
   id: number; tenantCode: string; legalName: string; displayName: string; timeZone: string;
@@ -53,8 +63,10 @@ export interface CreateTenantRequest {
   primaryContactName: string; primaryEmail: string; primaryMobile: string | null;
   countryCode: string; currencyCode: string; planId: number | null;
   maxStores: number | null; maxUsers: number | null; maxCameras: number | null;
-  auditReason: string | null;
+  auditReason: string | null; adminUserName: string; adminPassword: string; confirmAdminPassword: string;
 }
+export interface PlatformTenantAdministrator { userId:number;userName:string;email:string;displayName:string }
+export interface ResetTenantAdministratorPasswordRequest { newPassword:string;confirmNewPassword:string }
 export interface UpdateTenantRequest {
   legalName: string; displayName: string; timeZone: string; primaryContactName: string;
   primaryEmail: string; primaryMobile: string | null; countryCode: string; currencyCode: string;

@@ -11,6 +11,7 @@ internal sealed class TenantSubscriptionConfiguration:IEntityTypeConfiguration<T
     {
         builder.ToTable("TenantSubscriptions","dbo",table=>
         {
+            table.UseSqlOutputClause(false);
             table.HasCheckConstraint("CK_TenantSubscriptions_BillingCycle","[BillingCycle] IN (1,2)");
             table.HasCheckConstraint("CK_TenantSubscriptions_Status","[Status] BETWEEN 1 AND 6");
             table.HasCheckConstraint("CK_TenantSubscriptions_Period","[EndsUtc] IS NULL OR [EndsUtc] > [StartsUtc]");

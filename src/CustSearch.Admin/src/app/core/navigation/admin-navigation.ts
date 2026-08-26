@@ -24,11 +24,11 @@ export const ADMIN_NAVIGATION:Record<'customer'|'platform',readonly AdminNavigat
   platform:[
     {label:'Dashboard',route:'/admin/dashboard',permission:PERMISSIONS.tenantsOperationalSummary},
     {label:'Tenants',route:'/admin/tenants',permission:PERMISSIONS.tenantsView},
-    {label:'Tenant Users',route:null,permission:PERMISSIONS.tenantsView},
-    {label:'Stores',route:null,permission:PERMISSIONS.tenantsView},
-    {label:'Platform Billing',route:null,permission:PERMISSIONS.platformBillingView},
+    {label:'Tenant Users',route:'/admin/tenant-users',permission:PERMISSIONS.tenantsView},
+    {label:'Stores',route:'/admin/stores',permission:PERMISSIONS.tenantsView},
+    {label:'Platform Billing',route:'/platform-admin/billing/plans',permission:PERMISSIONS.platformBillingPlansView},
     {label:'Subscriptions',route:'/admin/subscription-plans',permission:PERMISSIONS.subscriptionPlansView},
-    {label:'Reports',route:null,permission:PERMISSIONS.platformReportsView},
+    {label:'Reports',route:'/admin/reports',permission:PERMISSIONS.platformReportsView},
     {label:'Operations',route:'/admin/operations',permission:PERMISSIONS.platformOperationsView},
   ],
 };

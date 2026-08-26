@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { catchError, finalize, of } from 'rxjs';
+import { AuthApiService } from '../../core/auth/auth-api.service';
 import { AuthSessionService } from '../../core/auth/auth-session.service';
 import { ADMIN_NAVIGATION } from '../../core/navigation/admin-navigation';
 import { ThemePreference, ThemeService } from '../../core/theme/theme.service';
@@ -15,6 +17,9 @@ import { ThemePreference, ThemeService } from '../../core/theme/theme.service';
 export class AdminShell implements OnInit {
   protected readonly theme = inject(ThemeService);
   protected readonly session = inject(AuthSessionService);
+  private readonly authApi = inject(AuthApiService);
+  private readonly router = inject(Router);
+  protected readonly logoutBusy = signal(false);
 
   // Customer Admin is the safe default for tenant-scoped Phase 5 pages. Platform pages continue
   // to provide their explicit values, so their dark-mode/navigation context remains unchanged.
@@ -32,5 +37,18 @@ export class AdminShell implements OnInit {
 
   protected setTheme(value: string): void {
     this.theme.setPreference(value as ThemePreference);
+  }
+
+  protected logout(): void {
+    if (this.logoutBusy()) return;
+    this.logoutBusy.set(true);
+    this.authApi.logout().pipe(
+      catchError(() => of(void 0)),
+      finalize(() => {
+        this.session.clear();
+        this.logoutBusy.set(false);
+        void this.router.navigateByUrl('/login');
+      }),
+    ).subscribe();
   }
 }

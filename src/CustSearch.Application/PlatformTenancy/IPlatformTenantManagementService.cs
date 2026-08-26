@@ -7,9 +7,13 @@ public interface IPlatformTenantManagementService
 {
     Task<PlatformDashboardSummary> GetDashboardAsync(CancellationToken cancellationToken = default);
     Task<PageResult<PlatformTenantListItem>> ListTenantsAsync(PlatformTenantQuery query, CancellationToken cancellationToken = default);
+    Task<PageResult<PlatformTenantUserListItem>> ListTenantUsersAsync(PlatformResourceQuery query, CancellationToken cancellationToken = default);
+    Task<PageResult<PlatformStoreListItem>> ListStoresAsync(PlatformResourceQuery query, CancellationToken cancellationToken = default);
     Task<PlatformTenantDetail?> GetTenantAsync(long tenantId, CancellationToken cancellationToken = default);
     Task<PlatformTenantDetail> CreateTenantAsync(CreatePlatformTenantCommand command, PlatformAuditContext audit, CancellationToken cancellationToken = default);
     Task<PlatformTenantDetail> UpdateTenantAsync(long tenantId, UpdatePlatformTenantCommand command, PlatformAuditContext audit, CancellationToken cancellationToken = default);
+    Task<PlatformTenantAdministrator> GetTenantAdministratorAsync(long tenantId, CancellationToken cancellationToken = default);
+    Task<PlatformTenantAdministrator> ResetTenantAdministratorPasswordAsync(long tenantId, ResetPlatformTenantAdminPasswordCommand command, PlatformAuditContext audit, CancellationToken cancellationToken = default);
     Task<PlatformTenantDetail> ActivateTenantAsync(long tenantId, string expectedVersion, PlatformAuditContext audit, CancellationToken cancellationToken = default);
     Task<PlatformTenantDetail> SuspendTenantAsync(long tenantId, string reason, string expectedVersion, PlatformAuditContext audit, CancellationToken cancellationToken = default);
     Task<PlatformTenantSummary?> GetTenantSummaryAsync(long tenantId, CancellationToken cancellationToken = default);
