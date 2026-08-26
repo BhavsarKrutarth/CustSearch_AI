@@ -28,6 +28,15 @@ Detailed per-requirement status is maintained in `../ALL_PHASE_IMPLEMENTATION_MA
 - Files changed: see `CODE_CHANGE_LOG.md` and Git diff.
 - Next exact task: review, commit and push the audit checkpoint; then configure the deployment test host.
 
+## Phase 13/17 Local Camera UAT Addendum
+
+- Status: IMPLEMENTED — PHYSICAL FRAME TESTING PENDING
+- Completed: dynamic camera metadata, opaque secret reference, CameraOperator users, JWT tenant/store
+  isolation, authenticated Python one-frame probe, API negative test and real Chrome UAT.
+- Pending: set the authorized RTSP URL in the Python server environment and observe one real frame;
+  then implement continuous reconnect/detection/event publishing separately.
+- Security: no camera IP, username, password or raw RTSP URL is stored in application source or SQL.
+
 ## Phase 18
 
 - Planning file: `../phase_implementation/PHASE_18_RETAIL_SECURITY_THEFT_DETECTION.md`

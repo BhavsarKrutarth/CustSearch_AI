@@ -16,3 +16,6 @@
 | 17 | `docs/PROJECT_WISE_MANUAL_RUN_GUIDE.md` | added terminal-by-terminal API/Worker/Angular/Python commands and checks | enable repeatable manual sub-project startup | commands matched observed local startup |
 | 16 | Redis backplane smoke script | added executable node-B to node-A SignalR delivery proof | validate actual scale-out behavior | two nodes ready 200; event 2 PASS |
 | 16 | SQL Server 2022 verifier | added exact-major-version gate and isolated canonical delegation | prevent SQL 2025/compatibility mode from being misreported as SQL 2022 | local v17 rejected as expected |
+| 13/17 | SQL/Infrastructure role provisioning | completed CameraOperator grants, dashboard entry permission and live enum `tinyint` mappings | repair real SQL/API UAT defects without widening tenant scope | build; integration 225/225; SQL twice |
+| 13/17 | Python camera source boundary | added authenticated dynamic `env:` resolver and bounded one-frame RTSP probe | support server-side cameras without static IP/credentials | Ruff PASS; pytest 10/10 |
+| 13/17 | headed Chrome UAT script/docs | parameterized all runtime identities/camera names and documented dynamic secret setup | reproducible non-hard-coded manual validation | three-context Chrome PASS |

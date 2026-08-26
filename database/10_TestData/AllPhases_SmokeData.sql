@@ -52,6 +52,9 @@ BEGIN TRY
     IF NOT EXISTS(SELECT 1 FROM dbo.Roles WHERE TenantId=@TenantId AND NormalizedName=N'STAFF')
         INSERT dbo.Roles(TenantId,Scope,Name,NormalizedName,Description,IsSystem,IsActive,CreatedUtc)
         VALUES(@TenantId,2,N'Staff',N'STAFF',N'Smoke store staff',1,1,@Now);
+    -- Materialize the production role catalog for an older deterministic smoke tenant as well.
+    -- The procedure is repeat-safe and grants tenant permissions only.
+    EXEC dbo.Tenant_ProvisionDefaultRoles @TenantId=@TenantId;
     DECLARE @TenantAdminRoleId bigint=(SELECT Id FROM dbo.Roles WHERE TenantId=@TenantId AND NormalizedName=N'TENANTADMIN');
     DECLARE @StaffRoleId bigint=(SELECT Id FROM dbo.Roles WHERE TenantId=@TenantId AND NormalizedName=N'STAFF');
     INSERT dbo.RolePermissions(RoleId,PermissionId)
@@ -152,6 +155,7 @@ BEGIN TRY
     DECLARE @TenantBId bigint=(SELECT Id FROM dbo.Tenants WHERE TenantCode=N'SMOKE-TENANT-002');
     IF NOT EXISTS(SELECT 1 FROM dbo.TenantSubscriptions WHERE TenantId=@TenantBId AND Status IN(1,2,3)) INSERT dbo.TenantSubscriptions(TenantId,SubscriptionPlanId,BillingCycle,Status,StartsUtc,AutoRenew)VALUES(@TenantBId,@PlanId,1,2,@Now,1);
     IF NOT EXISTS(SELECT 1 FROM dbo.Roles WHERE TenantId=@TenantBId AND NormalizedName=N'TENANTADMIN') INSERT dbo.Roles(TenantId,Scope,Name,NormalizedName,Description,IsSystem,IsActive,CreatedUtc)VALUES(@TenantBId,2,N'TenantAdmin',N'TENANTADMIN',N'Isolation tenant administrator',1,1,@Now);
+    EXEC dbo.Tenant_ProvisionDefaultRoles @TenantId=@TenantBId;
     DECLARE @TenantBRoleId bigint=(SELECT Id FROM dbo.Roles WHERE TenantId=@TenantBId AND NormalizedName=N'TENANTADMIN');
     INSERT dbo.RolePermissions(RoleId,PermissionId) SELECT @TenantBRoleId,p.Id FROM dbo.Permissions p WHERE p.Scope=2 AND NOT EXISTS(SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId=@TenantBRoleId AND rp.PermissionId=p.Id);
     IF NOT EXISTS(SELECT 1 FROM dbo.Users WHERE TenantId=@TenantBId AND NormalizedEmail=N'SMOKE.TENANTBADMIN@CUSTSEARCH.LOCAL') INSERT dbo.Users(TenantId,Scope,UserName,NormalizedUserName,Email,NormalizedEmail,DisplayName,PasswordHash,SecurityStamp,IsActive,CreatedUtc)VALUES(@TenantBId,2,N'smoke.tenantbadmin',N'SMOKE.TENANTBADMIN',N'smoke.tenantbadmin@custsearch.local',N'SMOKE.TENANTBADMIN@CUSTSEARCH.LOCAL',N'Smoke Tenant B Admin',@PasswordHash,REPLACE(CONVERT(nvarchar(36),NEWID()),N'-',N''),1,@Now);

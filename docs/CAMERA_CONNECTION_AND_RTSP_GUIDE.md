@@ -24,12 +24,12 @@ Read-only LAN discovery found this strong Hikvision candidate:
 
 | Setting | Observed value |
 |---|---|
-| Camera IP | `192.168.1.45` |
+| Camera IP | Runtime/admin supplied; never hard-coded in application source |
 | MAC address | `08-54-11-1E-5C-F0` |
 | HTTPS | Port `443` open, HTTP redirects to HTTPS |
 | RTSP | Port `554` open; Digest authentication required |
 | Hikvision SDK | Port `8000` open |
-| Browser URL | `https://192.168.1.45` |
+| Browser URL | `https://<camera-ip>` |
 
 Confirm that the MAC printed on the physical camera/box matches before changing its settings. The LAN
 also contains multiple other RTSP devices; do not assume an IP solely from its open port.
@@ -48,12 +48,12 @@ Get-NetIPConfiguration
 4. Confirm camera reachability:
 
 ```powershell
-Test-NetConnection 192.168.1.45 -Port 443
-Test-NetConnection 192.168.1.45 -Port 554
-Test-NetConnection 192.168.1.45 -Port 8000
+Test-NetConnection <camera-ip> -Port 443
+Test-NetConnection <camera-ip> -Port 554
+Test-NetConnection <camera-ip> -Port 8000
 ```
 
-5. Open `https://192.168.1.45` and sign in with the camera's authorized administrator credentials.
+5. Open `https://<camera-ip>` and sign in with the camera's authorized administrator credentials.
 6. A self-signed certificate warning is common locally; verify the IP/device before proceeding.
 7. Change any factory-default password, set correct time/NTP and create a least-privilege stream user.
 
@@ -64,13 +64,13 @@ Do not send the camera password in chat and do not commit it to this repository.
 Main stream:
 
 ```text
-rtsp://192.168.1.45:554/Streaming/Channels/101
+rtsp://<camera-ip>:554/Streaming/Channels/101
 ```
 
 Sub-stream:
 
 ```text
-rtsp://192.168.1.45:554/Streaming/Channels/102
+rtsp://<camera-ip>:554/Streaming/Channels/102
 ```
 
 Use the sub-stream first for development because it requires less CPU/network bandwidth. Prefer a
@@ -86,7 +86,7 @@ Media -> Open Network Stream -> paste RTSP URL -> enter credentials when prompte
 If FFmpeg/ffprobe is installed and a credential-safe local method is available:
 
 ```powershell
-ffprobe -rtsp_transport tcp -v error "rtsp://192.168.1.45:554/Streaming/Channels/102"
+ffprobe -rtsp_transport tcp -v error "rtsp://<camera-ip>:554/Streaming/Channels/102"
 ```
 
 An RTSP `401 Unauthorized` response proves the service is reachable but not that stream credentials
@@ -109,7 +109,28 @@ env:CUSTSEARCH_CAMERA_ENTRY01_RTSP
 8. Save the camera and create normalized zone polygons as required.
 
 The API stores the opaque reference and returns only a masked hint. Actual credentials belong in an
-environment variable or approved secret vault resolved by the future Python capture runner.
+environment variable or approved secret vault resolved by the Python host at runtime.
+
+Set a source dynamically on the Python server (example variable name only):
+
+```powershell
+$env:CUSTSEARCH_CAMERA_ENTRY01_RTSP = "rtsp://<authorized-user>:<password>@<camera-ip>:554/<stream-path>"
+$env:CUSTSEARCH_AI_API_KEY = "<local-service-api-key>"
+```
+
+Restart Python after changing environment variables, then probe one frame without returning the URL
+or image:
+
+```powershell
+$headers = @{ "X-CustSearch-AI-Key" = $env:CUSTSEARCH_AI_API_KEY }
+$body = @{ configuration_reference = "env:CUSTSEARCH_CAMERA_ENTRY01_RTSP"; timeout_seconds = 5 } |
+  ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/v1/cctv/cameras/probe" `
+  -Headers $headers -ContentType "application/json" -Body $body
+```
+
+Every camera may use a different allow-listed `CUSTSEARCH_CAMERA_*` environment variable. Nothing in
+the application assumes a specific IP, vendor, camera ID, tenant or store.
 
 ## 6. Configure the .NET CCTV ingestion identity
 
@@ -164,11 +185,12 @@ allowed anonymous event schema before writing through .NET to SQL Server.
 
 | Layer | Status |
 |---|---|
-| Camera network/HTTPS/RTSP reachability | Verified for `192.168.1.45` |
+| Camera network/HTTPS/RTSP reachability | Runtime environment check required per camera |
 | Angular camera registration | Implemented |
 | .NET HMAC event ingestion | Implemented and tested |
 | Python Demo Mode/normalization | Implemented and tested |
-| Python automatic RTSP capture | Not implemented |
+| Python authenticated dynamic one-frame RTSP probe | Implemented and tested; physical frame needs authorized runtime secret |
+| Python continuous RTSP capture/reconnect | Not implemented |
 | Python ONNX inference orchestration | Adapter exists; output pipeline not implemented |
 | Python HMAC publisher to .NET | Settings exist; publisher not implemented |
 

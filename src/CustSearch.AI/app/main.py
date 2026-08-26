@@ -7,8 +7,15 @@ from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 
+from app.camera_source import (
+    CameraProbeRequest,
+    CameraProbeResult,
+    CameraSourceConfigurationError,
+    probe_camera,
+)
 from app.config import get_settings
 from app.logging_config import configure_logging, correlation_id_context
 from app.tracking import NormalizedEvent, NormalizeRequest, deterministic_demo_events, normalize
@@ -82,6 +89,24 @@ async def normalize_events(
 
     require_api_key(x_custsearch_ai_key)
     return normalize(request)
+
+
+@app.post("/v1/cctv/cameras/probe", response_model=CameraProbeResult, tags=["CCTV"])
+async def probe_camera_source(
+    request: CameraProbeRequest,
+    x_custsearch_ai_key: str | None = Header(default=None),
+) -> CameraProbeResult:
+    """Probe a dynamically configured RTSP source without exposing its URL or captured frame."""
+
+    require_api_key(x_custsearch_ai_key)
+    try:
+        return await run_in_threadpool(
+            probe_camera, request.configuration_reference, request.timeout_seconds
+        )
+    except CameraSourceConfigurationError as exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exception)
+        ) from exception
 
 
 @app.get("/v1/cctv/demo/events", response_model=list[NormalizedEvent], tags=["CCTV"])

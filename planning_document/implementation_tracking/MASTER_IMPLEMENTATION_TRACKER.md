@@ -13,3 +13,7 @@ Phase 16 is blocked only for exact SQL Server 2022 environment evidence; Redis m
 now locally verified. Phase 17 is locally green but lacks deployed IIS/HTTPS/WebSocket validation.
 Phase 18 has live V1.16 objects but
 no matching source ancestry, so it must not be marked complete.
+
+Latest Phase 13/17 UAT addendum (2026-08-26): dynamic server-side camera registration, two-user
+tenant/store isolation, real Chrome flow and authenticated Python one-frame probe are locally verified.
+An authorized RTSP runtime secret and physical frame remain pending; no static camera endpoint was added.

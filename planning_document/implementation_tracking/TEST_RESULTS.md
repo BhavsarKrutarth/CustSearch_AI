@@ -20,3 +20,8 @@ Observed run: `CUSTSEARCH_SMOKE_20260825_001`
 | 16/17 | Manual API/Worker startup | no connection env required | both running; live/ready 200; heartbeat fresh | PASS | committed Windows-auth local settings |
 | 17 | Angular to API | dev proxy reaches API/SQL auth | UI 200; invalid login 401 through proxy | PASS | actual processes |
 | 13/17 | Python service | local health and .NET event target | health 200; protected API URL configured | PASS | no direct SQL access |
+| 13/17 | Camera role upgrade | repeat-safe tenant-only CameraOperator grants | V1.16.1 twice; 13 tenant grants per smoke tenant; zero platform grants | PASS | live SQL observed |
+| 13/17 | Dynamic camera access API | Office user sees own camera; isolation user sees none | counts 1/0; direct foreign camera request 404 | PASS | real JWT/API/SQL |
+| 13/17 | Headed Chrome camera UAT | isolated Platform/Office/Random sessions | three independent browser contexts and screenshots | PASS | actual Google Chrome |
+| 13/17 | Python dynamic source probe | authenticated allow-listed env resolver; no secret output | Ruff; pytest 10/10; missing runtime secret returns expected 422 | PASS | physical frame still blocked by credential |
+| 13/17 | Physical RTSP frame | connected and frame received | authorized runtime stream credential absent | BLOCKED | exact recovery command in camera guide |

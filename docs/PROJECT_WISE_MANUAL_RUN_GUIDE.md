@@ -146,6 +146,42 @@ $env:CUSTSEARCH_AI_SERVICE_SECRET = "<local-secret-not-committed-to-git>"
 
 Demo Mode remains usable without a physical RTSP camera or ONNX production model.
 
+For a dynamically configured physical camera, never edit Python/source code with an IP or password.
+Configure one allow-listed runtime variable, restart Python, and call the authenticated probe:
+
+```powershell
+$env:CUSTSEARCH_AI_API_KEY = "<local-service-api-key>"
+$env:CUSTSEARCH_CAMERA_ENTRY01_RTSP = "rtsp://<authorized-user>:<password>@<camera-ip>:554/<stream-path>"
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+$headers = @{ "X-CustSearch-AI-Key" = $env:CUSTSEARCH_AI_API_KEY }
+$body = @{ configuration_reference = "env:CUSTSEARCH_CAMERA_ENTRY01_RTSP"; timeout_seconds = 5 } |
+  ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/v1/cctv/cameras/probe" `
+  -Headers $headers -ContentType "application/json" -Body $body
+```
+
+The returned object contains connection/frame metadata only. The RTSP URL, password and frame are
+not returned. Continuous detection/event publishing remains a separate implementation step.
+
+To repeat the real Google Chrome access-isolation flow, keep API and Angular running, then set UAT
+values in the current shell (none are embedded in the script):
+
+```powershell
+Set-Location "D:\Project\AdminCore\CustSearch_AI\CustSearch_AI\tests\CustSearch.Admin.E2E"
+$env:CUSTSEARCH_MANUAL_TEST_PASSWORD = "<local-uat-password>"
+$env:CUSTSEARCH_UAT_PLATFORM_USER = "<platform-user>"
+$env:CUSTSEARCH_UAT_OFFICE_TENANT = "<office-tenant-code>"
+$env:CUSTSEARCH_UAT_OFFICE_USER = "<camera-operator-user>"
+$env:CUSTSEARCH_UAT_OFFICE_CAMERA_NAME = "<configured-camera-name>"
+$env:CUSTSEARCH_UAT_NO_CAMERA_TENANT = "<isolation-tenant-code>"
+$env:CUSTSEARCH_UAT_NO_CAMERA_USER = "<isolation-user>"
+node .\scripts\manual-server-camera-access-flow.mjs
+```
+
+The script uses separate browser contexts for every actor and fails if the isolation user sees the
+office camera. Evidence images are local ignored artifacts and contain no credentials.
+
 ## 5. Optional Redis scale-out
 
 Redis is disabled by default, so it is not required for ordinary one-API-node development. To test

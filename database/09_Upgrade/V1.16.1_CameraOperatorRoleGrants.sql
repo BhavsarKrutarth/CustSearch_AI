@@ -1,14 +1,21 @@
-/*
-==============================================================
-Script        : 003_Tenant_ProvisionDefaultRoles.sql
-Purpose       : Gives a newly created tenant its eight isolated default roles and safe grants.
-Safety        : Repeat-safe and transactional; never grants platform permissions.
-==============================================================
-*/
+:on error exit
 USE [CustSearch_AI];
 GO
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
 
--- Call this procedure inside the tenant-creation transaction immediately after the tenant row is saved.
+/*
+  Corrects role-provisioning drift found during the localhost office-camera UAT.
+  CameraOperator remains tenant/store scoped: this script grants no platform permission and
+  camera queries must still enforce JWT TenantId plus authoritative store assignments.
+*/
+IF OBJECT_ID(N'dbo.Tenants', N'U') IS NULL
+   OR OBJECT_ID(N'dbo.Roles', N'U') IS NULL
+   OR OBJECT_ID(N'dbo.Permissions', N'U') IS NULL
+   OR OBJECT_ID(N'dbo.RolePermissions', N'U') IS NULL
+    THROW 55195, 'Role-provisioning prerequisites are missing.', 1;
+GO
+
 CREATE OR ALTER PROCEDURE dbo.Tenant_ProvisionDefaultRoles
     @TenantId BIGINT
 AS
@@ -28,8 +35,7 @@ BEGIN
 
     BEGIN TRY
         DECLARE @TenantRoles TABLE (Name NVARCHAR(100), Description NVARCHAR(300));
-        INSERT INTO @TenantRoles (Name, Description)
-        VALUES
+        INSERT @TenantRoles (Name, Description) VALUES
             (N'TenantAdmin', N'Full administration access inside one tenant.'),
             (N'TenantOwner', N'Business owner with full tenant operations.'),
             (N'ShopOwner', N'Shop owner with full tenant operations.'),
@@ -39,24 +45,23 @@ BEGIN
             (N'SalesStaff', N'Assigned-store staff operations.'),
             (N'CRMStaff', N'Customer, household, preference and consent operations.'),
             (N'BillingStaff', N'Invoice, payment and purchase-related operations.'),
-            (N'CameraOperator', N'Camera, recognition and live visitor operations.'),
+            (N'CameraOperator', N'Assigned-store camera, recognition and live visitor operations.'),
             (N'IntegrationAdmin', N'Integration, webhook and synchronization operations.'),
             (N'Auditor', N'Read-only tenant operations and audit access.');
 
-        INSERT INTO dbo.Roles (TenantId, Scope, Name, NormalizedName, Description, IsSystem, IsActive, CreatedUtc)
+        INSERT dbo.Roles (TenantId, Scope, Name, NormalizedName, Description, IsSystem, IsActive, CreatedUtc)
         SELECT @TenantId, 2, source.Name, UPPER(source.Name), source.Description, 1, 1, SYSUTCDATETIME()
-        FROM @TenantRoles AS source
+        FROM @TenantRoles source
         WHERE NOT EXISTS
         (
-            SELECT 1 FROM dbo.Roles AS target
+            SELECT 1 FROM dbo.Roles target
             WHERE target.TenantId = @TenantId AND target.NormalizedName = UPPER(source.Name)
         );
 
-        -- These predicates mirror the reviewed Phase 3 least-privilege role defaults.
-        INSERT INTO dbo.RolePermissions (RoleId, PermissionId)
+        INSERT dbo.RolePermissions (RoleId, PermissionId)
         SELECT role.Id, permission.Id
-        FROM dbo.Roles AS role
-        INNER JOIN dbo.Permissions AS permission ON permission.Scope = 2 AND permission.IsActive = 1
+        FROM dbo.Roles role
+        JOIN dbo.Permissions permission ON permission.Scope = 2 AND permission.IsActive = 1
         WHERE role.TenantId = @TenantId AND role.Scope = 2 AND role.IsActive = 1
           AND
           (
@@ -89,7 +94,10 @@ BEGIN
                       (N'TenantReports.Export', N'Reports.Export', N'VoiceCommands.Audit', N'AuditLogs.View')))
           )
           AND NOT EXISTS
-              (SELECT 1 FROM dbo.RolePermissions AS grantRow WHERE grantRow.RoleId = role.Id AND grantRow.PermissionId = permission.Id);
+          (
+              SELECT 1 FROM dbo.RolePermissions grantRow
+              WHERE grantRow.RoleId = role.Id AND grantRow.PermissionId = permission.Id
+          );
 
         IF @StartedTransaction = 1 COMMIT TRANSACTION;
     END TRY
@@ -98,4 +106,58 @@ BEGIN
         THROW;
     END CATCH;
 END;
+GO
+
+DECLARE @TenantId BIGINT;
+DECLARE TenantCursor CURSOR LOCAL FAST_FORWARD FOR SELECT Id FROM dbo.Tenants;
+OPEN TenantCursor;
+FETCH NEXT FROM TenantCursor INTO @TenantId;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    EXEC dbo.Tenant_ProvisionDefaultRoles @TenantId = @TenantId;
+    FETCH NEXT FROM TenantCursor INTO @TenantId;
+END;
+CLOSE TenantCursor;
+DEALLOCATE TenantCursor;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.DatabaseVersions WHERE VersionNumber = N'V1.16.1')
+    INSERT dbo.DatabaseVersions (VersionNumber, Description, AppliedUtc, AppliedBy)
+    VALUES (N'V1.16.1', N'Correct complete tenant role grants including CameraOperator localhost/server UAT access', SYSUTCDATETIME(), SUSER_SNAME());
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM dbo.Roles role
+    JOIN dbo.RolePermissions grantRow ON grantRow.RoleId = role.Id
+    JOIN dbo.Permissions permission ON permission.Id = grantRow.PermissionId
+    WHERE role.NormalizedName = N'CAMERAOPERATOR' AND permission.Scope <> 2
+)
+    THROW 55196, 'CameraOperator received a non-tenant permission.', 1;
+
+IF EXISTS
+(
+    SELECT 1
+    FROM dbo.Tenants tenant
+    WHERE NOT EXISTS
+    (
+        SELECT 1
+        FROM dbo.Roles role
+        JOIN dbo.RolePermissions grantRow ON grantRow.RoleId = role.Id
+        JOIN dbo.Permissions permission ON permission.Id = grantRow.PermissionId
+        WHERE role.TenantId = tenant.Id AND role.NormalizedName = N'CAMERAOPERATOR'
+          AND permission.Name = N'TenantDashboard.View'
+    )
+    OR NOT EXISTS
+    (
+        SELECT 1
+        FROM dbo.Roles role
+        JOIN dbo.RolePermissions grantRow ON grantRow.RoleId = role.Id
+        JOIN dbo.Permissions permission ON permission.Id = grantRow.PermissionId
+        WHERE role.TenantId = tenant.Id AND role.NormalizedName = N'CAMERAOPERATOR'
+          AND permission.Name = N'Cameras.View'
+    )
+)
+    THROW 55197, 'CameraOperator grants were not provisioned for every tenant.', 1;
 GO

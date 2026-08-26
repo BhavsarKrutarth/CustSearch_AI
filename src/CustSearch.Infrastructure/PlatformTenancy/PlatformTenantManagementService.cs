@@ -690,8 +690,11 @@ public sealed class PlatformTenantManagementService(
         "CRMStaff" => StartsWithAny(permission, "Customers.", "Households.", "Visitors.", "Preferences.", "Consents.")
             || permission is "Visits.View" or "CustomerJourneys.View",
         "BillingStaff" => permission == "Customers.View" || StartsWithAny(permission, "Invoices.", "Payments."),
+        // Camera operators land on the tenant dashboard after login, then operate only their
+        // authoritative assigned-store camera/recognition scope. TenantDashboard.View makes
+        // that entry route usable without granting tenant administration capabilities.
         "CameraOperator" => StartsWithAny(permission, "Cameras.", "Recognition.")
-            || permission is "Visitors.View" or "Visits.View" or "Alerts.View" or "Alerts.Acknowledge",
+            || permission is "TenantDashboard.View" or "Visitors.View" or "Visits.View" or "Alerts.View" or "Alerts.Acknowledge",
         "IntegrationAdmin" => StartsWithAny(permission, "Integrations.", "Webhooks.") || permission == "Settings.View",
         "Auditor" => permission.EndsWith(".View", StringComparison.Ordinal)
             || permission is "TenantReports.Export" or "Reports.Export" or "VoiceCommands.Audit" or "AuditLogs.View",

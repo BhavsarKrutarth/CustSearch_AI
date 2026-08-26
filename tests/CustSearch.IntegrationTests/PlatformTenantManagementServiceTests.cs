@@ -38,6 +38,13 @@ public sealed class PlatformTenantManagementServiceTests
             .Distinct()
             .ToListAsync();
         Assert.Equal([UserScope.Tenant], grantedScopes);
+        var cameraOperatorPermissions = await fixture.Context.RolePermissions
+            .Where(grant => grant.Role.TenantId == tenant.Id && grant.Role.Name == "CameraOperator")
+            .Select(grant => grant.Permission.Name)
+            .ToListAsync();
+        Assert.Contains(PermissionCatalog.Tenant.DashboardView, cameraOperatorPermissions);
+        Assert.Contains(PermissionCatalog.Operations.CamerasView, cameraOperatorPermissions);
+        Assert.DoesNotContain(cameraOperatorPermissions, permission => permission.StartsWith("Platform", StringComparison.Ordinal));
         Assert.Contains(await fixture.Context.AuditLogs.ToListAsync(), audit => audit.Action == "TenantCreated");
     }
 

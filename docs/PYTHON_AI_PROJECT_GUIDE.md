@@ -153,6 +153,7 @@ This returns normalized metadata only. It does not currently forward the result 
 | `CUSTSEARCH_AI_DOTNET_EVENT_URL` | Target `.NET` ingestion URL | Configured, publisher not yet wired |
 | `CUSTSEARCH_AI_SERVICE_ID` | HMAC service identity | Configured, publisher not yet wired |
 | `CUSTSEARCH_AI_SERVICE_SECRET` | HMAC secret | Configured, publisher not yet wired |
+| `CUSTSEARCH_CAMERA_<CAMERA_KEY>_RTSP` | Dynamic authorized RTSP source resolved from an opaque `env:` reference | Active for authenticated one-frame probe |
 
 Environment variables are read once per process. Restart Uvicorn after changing them.
 
@@ -166,7 +167,7 @@ $env:PYTHONPATH = "."
 .\.venv\Scripts\python.exe -m pytest -q ..\..\tests\CustSearch.AI.Tests
 ```
 
-Current recorded regression result is Ruff PASS and pytest `7/7` PASS.
+Current recorded regression result is Ruff PASS and pytest `10/10` PASS.
 
 ## 10. Privacy and security rules
 
@@ -182,8 +183,8 @@ Current recorded regression result is Ruff PASS and pytest `7/7` PASS.
 
 To complete live-camera support, implement and test these bounded components:
 
-1. A configuration/vault resolver for an opaque RTSP reference.
-2. RTSP capture with bounded timeout, TCP option and exponential reconnect.
+1. Extend the implemented allow-listed environment resolver with the production secret-vault provider.
+2. Extend the implemented bounded one-frame RTSP probe into continuous capture with exponential reconnect.
 3. Approved ONNX detector output parsing and non-biometric person tracker.
 4. Frame dropping/backpressure so camera lag cannot exhaust memory.
 5. Normalized event generation using `tracking.py` contracts.
