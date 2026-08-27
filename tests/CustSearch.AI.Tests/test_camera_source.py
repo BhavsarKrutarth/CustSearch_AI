@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 import httpx
 import numpy as np
 import pytest
+from pydantic import SecretStr
+
 from app.camera_source import (
     CameraPreviewFrame,
     CameraProbeResult,
@@ -13,7 +15,6 @@ from app.camera_source import (
     resolve_camera_source,
 )
 from app.main import app, settings
-from pydantic import SecretStr
 
 
 def test_resolver_accepts_only_allow_listed_environment_reference(monkeypatch) -> None:
@@ -67,7 +68,10 @@ async def test_probe_endpoint_is_authenticated_and_does_not_return_reference(mon
         status="Frame received.",
     )
     monkeypatch.setattr("app.main.probe_camera", lambda _reference, _timeout: expected)
-    payload = {"configuration_reference": "env:CUSTSEARCH_CAMERA_DYNAMIC_RTSP", "timeout_seconds": 3}
+    payload = {
+        "configuration_reference": "env:CUSTSEARCH_CAMERA_DYNAMIC_RTSP",
+        "timeout_seconds": 3,
+    }
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -86,7 +90,9 @@ async def test_probe_endpoint_is_authenticated_and_does_not_return_reference(mon
 
 
 @pytest.mark.asyncio
-async def test_latest_frame_endpoint_is_authenticated_and_never_returns_reference(monkeypatch) -> None:
+async def test_latest_frame_endpoint_is_authenticated_and_never_returns_reference(
+    monkeypatch,
+) -> None:
     settings.api_key = SecretStr("camera-frame-key")
     expected = CameraPreviewFrame(
         content=b"safe-jpeg",
@@ -95,7 +101,10 @@ async def test_latest_frame_endpoint_is_authenticated_and_never_returns_referenc
         captured_utc=datetime(2026, 8, 26, 7, 0, tzinfo=UTC),
     )
     monkeypatch.setattr("app.main.preview_manager.get_latest", lambda _reference, _age: expected)
-    payload = {"configuration_reference": "env:CUSTSEARCH_CAMERA_DYNAMIC_RTSP", "max_age_seconds": 5}
+    payload = {
+        "configuration_reference": "env:CUSTSEARCH_CAMERA_DYNAMIC_RTSP",
+        "max_age_seconds": 5,
+    }
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"

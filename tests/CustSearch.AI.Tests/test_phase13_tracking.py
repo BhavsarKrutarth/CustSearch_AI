@@ -1,13 +1,14 @@
 """Phase 13 authenticated, anonymous-only and deterministic tracking tests."""
 
-from datetime import datetime, timezone
+from datetime import UTC
 
 import httpx
 import pytest
+from pydantic import SecretStr, ValidationError
+
 from app.config import Settings
 from app.main import app, settings
 from app.tracking import deterministic_demo_events
-from pydantic import SecretStr, ValidationError
 
 
 @pytest.mark.asyncio
@@ -83,4 +84,4 @@ def test_demo_mode_is_deterministic_and_production_guarded() -> None:
 def test_demo_fixture_uses_utc_and_one_continuous_anonymous_track() -> None:
     events = deterministic_demo_events()
     assert {event.person_track_id for event in events} == {"demo-track-0001"}
-    assert all(event.occurred_utc.utcoffset() == timezone.utc.utcoffset(datetime.now(timezone.utc)) for event in events)
+    assert all(event.occurred_utc.utcoffset() == UTC.utcoffset(None) for event in events)

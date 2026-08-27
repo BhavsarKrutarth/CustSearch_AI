@@ -27,3 +27,20 @@ sqlcmd -S 'KRUTARTH-BHAVSA' -d 'CustSearch_AI' -E -C -b `
 ```
 
 Do not use broad tenant deletes or manual cascading cleanup on a shared database.
+
+## Tenant TEN-35D77F00D7F0 page and camera UAT data
+
+`Tenant35D77F_UatData.sql` adds repeat-safe connected records for the existing active
+`smoke.platform` tenant administrator. It covers store/dashboard, customer, household, visit,
+visit-party, category, voice audit, product, retail, alert, integration, camera, consent and report
+views. It also assigns that user to the UAT store and grants the opaque office camera live preview.
+
+The script does not create or reset credentials, does not store an RTSP URL, and does not create a
+biometric template. Run the seed plus verifier with Windows authentication:
+
+```powershell
+& database/10_TestData/run-tenant35d77f-uat.ps1
+```
+
+The camera row uses `env:CUSTSEARCH_CAMERA_OFFICE_ENTRY01_RTSP`. Configure the matching environment
+secret only on the Python AI host and restart that process before physical live-preview validation.
