@@ -1,5 +1,10 @@
 # Camera Motion, Tenant Storage — Work Progress / Handover
 
+> **Continuation record moved:** Per the 2026-08-28 user instruction, the authoritative
+> append-preserved handover is now `planning_document/WORK_PROGRESS_LOG.txt`, with the
+> compact A-G index in `planning_document/ALL_PHASE_WORK_PROGRESS.txt`. This Markdown file
+> is retained as historical context and must not be used as the current continuation point.
+
 This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Storage_Planning.md`. A successor AI must read the requirement file and this file before changing code, must not repeat completed phases, and must continue from **Current continuation point**.
 
 ## Current continuation point

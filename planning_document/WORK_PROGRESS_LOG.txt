@@ -1,0 +1,243 @@
+CUSTSEARCH AI - CONTINUOUS WORK PROGRESS / HANDOVER LOG
+======================================================
+
+Purpose
+-------
+This is the append-preserved, authoritative implementation log for:
+planning_document/Camera_Motion_CustSearch_AI_Tenant_Storage_Planning.md
+
+Future continuation rule:
+1. Read the requirement/planning file above.
+2. Read this entire log.
+3. Verify the current Git status and the latest commit before changing code.
+4. Continue from CURRENT CONTINUATION POINT; do not repeat completed phases.
+5. Preserve all existing entries and append meaningful milestones, fixes, decisions,
+   verification results, pending work, Git commits, and the next exact step.
+
+Repository / branch baseline
+----------------------------
+Repository: D:\Project\AdminCore\CustSearch_AI\CustSearch_AI
+Working branch: camera-motion-tenant-storage
+Starting baseline commit: 31a78ad
+
+========================================================================
+Date/Time: 2026-08-28 19:38-20:20 +05:30 (recovered from prior session)
+Phase: A - Camera Quota Enforcement
+Module/Feature: Tenant-wide licensed active-camera limit
+Work Completed:
+- Added tenant-wide active camera quota query and create/reactivation enforcement.
+- Added SQL Server serialization/locking around quota-sensitive writes.
+- Added camera administration capacity display and disabled invalid activation paths.
+Files Changed:
+- Camera domain/application/infrastructure/API and Angular camera administration files.
+- database/09_Upgrade/V1.18.0_CameraQuotaEnforcement.sql
+Database/Table/SP Changes:
+- Added repeat-safe V1.18.0 upgrade, tenant/active camera count index, and version row.
+API/UI Changes:
+- Added tenant camera quota endpoint and Angular quota/capacity behavior.
+Testing Result:
+- Targeted .NET 17/17 passed.
+- Full .NET 355/355 passed.
+- Angular API tests 6/6 and production build passed.
+Errors/Fixes:
+- Default build output was locked by an existing Visual Studio/API process; verification
+  used isolated artifacts paths without stopping the user's process.
+Pending Work: None for Phase A.
+Next Step: Phase B.
+Git Commits:
+- 03983d6 feat(cameras): enforce tenant active camera quota
+- 91c6643 docs(handover): checkpoint camera quota phase
+
+========================================================================
+Date/Time: 2026-08-28 20:20-20:58 +05:30 (recovered from prior session)
+Phase: B - Common Live Monitoring
+Module/Feature: Secure maximum-five-camera monitoring grid
+Work Completed:
+- Added dedicated multi-camera monitoring page using the existing secure preview flow.
+- Added maximum five auto-connected active/authorized camera tiles, per-tile failure
+  isolation, online/offline filters, fullscreen, and deterministic session cleanup.
+- Reused same-camera sessions and enforced a hard per-user five-session backend cap.
+Files Changed:
+- Camera preview application/infrastructure/API, Angular monitoring route/page/service,
+  and Playwright/backend tests.
+Database/Table/SP Changes: No parallel stream architecture added; existing preview model reused.
+API/UI Changes:
+- Live monitoring grid and lifecycle behavior added without exposing RTSP credentials.
+Testing Result:
+- Targeted backend 4/4 passed.
+- Full .NET 356/356 passed.
+- Angular 88/88, production build, and Chromium E2E 5/5 passed.
+Errors/Fixes: Existing camera operations E2E fixture was reconciled with Phase A quota API.
+Pending Work: Motion-active filtering depends on later motion event work.
+Next Step: Phase C.
+Git Commits:
+- f5ca24d feat(cameras): add secure five-camera monitoring grid
+- dac0bd8 docs(handover): checkpoint live monitoring phase
+
+========================================================================
+Date/Time: 2026-08-28 21:01-22:15 +05:30 (recovered from prior session)
+Phase: C - Motion Rule Engine
+Module/Feature: Authoritative motion rule catalog and camera rule configuration
+Work Completed:
+- Added stable 26-code rule catalog: six MVP rules available and remaining codes marked planned.
+- Added camera master switch plus threshold, schedule, evidence, alert, and active-zone scope.
+- Added dedicated rule-management permission, SQL schema/versioning, APIs, and grouped Angular editor.
+Files Changed:
+- Motion rule domain/application/infrastructure/API, Angular camera rule editor, SQL, and tests.
+Database/Table/SP Changes:
+- database/09_Upgrade/V1.18.1_CameraMotionRules.sql and DatabaseVersions registration.
+API/UI Changes:
+- Catalog/settings/CRUD APIs and grouped rules UI.
+Testing Result:
+- Targeted .NET 20/20 passed.
+- Full .NET 365/365 passed.
+- Angular 89/89 and production build passed.
+Errors/Fixes:
+- Fixed failed-create entity remaining in EF change tracking by rolling back/detaching it.
+Pending Work: Advanced planned rules intentionally have no fabricated detection behavior.
+Next Step: Phase D.
+Git Commits:
+- e70c1ed feat(cameras): add motion rule configuration engine
+- db8f438 docs(handover): checkpoint motion rules phase
+
+========================================================================
+Date/Time: 2026-08-28 22:15-22:24 +05:30 (recovered from prior session)
+Phase: D - Optional Zones
+Module/Feature: Optional camera detection area and expanded semantic zones
+Work Completed:
+- Added camera-level Use Detection Zone setting, default OFF.
+- Enforced that ON requires a same-tenant/store/camera active zone; OFF preserves full-frame detection.
+- Exposed ten zone types and aligned zone editor permissions.
+- Retained stricter required-zone validation for Entry/Exit/Restricted semantic rules.
+Files Changed:
+- Camera zone domain/application/infrastructure/API, Angular zone/rule UI, SQL, and tests.
+Database/Table/SP Changes:
+- database/09_Upgrade/V1.18.2_OptionalDetectionZones.sql and version registration.
+API/UI Changes:
+- Detection-zone toggle API/UI and expanded zone type support.
+Testing Result:
+- Targeted backend 22/22 passed.
+- Full .NET: unit 118/118 and integration 249/249.
+- Angular 90/90 and production build passed.
+Errors/Fixes: None remaining.
+Pending Work:
+- Polygon geometry remains normalized server-validated JSON; a visual canvas is an optional UX enhancement.
+Next Step: Phase E.
+Git Commits:
+- b75a26e feat(cameras): add optional detection zones
+- 2bf2566 docs(handover): advance camera storage work to phase E
+
+========================================================================
+Date/Time: 2026-08-28 22:24-23:06 +05:30
+Phase: E - Evidence Storage (IN PROGRESS)
+Module/Feature: Tenant evidence namespace, encrypted storage, quota, usage, and admin UI
+Work Completed:
+- Added TenantStoragePolicy, TenantStorageUsage, and CameraEvidence domain/EF models.
+- Added repeat-safe V1.18.3 SQL upgrade with 2 GB default quota, retention policy,
+  usage counters, evidence metadata, permissions, indexes, and tenant/camera foreign keys.
+- Extended the existing Phase 18 AES-GCM evidence store with atomic encrypted writes.
+- Added signed HMAC/idempotent CCTV binary evidence ingestion with service-resolved
+  tenant/store scope, active-camera validation, content-type checks, atomic quota
+  reservation, generated tenant object keys, and physical-file rollback on DB failure.
+- Added tenant storage summary/policy/usage/evidence APIs and platform policy APIs.
+- Added customer storage dashboard and platform tenant storage policy editor.
+- Added backend/API contract tests and Angular storage API tests.
+Files Changed:
+- database/09_Upgrade/V1.18.3_TenantEvidenceStorage.sql
+- src/CustSearch.Domain/Entities/CameraEvidenceStorage.cs
+- src/CustSearch.Domain/Enums/CameraEvidenceEnums.cs
+- src/CustSearch.Application/CamerasTracking/ICameraEvidenceStorageService.cs
+- src/CustSearch.API/Controllers/CameraStorageController.cs
+- src/CustSearch.Infrastructure/CamerasTracking/CameraEvidenceStorageService.cs
+- src/CustSearch.Infrastructure/Persistence/Configurations/CameraEvidenceStorageConfigurations.cs
+- src/CustSearch.Infrastructure/Security/SecurityEvidenceServices.cs
+- src/CustSearch.Admin/src/app/features/storage/* and route/navigation/permission files
+- tests/CustSearch.IntegrationTests/CameraEvidenceStorageServiceTests.cs
+- tests/CustSearch.IntegrationTests/CameraStorageApiContractTests.cs
+Database/Table/SP Changes:
+- New dbo.TenantStoragePolicies, dbo.TenantStorageUsage, dbo.CameraEvidence.
+- Added SecurityIncidentEvidence.FileSizeBytes for later unified usage accounting.
+- Added Storage.ViewUsage, Cameras.ViewEvents, Platform.TenantStorage.Manage permissions.
+API/UI Changes:
+- GET /api/tenant/storage, /policy, /usage, /evidence
+- GET/PUT /api/platform/tenants/{tenantId}/storage[/policy]
+- POST /api/internal/cctv/evidence
+- Angular /customer-admin/storage and /admin/tenants/{tenantId}/storage.
+Testing Result:
+- Targeted Phase E backend/API contracts passed 10/10 after fixes.
+- Angular full suite passed 92/92.
+- Angular production build passed with only the pre-existing admin-shell.scss budget warning.
+- Full .NET regression is still running at this checkpoint; unit tests passed 118/118.
+Errors/Fixes:
+- Fixed missing API security namespace in the new contract test.
+- Fixed SQL Server-only N-string/LEFT check syntax breaking SQLite EnsureCreated;
+  portable EF constraint now checks non-empty key, while the SQL Server upgrade retains
+  traversal checks and runtime storage resolution enforces containment.
+Pending Work:
+- Await full .NET integration result.
+- Complete diff/security audit, update this log with final results, commit Phase E,
+  then implement Phase F retention/usage reconciliation.
+Next Step: Poll the full .NET regression, address any failures, then close Phase E.
+
+========================================================================
+CURRENT CONTINUATION POINT
+--------------------------
+Active phase: Phase E - Evidence Storage
+Exact state: Implementation is uncommitted. Targeted and Angular validation are green;
+full .NET integration tests are running in isolated artifacts/phase-e-full output.
+Do not repeat Phases A-D. Finish Phase E validation and commit boundary first.
+
+========================================================================
+Date/Time: 2026-08-28 23:06-23:14 +05:30
+Phase: E - Evidence Storage (COMPLETE)
+Module/Feature: Final security audit, regression, disk-space recovery, and Git boundary
+Work Completed:
+- Created this continuous authoritative WORK_PROGRESS_LOG.txt with recovered A-D history.
+- Created planning_document/ALL_PHASE_WORK_PROGRESS.txt as the compact A-G status index.
+- Added permission-aware platform storage policy UI: operators with
+  Tenants.ViewUsage can view usage; only Platform.TenantStorage.Manage can mutate policy.
+- Strengthened ingestion regression coverage for altered-content idempotency reuse,
+  invalid HMAC signatures, and service credential store-scope violations.
+- Completed the Phase E code audit and committed the complete implementation.
+Files Changed:
+- src/CustSearch.Admin/src/app/features/storage/platform-storage-page.ts
+- tests/CustSearch.IntegrationTests/CameraEvidenceStorageServiceTests.cs
+- All Phase E files listed in the preceding milestone.
+- planning_document/WORK_PROGRESS_LOG.txt
+- planning_document/ALL_PHASE_WORK_PROGRESS.txt
+Database/Table/SP Changes:
+- Final schema remains V1.18.3: TenantStoragePolicies, TenantStorageUsage,
+  CameraEvidence, SecurityIncidentEvidence.FileSizeBytes, permissions, indexes,
+  constraints, and DatabaseVersions registration.
+API/UI Changes:
+- Final API permission boundaries passed reflection contract checks.
+- Platform storage UI now has an explicit read-only state when manage permission is absent.
+Testing Result:
+- Phase E targeted backend/API contract tests: PASS 11/11.
+- Full .NET: PASS unit 118/118 and integration 260/260 (378 total).
+- Angular: PASS 35 files / 92 tests.
+- Angular production build: PASS; only pre-existing admin-shell.scss +151-byte warning.
+- git diff --cached --check: PASS; line-ending conversion notices only.
+Errors/Fixes:
+- A fresh full-regression output failed during dependency copy because D: had 0 GB free.
+- Verified exact generated targets and removed only disposable artifacts/phase-e-* test
+  output directories created during Phase E (approximately 1.6 GB; no source/user data).
+- Re-ran the complete .NET suite in a clean isolated path and it passed; removed that
+  disposable validation output afterward to preserve 1.62 GB free space.
+Pending Work:
+- Phase F retention worker and storage usage reconciliation.
+- SQL V1.18.3 should be executed/verified against the deployment SQL Server when that
+  environment is available; EF/SQLite schema and application contracts are green.
+Next Step:
+- Start Phase F by mapping existing CustSearch.Worker scheduling/maintenance patterns,
+  then implement safe retention cleanup, usage release/reconciliation, audit, and tests.
+Git Commit:
+- 9a50f09 feat(cameras): add encrypted tenant evidence storage
+
+========================================================================
+CURRENT CONTINUATION POINT
+--------------------------
+Active phase: Phase F - 15-Day Retention Worker
+Exact state: Phases A-E are implemented, verified, and code-committed. The tracking-file
+checkpoint commit is the next Git action, followed by Phase F implementation.
+Do not repeat Phases A-E. Read the Phase F requirements and existing worker patterns first.

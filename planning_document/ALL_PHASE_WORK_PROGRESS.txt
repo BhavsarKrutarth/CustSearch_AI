@@ -1,0 +1,105 @@
+CUSTSEARCH AI - CAMERA MOTION / TENANT STORAGE - ALL PHASE STATUS
+================================================================
+
+Requirement:
+planning_document/Camera_Motion_CustSearch_AI_Tenant_Storage_Planning.md
+
+Detailed chronological handover:
+planning_document/WORK_PROGRESS_LOG.txt
+
+Repository branch: camera-motion-tenant-storage
+Last status refresh: 2026-08-28 23:14 +05:30
+
+Status legend: COMPLETE | IN PROGRESS | NOT STARTED | BLOCKED
+
+----------------------------------------------------------------
+PHASE A - CAMERA QUOTA ENFORCEMENT
+Status: COMPLETE
+Delivered:
+- Tenant-wide active camera quota API and serialized create/reactivation enforcement.
+- SQL V1.18.0 index/version upgrade.
+- Angular capacity display and activation guard.
+Validation: .NET 355/355; Angular API 6/6; production build passed.
+Commits: 03983d6, 91c6643
+Pending: None.
+
+----------------------------------------------------------------
+PHASE B - COMMON LIVE MONITORING
+Status: COMPLETE
+Delivered:
+- Secure five-camera grid, authorization, per-tile isolation, filters, fullscreen,
+  session reuse/cap, and deterministic cleanup.
+Validation: .NET 356/356; Angular 88/88; Chromium E2E 5/5; build passed.
+Commits: f5ca24d, dac0bd8
+Pending: Motion-active filtering awaits actual motion events.
+
+----------------------------------------------------------------
+PHASE C - MOTION RULE ENGINE
+Status: COMPLETE
+Delivered:
+- Stable 26-code catalog, six enabled MVP definitions, camera master switch,
+  CRUD/validation/schedule/evidence/alert settings, SQL V1.18.1, permission, and UI.
+Validation: .NET 365/365; Angular 89/89; build passed.
+Commits: e70c1ed, db8f438
+Pending: Planned advanced detection codes intentionally have no fake behavior.
+
+----------------------------------------------------------------
+PHASE D - OPTIONAL ZONES
+Status: COMPLETE
+Delivered:
+- Optional detection-area switch (default OFF/full frame), active-zone validation,
+  ten zone types, permission alignment, SQL V1.18.2, API/UI/tests.
+Validation: .NET unit 118/118 + integration 249/249; Angular 90/90; build passed.
+Commits: b75a26e, 2bf2566
+Pending: Visual polygon canvas is optional future UX work.
+
+----------------------------------------------------------------
+PHASE E - EVIDENCE STORAGE
+Status: COMPLETE
+Delivered:
+- TenantStoragePolicy, TenantStorageUsage, CameraEvidence and SQL V1.18.3.
+- AES-GCM encrypted tenant namespace, signed/idempotent CCTV binary ingestion,
+  atomic quota accounting and rollback, storage permissions/APIs.
+- Customer usage dashboard and platform storage policy editor.
+Validation:
+- Targeted backend/API contracts 11/11.
+- Full .NET unit 118/118 + integration 260/260.
+- Angular 92/92 and production build passed (existing SCSS budget warning only).
+Fixes:
+- Added missing API security namespace in tests.
+- Made EF evidence-key check portable to SQLite while retaining stronger SQL/runtime checks.
+- Platform storage policy editor now exposes mutations only with
+  Platform.TenantStorage.Manage.
+- Added altered-idempotency, invalid-HMAC, and credential store-scope tests.
+Commit: 9a50f09
+Pending:
+- Execute/verify SQL V1.18.3 against deployment SQL Server when available.
+
+----------------------------------------------------------------
+PHASE F - 15-DAY RETENTION WORKER
+Status: IN PROGRESS (next implementation phase)
+Required:
+- RetentionUntilUtc cleanup, physical object deletion safety, DB soft-delete,
+  usage release/reconciliation, audit/diagnostics, scheduled worker, tests.
+Dependency: Satisfied by Phase E commit 9a50f09.
+
+----------------------------------------------------------------
+PHASE G - RETAIL SECURITY RULES
+Status: NOT STARTED
+Required:
+- Shelf interaction, pickup/put-back candidate, checkout/payment correlation,
+  suspected unpaid exit, human review, alerts, and evidence integration.
+Decision:
+- Extend/reuse existing Phase 18 security observations/incidents/review/SignalR;
+  do not build a parallel incident system.
+Dependency: Complete and commit Phase F first.
+
+----------------------------------------------------------------
+CURRENT CONTINUATION POINT
+Active phase: Phase F
+Next exact step:
+1. Commit the synchronized tracking files.
+2. Map existing CustSearch.Worker scheduling and maintenance patterns.
+3. Implement safe expired-evidence cleanup and usage release/reconciliation.
+4. Add targeted retention, missing-file, pinned-evidence, and tenant accounting tests.
+5. Run full regression, update both tracking files, and commit Phase F.
