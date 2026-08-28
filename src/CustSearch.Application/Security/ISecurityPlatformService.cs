@@ -41,7 +41,7 @@ public sealed record SecurityRealtimeEvent(string EventType,long TenantId,long S
 
 public interface ISecurityRealtimePublisher{Task PublishAsync(SecurityRealtimeEvent message,CancellationToken ct=default);}
 public interface ISecurityEvidenceTokenService{SecurityEvidenceTicket Create(long evidenceId,long incidentId,long userId,long tenantId,bool isExport,DateTime expiresUtc);void Validate(string token,long evidenceId,long incidentId,long userId,long tenantId,bool isExport,DateTime utcNow);}
-public interface ISecurityEvidenceStore{Task<Stream>OpenDecryptedAsync(string objectKey,CancellationToken ct=default);Task DeleteAsync(string objectKey,CancellationToken ct=default);}
+public interface ISecurityEvidenceStore{Task SaveEncryptedAsync(string objectKey,ReadOnlyMemory<byte>content,CancellationToken ct=default);Task<Stream>OpenDecryptedAsync(string objectKey,CancellationToken ct=default);Task DeleteAsync(string objectKey,CancellationToken ct=default);}
 public interface ISecurityMaintenanceProcessor{Task<SecurityMaintenanceResult>RunOnceAsync(CancellationToken ct=default);}
 public sealed record SecurityMaintenanceResult(int NotificationsDelivered,int EscalationsQueued,int EvidenceExpired,int PaymentsCorrelated,int StaleCandidatesResolved,long OpenCandidates);
 
@@ -56,6 +56,6 @@ public sealed class SecurityIngestionOptions
 
 public sealed class SecurityEvidenceOptions
 {
-    public const string SectionName="SecurityEvidence";public string StoragePath{get;set;}="artifacts/security-evidence";public string DownloadSigningKey{get;set;}=string.Empty;public string EncryptionKeyBase64{get;set;}=string.Empty;public int TicketLifetimeMinutes{get;set;}=5;
-    public bool IsValid(bool requireSecrets)=>TicketLifetimeMinutes is>=1 and<=15&&(!requireSecrets||(DownloadSigningKey.Length>=32&&TryKey()));private bool TryKey(){try{return Convert.FromBase64String(EncryptionKeyBase64).Length==32;}catch(FormatException){return false;}}
+    public const string SectionName="SecurityEvidence";public string StoragePath{get;set;}="artifacts/security-evidence";public string DownloadSigningKey{get;set;}=string.Empty;public string EncryptionKeyBase64{get;set;}=string.Empty;public int TicketLifetimeMinutes{get;set;}=5;public int MaximumUploadBytes{get;set;}=26214400;
+    public bool IsValid(bool requireSecrets)=>TicketLifetimeMinutes is>=1 and<=15&&MaximumUploadBytes is>=65536 and<=104857600&&(!requireSecrets||(DownloadSigningKey.Length>=32&&TryKey()));private bool TryKey(){try{return Convert.FromBase64String(EncryptionKeyBase64).Length==32;}catch(FormatException){return false;}}
 }
