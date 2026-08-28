@@ -47,6 +47,7 @@ BEGIN
         NormalizedEmail NVARCHAR(254) NOT NULL,
         DisplayName NVARCHAR(150) NOT NULL,
         PasswordHash NVARCHAR(500) NOT NULL,
+        DisplayPassword NVARCHAR(500) NULL,
         SecurityStamp NVARCHAR(64) NOT NULL,
         IsActive BIT NOT NULL
             CONSTRAINT DF_Users_IsActive DEFAULT (1),

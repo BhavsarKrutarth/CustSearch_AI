@@ -27,6 +27,7 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
         builder.Property(user => user.NormalizedEmail).HasMaxLength(254).IsRequired();
         builder.Property(user => user.DisplayName).HasMaxLength(150).IsRequired();
         builder.Property(user => user.PasswordHash).HasMaxLength(500).IsRequired();
+        builder.Property(user => user.DisplayPassword).HasMaxLength(500);
         builder.Property(user => user.SecurityStamp).HasMaxLength(64).IsRequired();
         builder.Property(user => user.CreatedUtc).HasPrecision(7).IsRequired();
         builder.Property(user => user.LastLoginUtc).HasPrecision(7);

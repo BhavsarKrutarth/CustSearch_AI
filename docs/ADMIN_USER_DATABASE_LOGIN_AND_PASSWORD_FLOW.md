@@ -9,7 +9,7 @@ Verified branch: `audit/all-phases-database-smoke`
 - Platform Admin, Tenant Admin, Shop Owner, Staff and Camera Operator ke liye alag-alag login tables nahi hain. Sabhi login identities `dbo.Users` mein store hoti hain.
 - Account ka type `Users.Scope`, `Users.TenantId`, `dbo.UserRoles`, `dbo.Roles`, `dbo.RolePermissions` aur tenant users ke liye `dbo.UserStoreAssignments` decide karte hain.
 - Shopper/customer record `dbo.Customers` mein hota hai. `Customers` login table nahi hai aur customer ko sirf customer record banane se Admin portal login nahi milta.
-- Database mein plaintext password nahi hota. `dbo.Users.PasswordHash` one-way ASP.NET Core Identity hash rakhta hai.
+- `dbo.Users.PasswordHash` one-way ASP.NET Core Identity hash rakhta hai. When the explicitly opt-in `PasswordStorage:StoreDisplayPassword` setting is enabled, newly created or changed passwords are additionally stored in `dbo.Users.DisplayPassword` for direct local SQL support access.
 - Password hash ko **decode/decrypt nahi kiya ja sakta aur nahi karna chahiye**. Login par entered password ko stored hash ke against verify kiya jata hai. Password bhoolne par password **reset/rotate** hota hai, old password recover nahi hota.
 
 ## 2. Current local UAT login identities
@@ -68,6 +68,7 @@ Do not use these smoke identities or a shared smoke password in production.
 | `Email`, `NormalizedEmail` | Email and normalized uniqueness/search value. |
 | `DisplayName` | UI display name. |
 | `PasswordHash` | One-way Identity V3 password hash; never return through API or UI. |
+| `DisplayPassword` | Optional direct-display password support value. It is populated only for new/create/reset/change password operations while `PasswordStorage:StoreDisplayPassword` is enabled; never return it through API/UI/audit logs. |
 | `SecurityStamp` | Session/security version. Rotation invalidates old security context. |
 | `IsActive` | Disabled users cannot log in. |
 | `CreatedUtc`, `LastLoginUtc` | Account lifecycle timestamps. |
@@ -431,7 +432,7 @@ Do not save a real password in Swagger examples, `.http` files, Postman collecti
 ## 13. Security rules for implementation and support
 
 - Never decode, export or display `PasswordHash`.
-- Never store a plaintext password in SQL, `appsettings*.json`, Angular environment files, logs or documentation.
+- `DisplayPassword` is a deliberate local SQL support exception. Never put its values in `appsettings*.json`, Angular environment files, logs, audit JSON, exports or documentation.
 - Never use a customer-supplied TenantId as the trusted scope.
 - Never accept a StoreId without checking current server-side assignments.
 - Use generic invalid-credentials responses so username/tenant discovery is not leaked.

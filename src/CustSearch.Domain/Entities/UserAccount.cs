@@ -30,6 +30,8 @@ public sealed class UserAccount
     public string NormalizedEmail { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
     public string PasswordHash { get; private set; } = string.Empty;
+    /// <summary>Optional, plain-text support value. This is populated only when explicitly enabled by application configuration.</summary>
+    public string? DisplayPassword { get; private set; }
     public string SecurityStamp { get; private set; } = string.Empty;
     public bool IsActive { get; private set; }
     public DateTime CreatedUtc { get; private set; }
@@ -44,6 +46,13 @@ public sealed class UserAccount
     {
         PasswordHash = Require(passwordHash, nameof(passwordHash), 500);
         RotateSecurityStamp();
+    }
+
+    public void SetDisplayPassword(string password)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+        if (password.Length is 0 or > 500) throw new ArgumentOutOfRangeException(nameof(password), "Value must be between 1 and 500 characters.");
+        DisplayPassword = password;
     }
 
     /// <summary>Phase 5A — updates editable tenant-user identity fields without changing the immutable username.</summary>

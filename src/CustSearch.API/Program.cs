@@ -212,6 +212,7 @@ try
     builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
     builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ApiAuthorizationResultHandler>();
     builder.Services.AddOptions<OperationalPlatformOptions>().Bind(builder.Configuration.GetSection(OperationalPlatformOptions.SectionName)).Validate(x=>x.IsValid(),"OperationalPlatform settings are invalid.").ValidateOnStart();
+    builder.Services.AddOptions<PasswordStorageOptions>().Bind(builder.Configuration.GetSection(PasswordStorageOptions.SectionName));
     var operationalOptions=builder.Configuration.GetSection(OperationalPlatformOptions.SectionName).Get<OperationalPlatformOptions>()??new();
     var signalR=builder.Services.AddSignalR(options=>{options.EnableDetailedErrors=false;options.MaximumReceiveMessageSize=32*1024;});
     if(operationalOptions.RedisEnabled){var redis=builder.Configuration.GetConnectionString("Redis");if(string.IsNullOrWhiteSpace(redis))throw new InvalidOperationException("Redis is enabled but secret-supplied ConnectionStrings:Redis is missing.");signalR.AddStackExchangeRedis(redis);}

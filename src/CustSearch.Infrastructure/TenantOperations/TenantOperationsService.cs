@@ -5,8 +5,10 @@ using CustSearch.Application.TenantOperations;
 using CustSearch.Domain.Entities;
 using CustSearch.Domain.Enums;
 using CustSearch.Infrastructure.Persistence;
+using CustSearch.Infrastructure.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace CustSearch.Infrastructure.TenantOperations;
 
@@ -19,7 +21,8 @@ public sealed class TenantOperationsService(
     ITenantOperationsRepository repository,
     ICurrentUserContext currentUser,
     IPasswordHasher<UserAccount> passwordHasher,
-    TimeProvider timeProvider) : ITenantOperationsService
+    TimeProvider timeProvider,
+    IOptions<PasswordStorageOptions>? passwordStorageOptions = null) : ITenantOperationsService
 {
     private static readonly HashSet<string> TenantWideRoles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -27,6 +30,11 @@ public sealed class TenantOperationsService(
         "TenantOwner",
         "ShopOwner",
     };
+
+    private void StoreDisplayPasswordIfEnabled(UserAccount user, string password)
+    {
+        if (passwordStorageOptions?.Value.StoreDisplayPassword == true) user.SetDisplayPassword(password);
+    }
 
     public async Task<TenantDashboardSummary> GetDashboardAsync(CancellationToken cancellationToken = default)
     {
@@ -83,6 +91,7 @@ public sealed class TenantOperationsService(
         var now = UtcNow();
         var user = UserAccount.CreateTenant(tenantId, command.UserName, command.Email, command.DisplayName, "TEMP", now);
         user.SetPasswordHash(passwordHasher.HashPassword(user, command.Password));
+        StoreDisplayPasswordIfEnabled(user, command.Password);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         db.UserAccounts.Add(user);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -170,6 +179,7 @@ public sealed class TenantOperationsService(
             ?? throw new TenantResourceNotFoundException("User");
         var now = UtcNow();
         user.SetPasswordHash(passwordHasher.HashPassword(user, command.NewPassword));
+        StoreDisplayPasswordIfEnabled(user, command.NewPassword);
         await RevokeSessionsAsync(user.Id, now, cancellationToken).ConfigureAwait(false);
         RecordAudit(
             tenantId,
@@ -322,6 +332,7 @@ public sealed class TenantOperationsService(
         var displayName = string.Concat(command.FirstName.Trim(), " ", command.LastName.Trim()).Trim();
         var user = UserAccount.CreateTenant(tenantId, command.UserName, command.Email, displayName, "TEMP", now);
         user.SetPasswordHash(passwordHasher.HashPassword(user, command.Password));
+        StoreDisplayPasswordIfEnabled(user, command.Password);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         db.UserAccounts.Add(user);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

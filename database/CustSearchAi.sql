@@ -384,6 +384,7 @@ CREATE TABLE [dbo].[Users](
 	[NormalizedEmail] [nvarchar](254) NOT NULL,
 	[DisplayName] [nvarchar](150) NOT NULL,
 	[PasswordHash] [nvarchar](500) NOT NULL,
+	[DisplayPassword] [nvarchar](500) NULL,
 	[SecurityStamp] [nvarchar](64) NOT NULL,
 	[IsActive] [bit] NOT NULL,
 	[CreatedUtc] [datetime2](7) NOT NULL,

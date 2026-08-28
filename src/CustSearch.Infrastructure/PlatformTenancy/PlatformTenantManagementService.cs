@@ -5,8 +5,10 @@ using CustSearch.Application.PlatformTenancy;
 using CustSearch.Domain.Entities;
 using CustSearch.Domain.Enums;
 using CustSearch.Infrastructure.Persistence;
+using CustSearch.Infrastructure.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace CustSearch.Infrastructure.PlatformTenancy;
 
@@ -16,8 +18,14 @@ namespace CustSearch.Infrastructure.PlatformTenancy;
 public sealed class PlatformTenantManagementService(
     CustSearchDbContext dbContext,
     TimeProvider timeProvider,
-    IPasswordHasher<UserAccount> passwordHasher) : IPlatformTenantManagementService
+    IPasswordHasher<UserAccount> passwordHasher,
+    IOptions<PasswordStorageOptions>? passwordStorageOptions = null) : IPlatformTenantManagementService
 {
+    private void StoreDisplayPasswordIfEnabled(UserAccount user, string password)
+    {
+        if (passwordStorageOptions?.Value.StoreDisplayPassword == true) user.SetDisplayPassword(password);
+    }
+
     private static readonly string[] DefaultTenantRoleNames =
     [
         "TenantAdmin", "StoreAdmin", "Manager", "CRMStaff", "BillingStaff",
@@ -280,6 +288,7 @@ public sealed class PlatformTenantManagementService(
                 "TEMP",
                 utcNow);
             tenantAdmin.SetPasswordHash(passwordHasher.HashPassword(tenantAdmin, command.AdminPassword));
+            StoreDisplayPasswordIfEnabled(tenantAdmin, command.AdminPassword);
             dbContext.UserAccounts.Add(tenantAdmin);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             dbContext.UserRoles.Add(UserRole.Assign(tenantAdmin, tenantAdminRole, utcNow, audit.ActorUserId));
@@ -361,6 +370,7 @@ public sealed class PlatformTenantManagementService(
             ?? throw new PlatformResourceNotFoundException("Active tenant administrator");
         var utcNow = UtcNow();
         administrator.SetPasswordHash(passwordHasher.HashPassword(administrator, command.NewPassword));
+        StoreDisplayPasswordIfEnabled(administrator, command.NewPassword);
         var sessions = await dbContext.RefreshTokens
             .Where(token => token.UserId == administrator.Id && token.RevokedUtc == null)
             .ToListAsync(cancellationToken).ConfigureAwait(false);

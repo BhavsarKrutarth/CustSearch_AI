@@ -23,7 +23,8 @@ public sealed class AuthenticationService(
     IPasswordHasher<UserAccount> passwordHasher,
     JwtTokenService jwtTokenService,
     IOptions<JwtOptions> jwtOptions,
-    TimeProvider timeProvider) : IAuthenticationService
+    TimeProvider timeProvider,
+    IOptions<PasswordStorageOptions>? passwordStorageOptions = null) : IAuthenticationService
 {
     private static readonly SemaphoreSlim SqliteRefreshGate = new(1, 1);
     private readonly JwtOptions _jwtOptions = jwtOptions.Value;
@@ -470,6 +471,7 @@ public sealed class AuthenticationService(
         }
 
         user.SetPasswordHash(passwordHasher.HashPassword(user, command.NewPassword));
+        if (passwordStorageOptions?.Value.StoreDisplayPassword == true) user.SetDisplayPassword(command.NewPassword);
         await RevokeAllUserSessionsAsync(
             user.Id,
             utcNow,

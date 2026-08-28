@@ -68,4 +68,13 @@ public sealed class PhaseFiveEntityTests
         Assert.NotEqual(before, user.SecurityStamp);
         Assert.Equal("STAFF2@EXAMPLE.COM", user.NormalizedEmail);
     }
+
+    [Fact]
+    public void DisplayPasswordRetainsTheExactPasswordForConfiguredDirectStorage()
+    {
+        var user = UserAccount.CreateTenant(1, "staff1", "staff@example.com", "Staff One", "hash", UtcNow);
+        user.SetDisplayPassword("Password with spaces 123 ");
+
+        Assert.Equal("Password with spaces 123 ", user.DisplayPassword);
+    }
 }
