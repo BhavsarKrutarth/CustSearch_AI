@@ -241,3 +241,129 @@ Active phase: Phase F - 15-Day Retention Worker
 Exact state: Phases A-E are implemented, verified, and code-committed. The tracking-file
 checkpoint commit is the next Git action, followed by Phase F implementation.
 Do not repeat Phases A-E. Read the Phase F requirements and existing worker patterns first.
+
+========================================================================
+Date/Time: 2026-08-28 23:14-23:22 +05:30
+Phase: F - 15-Day Retention Worker (IN PROGRESS)
+Module/Feature: Leased evidence cleanup and storage reconciliation worker
+Work Completed:
+- Added configurable EvidenceRetention worker settings (enabled, hourly poll, cleanup
+  batch, reconciliation tenant batch/interval, and lease duration).
+- Added a dedicated hosted service using the existing SQL-backed WorkerRuntimeGate with
+  worker type evidence-retention, preventing overlapping destructive batches.
+- Added bounded cleanup for expired, unpinned evidence under AutoCleanupEnabled policy.
+- Added encrypted-object existence checks, safe idempotent deletion, DB soft-delete,
+  tenant usage release, LastCleanupUtc, and append-only AuditLog worker events.
+- Added periodic per-tenant reconciliation: missing physical objects are marked deleted,
+  active metadata is re-aggregated by evidence category, and LastReconciledUtc is updated.
+- Added repeat-safe SQL V1.18.4 for LastReconciledUtc, reconciliation index, worker control,
+  and DatabaseVersions registration.
+- Added retention tests for expired deletion/accounting/audit, pinned-evidence protection,
+  and unexpired missing-object reconciliation.
+Files Changed:
+- src/CustSearch.Application/CamerasTracking/ICameraEvidenceMaintenanceProcessor.cs
+- src/CustSearch.Domain/Entities/CameraEvidenceStorage.cs
+- src/CustSearch.Infrastructure/CamerasTracking/CameraEvidenceMaintenanceProcessor.cs
+- src/CustSearch.Infrastructure/Persistence/Configurations/CameraEvidenceStorageConfigurations.cs
+- src/CustSearch.Application/Security/ISecurityPlatformService.cs
+- src/CustSearch.Infrastructure/Security/SecurityEvidenceServices.cs
+- src/CustSearch.Worker/EvidenceRetentionHostedService.cs
+- src/CustSearch.Worker/Program.cs and appsettings.json
+- src/CustSearch.Infrastructure/Operations/OperationalPlatformService.cs
+- database/09_Upgrade/V1.18.4_EvidenceRetentionWorker.sql
+- tests/CustSearch.IntegrationTests/CameraEvidenceStorageServiceTests.cs
+Database/Table/SP Changes:
+- dbo.TenantStorageUsage.LastReconciledUtc added.
+- IX_TenantStorageUsage_Reconciliation added.
+- evidence-retention worker control seeded.
+- No arbitrary frontend path is accepted; physical paths remain resolved from protected
+  server-generated object keys.
+API/UI Changes:
+- Storage usage response now includes lastReconciledUtc; Angular contract updated.
+- No destructive cleanup API exposed; execution remains worker-only.
+Testing Result:
+- Targeted storage/retention/API contract suite: PASS 14/14.
+- CustSearch.Worker direct build: PASS, 0 warnings / 0 errors after fix.
+Errors/Fixes:
+- Direct Worker build exposed pre-existing CA1848 errors in Phase 18 security maintenance
+  logging. Replaced direct LogInformation/LogError calls with source-generated
+  LoggerMessage methods; worker then built cleanly.
+Pending Work:
+- Audit concurrency/error recovery behavior and add any missing contract/options tests.
+- Run full .NET and Angular regressions, diff check, then commit Phase F.
+Next Step:
+- Complete Phase F audit and full verification; update both tracking files and commit.
+
+========================================================================
+CURRENT CONTINUATION POINT
+--------------------------
+Active phase: Phase F - validation/audit
+Exact state: Phase F implementation and targeted tests are green but changes are uncommitted.
+Next action: audit the diff, run full regressions using a space-conscious isolated output,
+then create Phase F code and tracking checkpoint commits.
+
+========================================================================
+Date/Time: 2026-08-28 23:30 +05:30
+Phase: F - 15-Day Retention Worker (COMPLETE)
+Module/Feature: Retention cleanup, physical-object reconciliation, and live SQL upgrade
+Work Completed:
+- Completed the Phase F implementation audit and full regression suite.
+- Applied V1.18.0 through V1.18.4 sequentially to the configured local SQL Server
+  (KRUTARTH-BHAVSA / CustSearch_AI), then successfully repeated the complete sequence
+  to prove that all five upgrades are deployment-safe and repeatable.
+- Verified that every V1.18.x database version is registered exactly once, CameraEvidence
+  exists, TenantStorageUsage.LastReconciledUtc is present, and evidence-retention is
+  seeded as an active worker control.
+- Added the required SQL Server indexed-view/computed-index session SET options to every
+  V1.18.0-V1.18.4 upgrade script so upgrades work against the live database schema.
+Files Changed:
+- All Phase F application, infrastructure, worker, Angular contract, test, and V1.18.4
+  files listed in the preceding milestone.
+- database/09_Upgrade/V1.18.0_CameraQuotaEnforcement.sql
+- database/09_Upgrade/V1.18.1_CameraMotionRules.sql
+- database/09_Upgrade/V1.18.2_OptionalDetectionZones.sql
+- database/09_Upgrade/V1.18.3_TenantEvidenceStorage.sql
+- database/09_Upgrade/V1.18.4_EvidenceRetentionWorker.sql
+- planning_document/WORK_PROGRESS_LOG.txt
+- planning_document/ALL_PHASE_WORK_PROGRESS.txt
+Database/Table/SP Changes:
+- Live SQL schema is upgraded through V1.18.4.
+- DatabaseVersions V1.18.0-V1.18.4 counts: exactly 1 row per version.
+- TenantStorageUsage.LastReconciledUtc length: 8 bytes (datetime2); CameraEvidence exists.
+- WorkerControls evidence-retention row exists with IsPaused = 0.
+API/UI Changes:
+- Storage usage response and Angular model expose lastReconciledUtc.
+- Retention remains an internal leased worker; no destructive public API was introduced.
+Testing Result:
+- Targeted storage/retention/API contract tests: PASS 15/15.
+- Full .NET: PASS unit 118/118 and integration 264/264 (382 total).
+- CustSearch.Worker direct build: PASS, 0 warnings / 0 errors.
+- Angular: PASS 35 files / 92 tests.
+- Angular production build: PASS; only existing admin-shell.scss +151-byte warning.
+- Live SQL upgrades: PASS first completed sequence and PASS full idempotent replay.
+- git diff --check: PASS; line-ending conversion notices only.
+Errors/Fixes:
+- Initial V1.18.1 live execution failed at CREATE INDEX because the SQL session inherited
+  incompatible QUOTED_IDENTIFIER/ANSI options. Added explicit required SET options to all
+  five V1.18.x scripts, safely resumed the repeatable migration, and replayed all scripts.
+- An initial verification query used RowCount as an alias and hit a SQL parser conflict;
+  changed the read-only alias to VersionRows and verification passed.
+Pending Work:
+- Phase G retail-security event correlation, evidence linkage, alerts, and human review.
+Next Step:
+- Commit Phase F code, checkpoint both progress files, then extend the existing Phase 18
+  security pipeline for Phase G rather than introducing a parallel incident system.
+Git Commit:
+- 20e7403 feat(cameras): add evidence retention worker
+Artifact Cleanup:
+- Removed only the verified disposable artifacts/phase-f-validation output after all
+  validations completed (433,387,663 bytes). It is not recoverable but is fully
+  reproducible from the test/build commands; no source or user data was removed.
+
+========================================================================
+CURRENT CONTINUATION POINT
+--------------------------
+Active phase: Phase G - Retail Security Rules
+Exact state: Phases A-F are implemented, fully validated, live SQL upgraded through
+V1.18.4, and code-committed. Phase F tracking checkpoint is being committed now.
+Do not repeat Phases A-F. Reuse the existing Phase 18 security pipeline for Phase G.

@@ -8,7 +8,7 @@ Detailed chronological handover:
 planning_document/WORK_PROGRESS_LOG.txt
 
 Repository branch: camera-motion-tenant-storage
-Last status refresh: 2026-08-28 23:14 +05:30
+Last status refresh: 2026-08-28 23:22 +05:30
 
 Status legend: COMPLETE | IN PROGRESS | NOT STARTED | BLOCKED
 
@@ -77,29 +77,46 @@ Pending:
 
 ----------------------------------------------------------------
 PHASE F - 15-DAY RETENTION WORKER
-Status: IN PROGRESS (next implementation phase)
-Required:
-- RetentionUntilUtc cleanup, physical object deletion safety, DB soft-delete,
-  usage release/reconciliation, audit/diagnostics, scheduled worker, tests.
+Status: COMPLETE
+Delivered:
+- Configurable hourly hosted worker with SQL-backed evidence-retention lease/control.
+- Bounded expired/unpinned cleanup under tenant auto-cleanup policy.
+- Safe encrypted-object deletion, DB soft-delete, quota release, worker audit events.
+- Periodic missing-object repair and category counter reconciliation.
+- LastReconciledUtc/index and repeat-safe SQL V1.18.4.
+- Targeted retention tests and direct Worker executable build.
+Validation:
+- Storage/retention/API contracts 15/15.
+- CustSearch.Worker build passed with 0 warnings/errors.
+- Full .NET unit 118/118 + integration 264/264.
+- Angular 92/92 and production build passed (existing SCSS warning only).
+- Live SQL V1.18.0-V1.18.4 applied and full sequence replayed successfully; each version
+  is registered exactly once and the retention schema/worker control were verified.
+Fix:
+- Replaced pre-existing analyzer-blocking direct logging in Phase 18 maintenance host
+  with source-generated LoggerMessage methods.
+- Added explicit SQL Server SET options to all V1.18.x scripts after the first live
+  V1.18.1 index attempt exposed incompatible inherited session options.
 Dependency: Satisfied by Phase E commit 9a50f09.
+Commit: 20e7403
+Pending:
+- None.
 
 ----------------------------------------------------------------
 PHASE G - RETAIL SECURITY RULES
-Status: NOT STARTED
+Status: IN PROGRESS (existing security pipeline mapping next)
 Required:
 - Shelf interaction, pickup/put-back candidate, checkout/payment correlation,
   suspected unpaid exit, human review, alerts, and evidence integration.
 Decision:
 - Extend/reuse existing Phase 18 security observations/incidents/review/SignalR;
   do not build a parallel incident system.
-Dependency: Complete and commit Phase F first.
+Dependency: Satisfied by Phase F commit 20e7403.
 
 ----------------------------------------------------------------
 CURRENT CONTINUATION POINT
-Active phase: Phase F
+Active phase: Phase G
 Next exact step:
-1. Commit the synchronized tracking files.
-2. Map existing CustSearch.Worker scheduling and maintenance patterns.
-3. Implement safe expired-evidence cleanup and usage release/reconciliation.
-4. Add targeted retention, missing-file, pinned-evidence, and tenant accounting tests.
-5. Run full regression, update both tracking files, and commit Phase F.
+1. Map the existing Phase 18 observation/incident/review/SignalR pipeline.
+2. Map available invoice/payment correlation and Phase C/D camera rule/zone inputs.
+3. Implement and test Phase G correlation without automatic criminal labels.
