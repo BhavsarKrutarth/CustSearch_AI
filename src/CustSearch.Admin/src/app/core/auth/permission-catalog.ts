@@ -1,5 +1,6 @@
 /** Keeps Angular permission names identical to the backend's stable authorization catalog. */
 export const PERMISSIONS = {
+  camerasManageZones:'Cameras.ManageZones',
   camerasPreview:'Cameras.Preview', camerasTrackingView:'Cameras.TrackingView',
   tenantsView:'Tenants.View', tenantsCreate:'Tenants.Create', tenantsEdit:'Tenants.Edit', tenantsActivate:'Tenants.Activate', tenantsSuspend:'Tenants.Suspend', tenantsViewUsage:'Tenants.ViewUsage', tenantsOperationalSummary:'Tenants.ViewOperationalSummary',
   platformBillingView:'PlatformBilling.View', subscriptionPlansView:'SubscriptionPlans.View', subscriptionPlansManage:'SubscriptionPlans.Manage', platformReportsView:'PlatformReports.View', platformOperationsView:'PlatformOperations.View', platformOperationsManage:'PlatformOperations.Manage', platformAuditView:'PlatformAudit.View',

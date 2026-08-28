@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { TenantApiClient } from '../../core/api/tenant-api.client';
 
-export type CameraStatus=1|2|3|4;export type CameraDirection=1|2|3|4;export type CameraZoneType=1|2|3|4|5|6|7;export type TrackingSubjectKind=1|2|3;
+export type CameraStatus=1|2|3|4;export type CameraDirection=1|2|3|4;export type CameraZoneType=1|2|3|4|5|6|7|8|9|10;export type TrackingSubjectKind=1|2|3;
 export interface CameraQuotaView{maxCameras:number;configuredCameras:number;activeCameras:number;availableCameras:number;canAddActiveCamera:boolean;}
 export interface CameraView{id:number;storeId:number;cameraCode:string;name:string;hasRtspConfiguration:boolean;rtspConfigurationHint:string|null;status:CameraStatus;location:string|null;direction:CameraDirection;isActive:boolean;lastHeartbeatUtc:string|null;createdUtc:string;updatedUtc:string;}
 export interface SaveCameraRequest{storeId:number;cameraCode:string;name:string;rtspConfigurationReference?:string|null;location?:string|null;direction:CameraDirection;isActive:boolean;}
@@ -14,7 +14,7 @@ export interface SaveCameraPreviewGrantRequest{canViewLive:boolean;canViewTracki
 export interface CameraPreviewSessionView{sessionId:string;cameraId:number;expiresUtc:string;frameUrl:string;refreshMilliseconds:number;}
 export interface CctvCapabilities{demoMode:boolean;previewEnabled:boolean;environment:string;identityRecognition:false;databaseAccessFromPython:false;}
 export interface MotionRuleCatalogItem{ruleCode:string;name:string;group:string;zoneRequired:boolean;isAvailable:boolean;description:string;}
-export interface CameraMotionSettingsView{cameraId:number;motionRulesEnabled:boolean;}
+export interface CameraMotionSettingsView{cameraId:number;motionRulesEnabled:boolean;useDetectionZone:boolean;}
 export interface CameraMotionRuleView{id:number;cameraId:number;ruleCode:string;ruleName:string;isEnabled:boolean;minimumConfidence:number;sensitivity:number;minimumDurationSeconds:number;cooldownSeconds:number;startTime:string|null;endTime:string|null;daysOfWeek:string;evidenceSnapshotEnabled:boolean;evidenceClipEnabled:boolean;evidencePreEventSeconds:number;evidencePostEventSeconds:number;severity:1|2|3;createAlert:boolean;realtimeNotificationEnabled:boolean;zoneRequired:boolean;zoneId:number|null;createdUtc:string;updatedUtc:string;}
 export interface SaveCameraMotionRuleRequest{ruleCode:string;ruleName:string;isEnabled:boolean;minimumConfidence:number;sensitivity:number;minimumDurationSeconds:number;cooldownSeconds:number;startTime:string|null;endTime:string|null;daysOfWeek:string;evidenceSnapshotEnabled:boolean;evidenceClipEnabled:boolean;evidencePreEventSeconds:number;evidencePostEventSeconds:number;severity:1|2|3;createAlert:boolean;realtimeNotificationEnabled:boolean;zoneId:number|null;}
 
@@ -34,6 +34,7 @@ export class CamerasApiService{
   motionRuleCatalog():Observable<MotionRuleCatalogItem[]>{return this.api.get<MotionRuleCatalogItem[]>('cameras/motion-rule-catalog');}
   motionSettings(cameraId:number):Observable<CameraMotionSettingsView>{return this.api.get<CameraMotionSettingsView>(`cameras/${cameraId}/motion-settings`);}
   saveMotionSettings(cameraId:number,enabled:boolean):Observable<CameraMotionSettingsView>{return this.api.put<CameraMotionSettingsView>(`cameras/${cameraId}/motion-settings`,{enabled});}
+  saveDetectionZoneSetting(cameraId:number,enabled:boolean):Observable<CameraMotionSettingsView>{return this.api.put<CameraMotionSettingsView>(`cameras/${cameraId}/detection-zone-setting`,{enabled});}
   motionRules(cameraId:number):Observable<CameraMotionRuleView[]>{return this.api.get<CameraMotionRuleView[]>(`cameras/${cameraId}/motion-rules`);}
   createMotionRule(cameraId:number,request:SaveCameraMotionRuleRequest):Observable<CameraMotionRuleView>{return this.api.post<CameraMotionRuleView>(`cameras/${cameraId}/motion-rules`,request);}
   updateMotionRule(cameraId:number,ruleId:number,request:SaveCameraMotionRuleRequest):Observable<CameraMotionRuleView>{return this.api.put<CameraMotionRuleView>(`cameras/${cameraId}/motion-rules/${ruleId}`,request);}
