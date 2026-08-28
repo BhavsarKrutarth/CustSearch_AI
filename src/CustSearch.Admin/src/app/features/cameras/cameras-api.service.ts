@@ -13,6 +13,10 @@ export interface CameraPreviewGrantView{cameraId:number;storeId:number;userId:nu
 export interface SaveCameraPreviewGrantRequest{canViewLive:boolean;canViewTracking:boolean;canControl:boolean;validUntilUtc:string|null;isActive:boolean;}
 export interface CameraPreviewSessionView{sessionId:string;cameraId:number;expiresUtc:string;frameUrl:string;refreshMilliseconds:number;}
 export interface CctvCapabilities{demoMode:boolean;previewEnabled:boolean;environment:string;identityRecognition:false;databaseAccessFromPython:false;}
+export interface MotionRuleCatalogItem{ruleCode:string;name:string;group:string;zoneRequired:boolean;isAvailable:boolean;description:string;}
+export interface CameraMotionSettingsView{cameraId:number;motionRulesEnabled:boolean;}
+export interface CameraMotionRuleView{id:number;cameraId:number;ruleCode:string;ruleName:string;isEnabled:boolean;minimumConfidence:number;sensitivity:number;minimumDurationSeconds:number;cooldownSeconds:number;startTime:string|null;endTime:string|null;daysOfWeek:string;evidenceSnapshotEnabled:boolean;evidenceClipEnabled:boolean;evidencePreEventSeconds:number;evidencePostEventSeconds:number;severity:1|2|3;createAlert:boolean;realtimeNotificationEnabled:boolean;zoneRequired:boolean;zoneId:number|null;createdUtc:string;updatedUtc:string;}
+export interface SaveCameraMotionRuleRequest{ruleCode:string;ruleName:string;isEnabled:boolean;minimumConfidence:number;sensitivity:number;minimumDurationSeconds:number;cooldownSeconds:number;startTime:string|null;endTime:string|null;daysOfWeek:string;evidenceSnapshotEnabled:boolean;evidenceClipEnabled:boolean;evidencePreEventSeconds:number;evidencePostEventSeconds:number;severity:1|2|3;createAlert:boolean;realtimeNotificationEnabled:boolean;zoneId:number|null;}
 
 /** Camera client deliberately has no TenantId input and never receives the full RTSP reference. */
 @Injectable({providedIn:'root'})
@@ -27,6 +31,12 @@ export class CamerasApiService{
   tracks(storeId?:number,afterId?:number,take=100):Observable<PersonTrackView[]>{const query=new URLSearchParams();if(storeId)query.set('storeId',String(storeId));if(afterId)query.set('afterId',String(afterId));query.set('take',String(take));return this.api.get<PersonTrackView[]>(`cameras/tracks?${query}`);}
   associate(trackId:number,subjectKind:2|3,subjectId:number):Observable<PersonTrackView>{return this.api.post<PersonTrackView>(`cameras/tracks/${trackId}/associate`,{subjectKind,subjectId});}
   capabilities():Observable<CctvCapabilities>{return this.api.get<CctvCapabilities>('cameras/capabilities');}
+  motionRuleCatalog():Observable<MotionRuleCatalogItem[]>{return this.api.get<MotionRuleCatalogItem[]>('cameras/motion-rule-catalog');}
+  motionSettings(cameraId:number):Observable<CameraMotionSettingsView>{return this.api.get<CameraMotionSettingsView>(`cameras/${cameraId}/motion-settings`);}
+  saveMotionSettings(cameraId:number,enabled:boolean):Observable<CameraMotionSettingsView>{return this.api.put<CameraMotionSettingsView>(`cameras/${cameraId}/motion-settings`,{enabled});}
+  motionRules(cameraId:number):Observable<CameraMotionRuleView[]>{return this.api.get<CameraMotionRuleView[]>(`cameras/${cameraId}/motion-rules`);}
+  createMotionRule(cameraId:number,request:SaveCameraMotionRuleRequest):Observable<CameraMotionRuleView>{return this.api.post<CameraMotionRuleView>(`cameras/${cameraId}/motion-rules`,request);}
+  updateMotionRule(cameraId:number,ruleId:number,request:SaveCameraMotionRuleRequest):Observable<CameraMotionRuleView>{return this.api.put<CameraMotionRuleView>(`cameras/${cameraId}/motion-rules/${ruleId}`,request);}
   previewGrants(cameraId:number):Observable<CameraPreviewGrantView[]>{return this.api.get<CameraPreviewGrantView[]>(`cameras/${cameraId}/preview-grants`);}
   savePreviewGrant(cameraId:number,userId:number,request:SaveCameraPreviewGrantRequest):Observable<CameraPreviewGrantView>{return this.api.put<CameraPreviewGrantView>(`cameras/${cameraId}/preview-grants/${userId}`,request);}
   removePreviewGrant(cameraId:number,userId:number):Observable<void>{return this.api.delete<void>(`cameras/${cameraId}/preview-grants/${userId}`);}
