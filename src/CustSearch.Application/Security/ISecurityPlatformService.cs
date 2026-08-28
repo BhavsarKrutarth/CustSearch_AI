@@ -41,7 +41,7 @@ public sealed record SecurityRealtimeEvent(string EventType,long TenantId,long S
 
 public interface ISecurityRealtimePublisher{Task PublishAsync(SecurityRealtimeEvent message,CancellationToken ct=default);}
 public interface ISecurityEvidenceTokenService{SecurityEvidenceTicket Create(long evidenceId,long incidentId,long userId,long tenantId,bool isExport,DateTime expiresUtc);void Validate(string token,long evidenceId,long incidentId,long userId,long tenantId,bool isExport,DateTime utcNow);}
-public interface ISecurityEvidenceStore{Task SaveEncryptedAsync(string objectKey,ReadOnlyMemory<byte>content,CancellationToken ct=default);Task<Stream>OpenDecryptedAsync(string objectKey,CancellationToken ct=default);Task DeleteAsync(string objectKey,CancellationToken ct=default);}
+public interface ISecurityEvidenceStore{Task SaveEncryptedAsync(string objectKey,ReadOnlyMemory<byte>content,CancellationToken ct=default);Task<Stream>OpenDecryptedAsync(string objectKey,CancellationToken ct=default);Task<bool>ExistsAsync(string objectKey,CancellationToken ct=default);Task DeleteAsync(string objectKey,CancellationToken ct=default);}
 public interface ISecurityMaintenanceProcessor{Task<SecurityMaintenanceResult>RunOnceAsync(CancellationToken ct=default);}
 public sealed record SecurityMaintenanceResult(int NotificationsDelivered,int EscalationsQueued,int EvidenceExpired,int PaymentsCorrelated,int StaleCandidatesResolved,long OpenCandidates);
 

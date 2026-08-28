@@ -34,7 +34,9 @@ internal sealed class TenantStorageUsageConfiguration : IEntityTypeConfiguration
         builder.Property(x => x.TenantId).ValueGeneratedNever();
         builder.Property(x => x.LastCalculatedUtc).HasPrecision(7);
         builder.Property(x => x.LastCleanupUtc).HasPrecision(7);
+        builder.Property(x => x.LastReconciledUtc).HasPrecision(7);
         builder.Property(x => x.RowVersion).IsRowVersion();
+        builder.HasIndex(x => new { x.LastReconciledUtc, x.TenantId });
     }
 }
 
