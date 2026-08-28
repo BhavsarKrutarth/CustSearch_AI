@@ -5,8 +5,8 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 ## Current continuation point
 
 - **Overall status:** In progress
-- **Active phase:** Phase D — Optional Zones
-- **Next action:** Add camera-level optional detection-zone mode, OFF/full-frame and ON/active-zone validation, expanded zone catalog, API/UI controls and tests.
+- **Active phase:** Phase E — Evidence Storage
+- **Next action:** Add tenant storage policy/usage and camera evidence metadata, secure tenant object namespace, atomic 2 GB quota reservation, motion evidence APIs, storage UI and tests. Reuse Phase 18 incident evidence instead of creating a parallel security-evidence architecture.
 - **Blocking issues:** None
 - **Working branch:** `camera-motion-tenant-storage`
 - **Baseline commit:** `31a78ada3344d604e16ecd6808eb81da5d6ee598`
@@ -21,7 +21,7 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 | A | Camera quota enforcement | **Completed** | `03983d6` |
 | B | Common live monitoring | **Completed** | `f5ca24d` |
 | C | Motion rule engine | **Completed** | `e70c1ed` |
-| D | Optional zones | In progress | Pending |
+| D | Optional zones | **Completed** | `b75a26e` |
 | E | Evidence storage | Not started | — |
 | F | 15-day retention worker | Not started | — |
 | G | Retail security rules | Not started | — |
@@ -122,7 +122,28 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 
 ## Phase D — Optional Zones
 
-- Not started. Read Phase D in the requirement after Phase C is committed.
+- **Status:** Completed.
+
+### Development / database / API / UI / tests / fixes
+
+- Added camera-level `UseDetectionZone`, defaulting to false. OFF keeps motion processing full-frame; ON is accepted only when the authenticated tenant/store/camera scope has at least one active zone.
+- Added the separate `PUT /api/tenant/cameras/{cameraId}/detection-zone-setting` contract. It derives TenantId from the authenticated context, audits changes and uses the dedicated `Cameras.ManageZones` permission.
+- Kept rule-semantic zone validation independent: Entry/Exit/Restricted rules still require a matching active zone even when the generic detection-area switch is OFF.
+- Expanded the persisted/API/UI zone catalog from seven to ten values by adding High Value, Blind / Low Confidence and Custom.
+- Added an Angular detection-area control to the motion-rule page and aligned zone creation UI/API authorization with `Cameras.ManageZones`.
+- Added repeat-safe `V1.18.2_OptionalDetectionZones.sql`: camera setting column/default, expanded database check constraint, permission/grants and version registration.
+- Added service tests for the default full-frame behavior, valid enable/disable and rejection when no active same-scope zone exists; extended API permission and Angular tenant-relative request contracts.
+
+### Decisions
+
+- A generic detection zone narrows the camera processing area; it does not weaken the semantic zone requirements of rules such as Entry Crossed or Restricted Zone Entry.
+- Existing active versioned `CameraZoneConfigurations` remain authoritative. A second, parallel zone table was not introduced.
+- Zone geometry remains normalized JSON and server validated. The current UI is a JSON editor; a visual polygon canvas is an optional later UX enhancement, not a Phase D correctness dependency.
+
+### Pending issues
+
+- Apply `V1.18.2_OptionalDetectionZones.sql` to target SQL Server after V1.18.1.
+- Physical camera UAT should verify that Python inference consumes `UseDetectionZone` and active zone geometry; no direct Python database access was introduced.
 
 ## Phase E — Evidence Storage
 
@@ -157,6 +178,11 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 | 2026-08-28 | Phase C Angular full | `npm test -- --watch=false` | **PASS — 89/89** |
 | 2026-08-28 | Phase C Angular build | `npm run build` | **PASS — existing admin-shell.scss budget warning only** |
 | 2026-08-28 | Phase C diff | `git diff --check` | **PASS — line-ending notices only** |
+| 2026-08-28 | Phase D targeted .NET | `dotnet test ... --filter CameraMotionRuleServiceTests\|PhaseThirteenApiContractTests --artifacts-path artifacts/phase-d-targeted` | **PASS — 22/22** |
+| 2026-08-28 | Phase D full .NET | `dotnet test CustSearch_AI.sln --artifacts-path artifacts/phase-d-full` | **PASS — Unit 118/118, Integration 249/249 (367 total)** |
+| 2026-08-28 | Phase D Angular full | `npm run test:ci` | **PASS — 90/90** |
+| 2026-08-28 | Phase D Angular build | `npm run build` | **PASS — existing admin-shell.scss budget warning only** |
+| 2026-08-28 | Phase D diff | `git diff --check` | **PASS — line-ending notices only** |
 
 ## Git ledger
 
@@ -168,9 +194,11 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 | `f5ca24d` | Phase B | Secure five-camera monitoring grid, session cap, cleanup and tests |
 | `dac0bd8` | Phase B checkpoint | Handover advanced to Phase C |
 | `e70c1ed` | Phase C | Motion rule catalog, domain, SQL, APIs, permissions, Angular editor and tests |
+| `db8f438` | Phase C checkpoint | Handover advanced to Phase D |
+| `b75a26e` | Phase D | Optional detection-area setting, expanded zones, permissions, SQL, UI and tests |
 
 ## Known pending work
 
-- Complete Phases D–G in order. Phases A–C must not be repeated.
+- Complete Phases E–G in order. Phases A–D must not be repeated.
 - Run the full .NET, Angular, Python and E2E regression suites after phase-specific tests are stable.
 - Apply SQL upgrade scripts to a real SQL Server test database when one is available; automated SQLite/model tests do not replace SQL Server deployment verification.
