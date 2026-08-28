@@ -5,8 +5,8 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 ## Current continuation point
 
 - **Overall status:** In progress
-- **Active phase:** Phase C — Motion Rule Engine
-- **Next action:** Define the initial rule catalog/domain model, SQL V1.18.1 upgrade, tenant/store/camera-scoped rule APIs, validation and grouped Angular rule configuration UI.
+- **Active phase:** Phase D — Optional Zones
+- **Next action:** Add camera-level optional detection-zone mode, OFF/full-frame and ON/active-zone validation, expanded zone catalog, API/UI controls and tests.
 - **Blocking issues:** None
 - **Working branch:** `camera-motion-tenant-storage`
 - **Baseline commit:** `31a78ada3344d604e16ecd6808eb81da5d6ee598`
@@ -20,8 +20,8 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 |---|---|---|---|
 | A | Camera quota enforcement | **Completed** | `03983d6` |
 | B | Common live monitoring | **Completed** | `f5ca24d` |
-| C | Motion rule engine | In progress | Pending |
-| D | Optional zones | Not started | — |
+| C | Motion rule engine | **Completed** | `e70c1ed` |
+| D | Optional zones | In progress | Pending |
 | E | Evidence storage | Not started | — |
 | F | 15-day retention worker | Not started | — |
 | G | Retail security rules | Not started | — |
@@ -97,8 +97,28 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 
 ## Phase C — Motion Rule Engine
 
-- **Status:** In progress.
-- Implement the initial MVP catalog: Person Detected, Entry Crossed, Exit Crossed, Dwell Threshold, Restricted Zone Entry and Camera Offline. Keep advanced catalog codes representable without prematurely implementing unreliable detection logic.
+- **Status:** Completed.
+
+### Development / database / API / UI / tests / fixes
+
+- Added `Camera.MotionRulesEnabled` master switch and full `CameraMotionRule` domain/configuration model: confidence, sensitivity, minimum duration, cooldown, optional UTC schedule window, days, snapshot/clip settings, pre/post seconds, severity, alert/realtime flags and optional/required zone.
+- Added stable 26-code grouped catalog. Initial available MVP rules are `PERSON_DETECTED`, `ENTRY_CROSSED`, `EXIT_CROSSED`, `DWELL_THRESHOLD`, `RESTRICTED_ZONE_ENTRY` and `CAMERA_OFFLINE`; planned/advanced codes are visible but rejected server-side until their phase is implemented.
+- Added authenticated catalog/settings/list/create/update APIs. TenantId is server-derived; camera and any selected active zone must match Tenant + Store + Camera scope. Rule code is immutable and one code per camera is enforced.
+- Added `Cameras.ManageRules` backend/UI permission and least-privilege upgrade grants to tenant ownership/admin roles.
+- Added grouped Angular rule editor reachable from Camera Operations, with master switch, planned-vs-available catalog, server-owned defaults/validation, zone selection and complete per-rule fields.
+- Added repeat-safe SQL `V1.18.1_CameraMotionRules.sql`, camera master column, rule table/constraints/indexes/FKs, permission/grants and version ledger.
+- Fixed validation rollback: a newly tracked rule that fails domain validation is detached, so a corrected retry in the same unit of work does not create a false duplicate conflict.
+
+### Decisions
+
+- Rule codes are stable strings instead of a closed database enum, allowing phased catalog expansion without data remapping.
+- Entry/Exit/Restricted rules inherently require an active semantic zone. Person, Dwell and Camera Offline allow full-frame operation. Phase D adds the separate camera-level optional detection-area switch.
+- This phase is the authoritative rule configuration engine. Actual computer-vision inference remains in the existing signed Python CCTV boundary; advanced detectors are not simulated by the .NET/UI layer.
+
+### Pending issues
+
+- Apply `V1.18.1_CameraMotionRules.sql` to target SQL Server after V1.18.0.
+- Production Python deployments must consume/evaluate only the available, enabled server configuration; no Python direct database access was introduced.
 
 ## Phase D — Optional Zones
 
@@ -132,6 +152,11 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 | 2026-08-28 | Phase B Angular build | `npm run build` | **PASS — existing admin-shell.scss budget warning only** |
 | 2026-08-28 | Phase B Playwright | `npx playwright test tests/phase13-cameras-tracking.spec.ts` | **PASS — Chromium 5/5** |
 | 2026-08-28 | Phase B diff | `git diff --check` | **PASS — line-ending notices only** |
+| 2026-08-28 | Phase C targeted .NET | `dotnet test ... --filter CameraMotionRuleServiceTests|PhaseThirteenApiContractTests --artifacts-path artifacts/phase-c-targeted2` | **PASS — 20/20** |
+| 2026-08-28 | Phase C full .NET | `dotnet test CustSearch_AI.sln --artifacts-path artifacts/phase-c-full` | **PASS — Unit 118/118, Integration 247/247 (365 total)** |
+| 2026-08-28 | Phase C Angular full | `npm test -- --watch=false` | **PASS — 89/89** |
+| 2026-08-28 | Phase C Angular build | `npm run build` | **PASS — existing admin-shell.scss budget warning only** |
+| 2026-08-28 | Phase C diff | `git diff --check` | **PASS — line-ending notices only** |
 
 ## Git ledger
 
@@ -141,9 +166,11 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 | `03983d6` | Phase A | Tenant-wide active camera quota API, enforcement, SQL upgrade, UI and tests |
 | `91c6643` | Phase A checkpoint | Single handover file initialized and Phase B continuation point recorded |
 | `f5ca24d` | Phase B | Secure five-camera monitoring grid, session cap, cleanup and tests |
+| `dac0bd8` | Phase B checkpoint | Handover advanced to Phase C |
+| `e70c1ed` | Phase C | Motion rule catalog, domain, SQL, APIs, permissions, Angular editor and tests |
 
 ## Known pending work
 
-- Complete Phases C–G in order. Phases A and B must not be repeated.
+- Complete Phases D–G in order. Phases A–C must not be repeated.
 - Run the full .NET, Angular, Python and E2E regression suites after phase-specific tests are stable.
 - Apply SQL upgrade scripts to a real SQL Server test database when one is available; automated SQLite/model tests do not replace SQL Server deployment verification.
