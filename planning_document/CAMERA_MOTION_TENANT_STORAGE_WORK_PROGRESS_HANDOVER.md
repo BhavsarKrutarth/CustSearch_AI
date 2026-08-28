@@ -5,8 +5,8 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 ## Current continuation point
 
 - **Overall status:** In progress
-- **Active phase:** Phase B — Common Live Monitoring
-- **Next action:** Audit the existing preview-session flow and implement the authorized maximum-five-camera monitoring grid, health/filter/full-screen behavior and session cleanup.
+- **Active phase:** Phase C — Motion Rule Engine
+- **Next action:** Define the initial rule catalog/domain model, SQL V1.18.1 upgrade, tenant/store/camera-scoped rule APIs, validation and grouped Angular rule configuration UI.
 - **Blocking issues:** None
 - **Working branch:** `camera-motion-tenant-storage`
 - **Baseline commit:** `31a78ada3344d604e16ecd6808eb81da5d6ee598`
@@ -19,8 +19,8 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 | Phase | Scope | Status | Git commit |
 |---|---|---|---|
 | A | Camera quota enforcement | **Completed** | `03983d6` |
-| B | Common live monitoring | In progress | Pending |
-| C | Motion rule engine | Not started | — |
+| B | Common live monitoring | **Completed** | `f5ca24d` |
+| C | Motion rule engine | In progress | Pending |
 | D | Optional zones | Not started | — |
 | E | Evidence storage | Not started | — |
 | F | 15-day retention worker | Not started | — |
@@ -71,13 +71,34 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 
 ## Phase B — Common Live Monitoring
 
-- **Status:** In progress.
-- Existing reusable pieces: secure preview grants, short-lived preview sessions, authenticated frame endpoint, preview session end endpoint, camera status/heartbeat and Angular single-camera polling.
-- Next implementation must preserve assigned-store/camera authorization, cap the grid at five authorized active cameras, stop every session on filter/navigation/destruction, avoid exposing RTSP data, and degrade individual tiles without breaking the whole page.
+- **Status:** Completed.
+
+### Development / database / API / UI / tests / fixes
+
+- **UI:** Added lazy route `/customer-admin/live-monitoring`, navigation entry and `LiveCameraMonitoringPage`. It renders at most five active, server-visible cameras in a responsive 3+2 grid, shows tenant quota/online/offline/live summaries, auto-starts secure sessions, filters All/Online/Offline and supports per-tile full screen, retry and stop.
+- **Failure isolation:** Each tile owns its polling subscription, short-lived preview session and browser object URL. One denied/offline/unavailable camera becomes an unavailable tile without stopping other streams.
+- **Cleanup:** Filtering, refresh and component destruction unsubscribe frame polling, revoke object URLs and call the audited session-end endpoint. A start response arriving after a filter change is immediately ended.
+- **Security:** Route requires both `Cameras.View` and `Cameras.Preview`; per-camera preview grants and authoritative tenant/store checks remain enforced by the existing backend. No RTSP value or camera credential is added to the browser contract.
+- **Backend resource boundary:** Added validated `CctvPreview:MaximumConcurrentSessionsPerUser` (default/hard maximum 5). Session starts run in a serializable transaction and use a SQL Server transaction-owned application lock per tenant/user, so concurrent starts cannot exceed five active, unexpired sessions.
+- **Database:** No schema change was needed. Existing `CameraPreviewSessions` supports the cap and audited lifecycle.
+- **Tests:** Backend integration verifies five session success and sixth conflict. Playwright fixtures now cover five tiles, live frames, online/offline filters, permission denial and credential non-disclosure. Existing camera operations E2E was reconciled with the Phase A quota endpoint.
+
+### Decisions
+
+- The common grid is intentionally capped at five even if a future tenant plan allows more active cameras; it takes the first five active cameras from the already server-authorized/sorted camera list.
+- Preview sessions stay independent per browser request/tab. They are not shared across tabs; the five-session cap is a resource/security boundary and avoids one tab ending another tab's token.
+- `CameraStatus.Online` drives the Online filter; Offline, Degraded and Maintenance appear in the Offline/non-online filter until a richer health grouping is requested.
+- Motion Active and Recent Motion filters remain Phase C outputs; Phase B does not fabricate motion state before the rule/event model exists.
+
+### Pending issues
+
+- Physical-camera visual/UAT still requires `CctvPreview.Enabled=true`, a valid server-side API key and real grants. Automated tests use deterministic JPEG fixtures.
+- The existing `admin-shell.scss` production budget warning remains unrelated and unchanged.
 
 ## Phase C — Motion Rule Engine
 
-- Not started. Read Phase C in the requirement after Phase B is committed.
+- **Status:** In progress.
+- Implement the initial MVP catalog: Person Detected, Entry Crossed, Exit Crossed, Dwell Threshold, Restricted Zone Entry and Camera Offline. Keep advanced catalog codes representable without prematurely implementing unreliable detection logic.
 
 ## Phase D — Optional Zones
 
@@ -105,6 +126,12 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 | 2026-08-28 | Phase A Angular API | `npm test -- --watch=false --include=src/app/features/cameras/cameras-api.service.spec.ts` | **PASS — 6/6** |
 | 2026-08-28 | Phase A Angular build | `npm run build` | **PASS — existing admin-shell.scss budget warning only** |
 | 2026-08-28 | Phase A diff | `git diff --check` | **PASS — line-ending notices only** |
+| 2026-08-28 | Phase B targeted .NET | `dotnet test ... --filter CameraPreviewAuthorizationTests --artifacts-path artifacts/phase-b-dotnet-rerun` | **PASS — 4/4** |
+| 2026-08-28 | Phase B full .NET | `dotnet test CustSearch_AI.sln --artifacts-path artifacts/phase-b-full` | **PASS — Unit 118/118, Integration 238/238 (356 total)** |
+| 2026-08-28 | Phase B Angular full | `npm test -- --watch=false` | **PASS — 88/88** |
+| 2026-08-28 | Phase B Angular build | `npm run build` | **PASS — existing admin-shell.scss budget warning only** |
+| 2026-08-28 | Phase B Playwright | `npx playwright test tests/phase13-cameras-tracking.spec.ts` | **PASS — Chromium 5/5** |
+| 2026-08-28 | Phase B diff | `git diff --check` | **PASS — line-ending notices only** |
 
 ## Git ledger
 
@@ -112,9 +139,11 @@ This is the single execution record for `Camera_Motion_CustSearch_AI_Tenant_Stor
 |---|---|---|
 | `31a78ada3344d604e16ecd6808eb81da5d6ee598` | Baseline | Starting point supplied by user |
 | `03983d6` | Phase A | Tenant-wide active camera quota API, enforcement, SQL upgrade, UI and tests |
+| `91c6643` | Phase A checkpoint | Single handover file initialized and Phase B continuation point recorded |
+| `f5ca24d` | Phase B | Secure five-camera monitoring grid, session cap, cleanup and tests |
 
 ## Known pending work
 
-- Complete Phases B–G in order. Phase A must not be repeated.
+- Complete Phases C–G in order. Phases A and B must not be repeated.
 - Run the full .NET, Angular, Python and E2E regression suites after phase-specific tests are stable.
 - Apply SQL upgrade scripts to a real SQL Server test database when one is available; automated SQLite/model tests do not replace SQL Server deployment verification.
