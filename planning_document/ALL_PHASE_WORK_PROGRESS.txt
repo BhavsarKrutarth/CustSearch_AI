@@ -104,7 +104,7 @@ Pending:
 
 ----------------------------------------------------------------
 PHASE G - RETAIL SECURITY RULES
-Status: IN PROGRESS (existing security pipeline mapping next)
+Status: IN PROGRESS (existing pipeline mapped; correlation/evidence bridge implementation)
 Required:
 - Shelf interaction, pickup/put-back candidate, checkout/payment correlation,
   suspected unpaid exit, human review, alerts, and evidence integration.
@@ -112,6 +112,11 @@ Decision:
 - Extend/reuse existing Phase 18 security observations/incidents/review/SignalR;
   do not build a parallel incident system.
 Dependency: Satisfied by Phase F commit 20e7403.
+Mapping result:
+- Existing Phase 18 already supplies signed factual observations, authoritative risk,
+  scoped incident APIs, mandatory human confirmation, alerts, review UI, and reports.
+- Remaining gaps are ordered/product-aware correlation, late POS resolution, and linking
+  Phase E quota-managed evidence into incident review.
 
 ----------------------------------------------------------------
 CURRENT CONTINUATION POINT

@@ -367,3 +367,40 @@ Active phase: Phase G - Retail Security Rules
 Exact state: Phases A-F are implemented, fully validated, live SQL upgraded through
 V1.18.4, and code-committed. Phase F tracking checkpoint is being committed now.
 Do not repeat Phases A-F. Reuse the existing Phase 18 security pipeline for Phase G.
+
+========================================================================
+Date/Time: 2026-08-28 23:31-23:42 +05:30
+Phase: G - Retail Security Rules (IN PROGRESS)
+Module/Feature: Existing security pipeline mapping and Phase G gap analysis
+Work Completed:
+- Mapped the existing Phase 18 signed observation ingestion, server risk engine, POS
+  lookup, incident state machine, permissions, human review UI, SignalR publisher,
+  notification maintenance, evidence tickets, and reporting.
+- Confirmed that factual ShelfInteraction, ProbablePickup, ProbablePutBack, checkout,
+  tracking-quality, and RFID/EAS observation types already exist in .NET and Python.
+- Confirmed that Phase C exposes the planned Phase G rule codes in its stable catalog.
+- Chose to extend Phase 18 instead of creating duplicate observation/incident tables.
+- Identified the remaining implementation gaps: risk evaluation can be lowered enough to
+  create an exit-only candidate; put-back matching is not ordered/product-aware; a later
+  POS match is recorded but does not update item/payment state; Phase E currently rejects
+  security evidence types and incident linkage; security review reads the older evidence
+  metadata table instead of quota-managed CameraEvidence.
+Files Changed:
+- planning_document/WORK_PROGRESS_LOG.txt
+- planning_document/ALL_PHASE_WORK_PROGRESS.txt
+Database/Table/SP Changes:
+- None at this analysis milestone; V1.18.5 incident-evidence index/FK is planned.
+API/UI Changes:
+- Existing security controller/UI contracts will be reused; no parallel endpoints planned.
+Testing Result:
+- Architecture/source mapping completed; implementation tests pending.
+Errors/Fixes:
+- No runtime error. The gaps above are design/audit findings to be fixed in Phase G.
+Pending Work:
+- Ordered correlation and mandatory pickup guard.
+- Late paid-invoice resolution/status update.
+- Signed quota-managed security snapshot/clip ingestion linked to an in-scope incident.
+- Security evidence API read/open integration, SQL upgrade, tests, and regressions.
+Next Step:
+- Implement the domain correlation primitive and evidence-link validator, then update the
+  server-authoritative ingestion/maintenance/evidence paths.
