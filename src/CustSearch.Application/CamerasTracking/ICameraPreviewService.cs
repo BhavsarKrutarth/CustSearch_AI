@@ -31,5 +31,6 @@ public sealed class CctvPreviewOptions
     public int SessionLifetimeMinutes{get;set;}=10;
     public int FrameRefreshMilliseconds{get;set;}=750;
     public int RequestTimeoutSeconds{get;set;}=10;
-    public bool IsValid()=>SessionLifetimeMinutes is>=1 and<=60&&FrameRefreshMilliseconds is>=250 and<=5000&&RequestTimeoutSeconds is>=1 and<=30&&Uri.TryCreate(AiServiceBaseUrl,UriKind.Absolute,out var uri)&&uri.Scheme is "http" or "https"&&(!Enabled||!string.IsNullOrWhiteSpace(ApiKey));
+    public int MaximumConcurrentSessionsPerUser{get;set;}=5;
+    public bool IsValid()=>SessionLifetimeMinutes is>=1 and<=60&&FrameRefreshMilliseconds is>=250 and<=5000&&RequestTimeoutSeconds is>=1 and<=30&&MaximumConcurrentSessionsPerUser is>=1 and<=5&&Uri.TryCreate(AiServiceBaseUrl,UriKind.Absolute,out var uri)&&uri.Scheme is "http" or "https"&&(!Enabled||!string.IsNullOrWhiteSpace(ApiKey));
 }

@@ -1,3 +1,4 @@
+using System.Data;
 using System.Globalization;
 using System.Text.Json;
 using CustSearch.Application.Authentication;
@@ -40,7 +41,7 @@ public sealed class CameraPreviewService(CustSearchDbContext db,ICurrentUserCont
 
     public async Task<CameraPreviewSessionView> StartSessionAsync(long cameraId,TenantAuditContext audit,CancellationToken ct=default)
     {
-        if(!preview.Enabled)throw new CameraTrackingException("Live camera preview is not enabled on this server.",CameraTrackingFailureKind.Unavailable);var camera=await RequireCameraAsync(cameraId,ct).ConfigureAwait(false);RequireStore(camera.StoreId);if(!camera.IsActive)throw new CameraTrackingException("Camera is inactive.",CameraTrackingFailureKind.Conflict);await RequireGrantAsync(camera,currentUser.UserId,ct).ConfigureAwait(false);var now=clock.GetUtcNow().UtcDateTime;var session=CameraPreviewSession.Start(camera.TenantId,camera.StoreId,camera.Id,currentUser.UserId,now,TimeSpan.FromMinutes(preview.SessionLifetimeMinutes));db.CameraPreviewSessions.Add(session);Audit(audit,camera.TenantId,camera.StoreId,"CameraPreviewStarted","CameraPreviewSession",camera.Id,new{CameraId=camera.Id,SessionId=session.Id,session.ExpiresUtc},now);await db.SaveChangesAsync(ct).ConfigureAwait(false);return new(session.Id,camera.Id,session.ExpiresUtc,$"/api/tenant/cameras/{camera.Id}/preview-sessions/{session.Id}/frame",preview.FrameRefreshMilliseconds);
+        if(!preview.Enabled)throw new CameraTrackingException("Live camera preview is not enabled on this server.",CameraTrackingFailureKind.Unavailable);var tenant=RequireTenant();await using var transaction=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable,ct).ConfigureAwait(false);await AcquirePreviewSessionLockAsync(tenant,currentUser.UserId,ct).ConfigureAwait(false);var camera=await RequireCameraAsync(cameraId,ct).ConfigureAwait(false);RequireStore(camera.StoreId);if(!camera.IsActive)throw new CameraTrackingException("Camera is inactive.",CameraTrackingFailureKind.Conflict);await RequireGrantAsync(camera,currentUser.UserId,ct).ConfigureAwait(false);var now=clock.GetUtcNow().UtcDateTime;var active=await db.CameraPreviewSessions.CountAsync(x=>x.TenantId==tenant&&x.UserId==currentUser.UserId&&x.Status==CameraPreviewSessionStatus.Active&&x.ExpiresUtc>now,ct).ConfigureAwait(false);if(active>=preview.MaximumConcurrentSessionsPerUser)throw new CameraTrackingException($"Live monitoring supports maximum {preview.MaximumConcurrentSessionsPerUser} concurrent cameras per user.",CameraTrackingFailureKind.Conflict);var session=CameraPreviewSession.Start(camera.TenantId,camera.StoreId,camera.Id,currentUser.UserId,now,TimeSpan.FromMinutes(preview.SessionLifetimeMinutes));db.CameraPreviewSessions.Add(session);Audit(audit,camera.TenantId,camera.StoreId,"CameraPreviewStarted","CameraPreviewSession",camera.Id,new{CameraId=camera.Id,SessionId=session.Id,session.ExpiresUtc},now);await db.SaveChangesAsync(ct).ConfigureAwait(false);await transaction.CommitAsync(ct).ConfigureAwait(false);return View(session);
     }
 
     public async Task<CameraPreviewFrame> GetFrameAsync(long cameraId,Guid sessionId,CancellationToken ct=default)
@@ -54,6 +55,12 @@ public sealed class CameraPreviewService(CustSearchDbContext db,ICurrentUserCont
     }
 
     private async Task<Camera> RequireCameraAsync(long cameraId,CancellationToken ct){var tenant=RequireTenant();return await db.Cameras.SingleOrDefaultAsync(x=>x.Id==cameraId&&x.TenantId==tenant,ct).ConfigureAwait(false)??throw new CameraTrackingException("Camera was not found.",CameraTrackingFailureKind.NotFound);}
+    private CameraPreviewSessionView View(CameraPreviewSession session)=>new(session.Id,session.CameraId,session.ExpiresUtc,$"/api/tenant/cameras/{session.CameraId}/preview-sessions/{session.Id}/frame",preview.FrameRefreshMilliseconds);
+    private async Task AcquirePreviewSessionLockAsync(long tenant,long userId,CancellationToken ct){if(db.Database.ProviderName?.Contains("SqlServer",StringComparison.OrdinalIgnoreCase)!=true)return;var resource=$"CustSearch.CameraPreview.Tenant.{tenant}.User.{userId}";await db.Database.ExecuteSqlInterpolatedAsync($$"""
+DECLARE @LockResult int;
+EXEC @LockResult = sys.sp_getapplock @Resource={{resource}}, @LockMode=N'Exclusive', @LockOwner=N'Transaction', @LockTimeout=10000;
+IF @LockResult < 0 THROW 56211,'Camera preview session lock could not be acquired.',1;
+""",ct).ConfigureAwait(false);}
     private async Task RequireGrantAsync(Camera camera,long userId,CancellationToken ct){var now=clock.GetUtcNow().UtcDateTime;var allowed=await db.CameraUserPreviewGrants.AsNoTracking().AnyAsync(x=>x.TenantId==camera.TenantId&&x.StoreId==camera.StoreId&&x.CameraId==camera.Id&&x.UserId==userId&&x.IsActive&&x.CanViewLive&&(x.ValidUntilUtc==null||x.ValidUntilUtc>now),ct).ConfigureAwait(false);if(!allowed)throw new CameraTrackingException("Live preview is not assigned to this user.",CameraTrackingFailureKind.Forbidden);}
     private long RequireTenant()=>currentUser.IsAuthenticated&&!currentUser.IsPlatformAdmin&&currentUser.TenantId is>0?currentUser.TenantId.Value:throw new CameraTrackingException("Tenant session is required.",CameraTrackingFailureKind.Forbidden);
     private bool TenantWide()=>PhaseFiveAccessRules.ContainsTenantWideRole(currentUser.Roles);
