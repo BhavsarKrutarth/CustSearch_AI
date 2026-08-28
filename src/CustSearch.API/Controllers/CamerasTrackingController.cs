@@ -21,6 +21,7 @@ namespace CustSearch.API.Controllers;
 public sealed class CamerasTrackingController(ICameraTrackingService service,ICameraPreviewService preview,ICurrentUserContext currentUser,IConfiguration configuration,IHostEnvironment environment):ControllerBase
 {
     [HttpGet][HasPermission(PermissionCatalog.Operations.CamerasView)]public Task<IReadOnlyList<CameraView>>List([FromQuery]long?storeId=null,CancellationToken ct=default)=>service.ListCamerasAsync(storeId,ct);
+    [HttpGet("quota")][HasPermission(PermissionCatalog.Operations.CamerasView)]public Task<CameraQuotaView>Quota(CancellationToken ct=default)=>service.GetCameraQuotaAsync(ct);
     [HttpPost][HasPermission(PermissionCatalog.Operations.CamerasManage)]public Task<CameraView>Create(SaveCameraRequest request,CancellationToken ct)=>service.SaveCameraAsync(null,request.Command(),Audit(),ct);
     [HttpPut("{cameraId:long}")][HasPermission(PermissionCatalog.Operations.CamerasManage)]public Task<CameraView>Update(long cameraId,SaveCameraRequest request,CancellationToken ct)=>service.SaveCameraAsync(cameraId,request.Command(),Audit(),ct);
     [HttpGet("{cameraId:long}/zones")][HasPermission(PermissionCatalog.Operations.CamerasView)]public Task<IReadOnlyList<CameraZoneView>>Zones(long cameraId,CancellationToken ct)=>service.ListZonesAsync(cameraId,ct);

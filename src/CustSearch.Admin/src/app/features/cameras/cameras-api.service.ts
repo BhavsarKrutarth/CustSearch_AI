@@ -3,6 +3,7 @@ import { Observable } from 'rxjs';
 import { TenantApiClient } from '../../core/api/tenant-api.client';
 
 export type CameraStatus=1|2|3|4;export type CameraDirection=1|2|3|4;export type CameraZoneType=1|2|3|4|5|6|7;export type TrackingSubjectKind=1|2|3;
+export interface CameraQuotaView{maxCameras:number;configuredCameras:number;activeCameras:number;availableCameras:number;canAddActiveCamera:boolean;}
 export interface CameraView{id:number;storeId:number;cameraCode:string;name:string;hasRtspConfiguration:boolean;rtspConfigurationHint:string|null;status:CameraStatus;location:string|null;direction:CameraDirection;isActive:boolean;lastHeartbeatUtc:string|null;createdUtc:string;updatedUtc:string;}
 export interface SaveCameraRequest{storeId:number;cameraCode:string;name:string;rtspConfigurationReference?:string|null;location?:string|null;direction:CameraDirection;isActive:boolean;}
 export interface CameraZoneView{id:number;cameraId:number;zoneCode:string;name:string;zoneType:CameraZoneType;geometryJson:string;version:number;categoryId:number|null;effectiveUtc:string;supersededUtc:string|null;isActive:boolean;}
@@ -18,6 +19,7 @@ export interface CctvCapabilities{demoMode:boolean;previewEnabled:boolean;enviro
 export class CamerasApiService{
   private readonly api=inject(TenantApiClient);
   cameras(storeId?:number):Observable<CameraView[]>{return this.api.get<CameraView[]>(`cameras${storeId?`?storeId=${storeId}`:''}`);}
+  quota():Observable<CameraQuotaView>{return this.api.get<CameraQuotaView>('cameras/quota');}
   create(request:SaveCameraRequest):Observable<CameraView>{return this.api.post<CameraView>('cameras',request);}
   update(id:number,request:SaveCameraRequest):Observable<CameraView>{return this.api.put<CameraView>(`cameras/${id}`,request);}
   zones(cameraId:number):Observable<CameraZoneView[]>{return this.api.get<CameraZoneView[]>(`cameras/${cameraId}/zones`);}
