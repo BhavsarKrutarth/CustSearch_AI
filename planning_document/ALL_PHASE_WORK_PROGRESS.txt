@@ -142,3 +142,7 @@ Next exact step:
 1. Commit this final progress checkpoint.
 2. Supply the planning file plus WORK_PROGRESS_LOG.txt and ALL_PHASE_WORK_PROGRESS.txt
    to the next AI for operational rollout/tuning without repeating implementation.
+
+Final checkpoint: 19e6316 docs(progress): complete retail security phase
+Disposable validation output artifacts/phase-g-validation was removed after validation
+(433,565,043 bytes; reproducible; no source/user data removed).
