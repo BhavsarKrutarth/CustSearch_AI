@@ -183,3 +183,10 @@ UX-2 IMPLEMENTATION CHECKPOINT
   headers, scope visibility, sync metadata and purposeful primary actions.
 - Existing dashboard APIs/data and authorization were preserved. Both dashboard specs pass.
 - Next: shared DataTable, FilterBar, SavedView, EmptyState and workflow components.
+
+----------------------------------------------------------------
+FULL PRODUCT VISUAL BASELINE CHECKPOINT
+- Shared corporate tokens and interaction baseline are now applied globally; dark mode is
+  slate/navy and no longer uses the previous decorative purple/gold treatment.
+- Full Angular suite is green (36 files / 94 tests) and production build passes.
+- SCSS budget warnings are tracked for extraction during shared component migration.

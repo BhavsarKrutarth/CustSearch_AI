@@ -619,3 +619,30 @@ Pending Work:
 - Replace static scope controls with API-backed scope/date filters and saved views.
 - Add shared DataTable/FilterBar/EmptyState primitives and migrate management pages.
 Next Step: UX-3 shared data components and high-value operational workflows.
+
+========================================================================
+Date/Time: 2026-08-29 11:42 +05:30
+Phase: UX-2/UX-3 - Full Product Visual Baseline
+Module/Feature: Platform and Customer Admin shared UI system
+Work Completed:
+- Applied centralized corporate visual baseline across the Angular application: spacing and
+  focus tokens, restrained interaction motion, consistent input/select/textarea focus states,
+  panel elevation, table hover/state styling and shared empty/error state treatment.
+- Replaced the previous purple/gold dark theme with a professional slate/navy dark palette
+  while preserving light theme and existing ThemeService behavior.
+- Added purpose-led Platform Command Center and Customer Operations scope context already
+  recorded in the prior UX-2 checkpoint; all modules now inherit the shared baseline.
+Files Changed:
+- src/CustSearch.Admin/src/styles.scss
+Database/Table/SP Changes: None.
+API/UI Changes: UI-only global token and component styling; no route/API/permission changes.
+Testing Result:
+- Full Angular suite passed: 36 files, 94/94 tests.
+- Production build passed; output generated successfully.
+Errors/Fixes:
+- Build reports tracked SCSS budget warnings: AdminShell +2.13 KB, Platform Dashboard +522 B,
+  Customer Dashboard +53 B. No build failure; planned extraction into shared component styles.
+Pending Work:
+- Migrate high-traffic tables/forms to shared DataTable, FilterBar, SavedView and Detail
+  components; complete module-specific responsive workflows and accessibility UAT.
+Next Step: UX-3 shared data components and page migration across both admin contexts.
