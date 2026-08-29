@@ -12,6 +12,11 @@ public interface ICameraEvidenceStorageService
     Task<CameraEvidenceIngestionResult>IngestAsync(CctvEvidenceEnvelope envelope,CancellationToken ct=default);
 }
 
+public interface ISecurityIncidentEvidenceLinkValidator
+{
+    Task<bool> ExistsInScopeAsync(long tenantId,long storeId,long incidentId,CancellationToken ct=default);
+}
+
 public sealed record TenantStoragePolicyView(long TenantId,bool StorageEnabled,long StorageQuotaBytes,int DefaultRetentionDays,int MotionSnapshotRetentionDays,int MotionClipRetentionDays,int FalsePositiveRetentionDays,int UnreviewedEvidenceRetentionDays,int ConfirmedIncidentRetentionDays,int WarningPercent,int CriticalPercent,bool AllowSnapshots,bool AllowMotionClips,bool AutoCleanupEnabled,QuotaPressurePolicy QuotaPressurePolicy,DateTime UpdatedUtc);
 public sealed record TenantStorageUsageView(long TenantId,long QuotaBytes,long UsedBytes,long AvailableBytes,long SnapshotBytes,long MotionClipBytes,long SecurityEvidenceBytes,long OtherBytes,decimal UsagePercent,string PressureLevel,DateTime LastCalculatedUtc,DateTime?LastCleanupUtc,DateTime?LastReconciledUtc);
 public sealed record TenantStorageSummaryView(TenantStoragePolicyView Policy,TenantStorageUsageView Usage);

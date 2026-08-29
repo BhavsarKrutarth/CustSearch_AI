@@ -18,10 +18,23 @@ public sealed class SecurityMaintenanceProcessor(IDbConnectionFactory connection
 SELECT TOP(100)i.TenantId,i.StoreId,i.Id,N'InApp',1,0,SYSUTCDATETIME(),SYSUTCDATETIME(),CONCAT(N'security-escalation:',i.Id,N':',i.Status)
 FROM dbo.SecurityIncidents i WHERE i.Status IN(2,3) AND i.UpdatedUtc<DATEADD(MINUTE,-5,SYSUTCDATETIME()) AND NOT EXISTS(SELECT 1 FROM dbo.SecurityNotificationDeliveries d WHERE d.IdempotencyKey=CONCAT(N'security-escalation:',i.Id,N':',i.Status))",transaction:tx,cancellationToken:ct)).ConfigureAwait(false);
         var evidence=expired.Count==0?0:await db.ExecuteAsync(new CommandDefinition("UPDATE dbo.SecurityIncidentEvidence SET DeletedUtc=SYSUTCDATETIME() WHERE DeletedUtc IS NULL AND Id IN @Ids",new{Ids=expired.Select(x=>x.Id).ToArray()},tx,cancellationToken:ct)).ConfigureAwait(false);
-        var payments=await db.ExecuteAsync(new CommandDefinition(@"INSERT dbo.SecurityPaymentCorrelations(TenantId,StoreId,SecurityIncidentId,InvoiceId,TransactionReference,MatchType,MatchScore,MatchedUtc,Notes)
-SELECT TOP(200)i.TenantId,i.StoreId,i.Id,r.Id,r.InvoiceNumber,1,1,SYSUTCDATETIME(),N'Idempotent worker re-correlation by visit and paid invoice'
-FROM dbo.SecurityIncidents i JOIN dbo.RetailInvoices r ON r.TenantId=i.TenantId AND r.StoreId=i.StoreId AND r.CustomerVisitId=i.VisitId AND r.Status=4 AND r.BalanceAmount=0 AND r.CancelledUtc IS NULL
-WHERE i.Status IN(2,3,4,5) AND NOT EXISTS(SELECT 1 FROM dbo.SecurityPaymentCorrelations p WHERE p.TenantId=i.TenantId AND p.StoreId=i.StoreId AND p.SecurityIncidentId=i.Id AND p.InvoiceId=r.Id)",transaction:tx,cancellationToken:ct)).ConfigureAwait(false);
+        var payments=await db.ExecuteScalarAsync<int>(new CommandDefinition(@"SET NOCOUNT ON;
+DECLARE @Matched TABLE(TenantId BIGINT,StoreId BIGINT,IncidentId BIGINT PRIMARY KEY);
+INSERT dbo.SecurityPaymentCorrelations(TenantId,StoreId,SecurityIncidentId,InvoiceId,TransactionReference,MatchType,MatchScore,MatchedUtc,Notes)
+OUTPUT inserted.TenantId,inserted.StoreId,inserted.SecurityIncidentId INTO @Matched
+SELECT TOP(200)i.TenantId,i.StoreId,i.Id,r.Id,r.InvoiceNumber,1,1,SYSUTCDATETIME(),N'Exact paid match by visit and incident product/category'
+FROM dbo.SecurityIncidents i CROSS APPLY(SELECT TOP(1)candidate.Id,candidate.InvoiceNumber FROM dbo.RetailInvoices candidate WHERE candidate.TenantId=i.TenantId AND candidate.StoreId=i.StoreId AND candidate.CustomerVisitId=i.VisitId AND candidate.Status=4 AND candidate.BalanceAmount=0 AND candidate.CancelledUtc IS NULL
+ AND EXISTS(SELECT 1 FROM dbo.SecurityIncidentItems si JOIN dbo.RetailInvoiceItems li ON li.TenantId=candidate.TenantId AND li.InvoiceId=candidate.Id AND ((si.ProductId IS NOT NULL AND li.ProductId=si.ProductId) OR (si.ProductId IS NULL AND si.ProductCategoryId IS NOT NULL AND li.CategoryId=si.ProductCategoryId)) WHERE si.TenantId=i.TenantId AND si.StoreId=i.StoreId AND si.SecurityIncidentId=i.Id) ORDER BY candidate.InvoiceUtc DESC,candidate.Id DESC)r
+WHERE i.Status IN(2,3,4,5)
+ AND NOT EXISTS(SELECT 1 FROM dbo.SecurityPaymentCorrelations p WHERE p.TenantId=i.TenantId AND p.StoreId=i.StoreId AND p.SecurityIncidentId=i.Id AND p.InvoiceId=r.Id);
+UPDATE item SET PaymentMatchStatus=4 FROM dbo.SecurityIncidentItems item JOIN @Matched m ON m.TenantId=item.TenantId AND m.StoreId=item.StoreId AND m.IncidentId=item.SecurityIncidentId;
+DECLARE @Resolved TABLE(TenantId BIGINT,StoreId BIGINT,IncidentId BIGINT,OldStatus TINYINT);
+UPDATE incident SET Status=8,ResolutionCode=N'PAID_INVOICE_MATCHED',ResolutionNotes=N'A compatible paid invoice arrived after the camera candidate.',UpdatedUtc=SYSUTCDATETIME()
+OUTPUT inserted.TenantId,inserted.StoreId,inserted.Id,deleted.Status INTO @Resolved
+FROM dbo.SecurityIncidents incident JOIN @Matched m ON m.TenantId=incident.TenantId AND m.StoreId=incident.StoreId AND m.IncidentId=incident.Id WHERE incident.Status IN(2,3);
+INSERT dbo.SecurityIncidentActions(TenantId,StoreId,SecurityIncidentId,ActionType,FromStatus,ToStatus,ActorType,ReasonCode,Notes,CorrelationId)
+SELECT TenantId,StoreId,IncidentId,N'PaidInvoiceMatched',OldStatus,8,N'Worker',N'PAID_INVOICE_MATCHED',N'Candidate automatically resolved before human review because an exact paid visit/item match arrived.',CONCAT(N'worker-paid-',IncidentId) FROM @Resolved;
+SELECT COUNT(1) FROM @Matched;",transaction:tx,cancellationToken:ct)).ConfigureAwait(false);
         var stale=await db.ExecuteAsync(new CommandDefinition(@"DECLARE @Expired TABLE(TenantId BIGINT,StoreId BIGINT,Id BIGINT,OldStatus TINYINT);
 UPDATE TOP(200) i SET Status=8,ResolutionCode=N'STALE_CANDIDATE_EXPIRED',ResolutionNotes=N'No additional risk signal arrived during the review window.',UpdatedUtc=SYSUTCDATETIME() OUTPUT inserted.TenantId,inserted.StoreId,inserted.Id,deleted.Status INTO @Expired FROM dbo.SecurityIncidents i WHERE i.Status=2 AND i.UpdatedUtc<DATEADD(HOUR,-24,SYSUTCDATETIME());
 INSERT dbo.SecurityIncidentActions(TenantId,StoreId,SecurityIncidentId,ActionType,FromStatus,ToStatus,ActorType,ReasonCode,Notes,CorrelationId)SELECT TenantId,StoreId,Id,N'StaleCandidateExpired',OldStatus,8,N'Worker',N'STALE_CANDIDATE_EXPIRED',N'Idempotent stale candidate expiry',CONCAT(N'worker-stale-',Id) FROM @Expired;",transaction:tx,cancellationToken:ct)).ConfigureAwait(false);

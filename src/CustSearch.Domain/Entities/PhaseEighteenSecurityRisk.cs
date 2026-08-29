@@ -16,6 +16,46 @@ public sealed record SecurityRiskSignals(
 public sealed record SecurityRiskEvaluation(
     decimal Score,SecuritySeverity Severity,bool Candidate,bool Suppressed,string Reason);
 
+public sealed record SecurityObservedSignal(
+    SecurityObservationType ObservationType,DateTime OccurredUtc,decimal Confidence,
+    long? ProductId,long? ProductCategoryId);
+
+public sealed record SecuritySignalCorrelation(
+    SecurityObservedSignal? Pickup,bool ShelfInteractionObserved,bool PutBackObserved,
+    bool CheckoutVisited,bool ItemRemainsWithTrack);
+
+/// <summary>
+/// Correlates factual visual signals in event order. A put-back only clears the latest
+/// pickup when it occurred afterwards and refers to the same product/category when known.
+/// </summary>
+public static class SecuritySignalCorrelationEngine
+{
+    public static SecuritySignalCorrelation Correlate(
+        IEnumerable<SecurityObservedSignal> observations,DateTime exitUtc)
+    {
+        ArgumentNullException.ThrowIfNull(observations);
+        if(exitUtc.Kind!=DateTimeKind.Utc)throw new ArgumentException("Exit timestamp must be UTC.",nameof(exitUtc));
+        var ordered=observations.Where(x=>x.OccurredUtc.Kind==DateTimeKind.Utc&&x.OccurredUtc<=exitUtc)
+            .OrderBy(x=>x.OccurredUtc).ToArray();
+        var pickup=ordered.LastOrDefault(x=>x.ObservationType==SecurityObservationType.ProbablePickup);
+        if(pickup is null)return new(null,ordered.Any(x=>x.ObservationType==SecurityObservationType.ShelfInteraction),false,false,false);
+        var afterPickup=ordered.Where(x=>x.OccurredUtc>=pickup.OccurredUtc).ToArray();
+        return new(
+            pickup,
+            ordered.Any(x=>x.ObservationType==SecurityObservationType.ShelfInteraction&&x.OccurredUtc<=pickup.OccurredUtc),
+            afterPickup.Any(x=>x.ObservationType==SecurityObservationType.ProbablePutBack&&Matches(pickup,x)),
+            afterPickup.Any(x=>x.ObservationType==SecurityObservationType.CheckoutZoneVisit),
+            afterPickup.Any(x=>x.ObservationType==SecurityObservationType.ProbableItemAssociation&&Matches(pickup,x)));
+    }
+
+    private static bool Matches(SecurityObservedSignal pickup,SecurityObservedSignal candidate)
+    {
+        if(pickup.ProductId.HasValue)return candidate.ProductId==pickup.ProductId;
+        if(pickup.ProductCategoryId.HasValue)return candidate.ProductCategoryId==pickup.ProductCategoryId;
+        return true;
+    }
+}
+
 /// <summary>Authoritative, versioned server rule engine. AI and Angular never calculate this score.</summary>
 public static class SecurityRiskEngine
 {
@@ -24,6 +64,7 @@ public static class SecurityRiskEngine
         ArgumentNullException.ThrowIfNull(rule);ArgumentNullException.ThrowIfNull(signals);
         if(rule.Version<=0||rule.RiskThreshold is<0 or>100||signals.ObservationConfidence is<0 or>1||signals.OcclusionQuality is<0 or>1)throw new ArgumentOutOfRangeException(nameof(rule));
         if(!signals.ExitObserved)return Result(0,false,"No exit crossing was observed.");
+        if(!signals.ProbablePossession)return Result(0,true,"No probable pickup or continuing item association was observed.");
         if(signals.PutBackObserved)return Result(0,true,"A probable put-back followed the pickup signal.");
         if(signals.StaffHandling)return Result(0,true,"Authorized staff handling/restocking signal suppressed the candidate.");
         if(signals.PaidMatch)return Result(0,true,"A compatible paid checkout suppressed the candidate.");
