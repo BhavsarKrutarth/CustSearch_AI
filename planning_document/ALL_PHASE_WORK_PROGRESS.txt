@@ -104,7 +104,7 @@ Pending:
 
 ----------------------------------------------------------------
 PHASE G - RETAIL SECURITY RULES
-Status: IN PROGRESS (existing pipeline mapped; correlation/evidence bridge implementation)
+Status: COMPLETE
 Required:
 - Shelf interaction, pickup/put-back candidate, checkout/payment correlation,
   suspected unpaid exit, human review, alerts, and evidence integration.
@@ -117,11 +117,28 @@ Mapping result:
   scoped incident APIs, mandatory human confirmation, alerts, review UI, and reports.
 - Remaining gaps are ordered/product-aware correlation, late POS resolution, and linking
   Phase E quota-managed evidence into incident review.
+Delivered:
+- Ordered/product-aware pickup, put-back, checkout, and possession correlation with a
+  mandatory pickup guard in the authoritative risk engine.
+- Late exact paid visit/item matching updates payment status, audit timeline, and safely
+  resolves only pre-review candidates.
+- SecuritySnapshot/SecurityClip ingestion is linked to an in-scope incident, restricted,
+  encrypted, quota-accounted, and visible in the existing human-review evidence flow.
+- V1.18.5 incident FK/index applied and replayed idempotently on the live SQL database.
+Validation:
+- .NET unit 120/120; integration 265/265.
+- API and Worker builds 0 warnings/0 errors.
+- Angular 36 files / 94 tests; production build passed (existing SCSS warning only).
+- Python AI suite 22/22.
+Commit: a05489c
+Pending:
+- None for implementation. Tune versioned security rules with real CCTV/POS metrics before
+  disabling shadow mode in production.
 
 ----------------------------------------------------------------
 CURRENT CONTINUATION POINT
-Active phase: Phase G
+Active phase: Complete (A-G)
 Next exact step:
-1. Map the existing Phase 18 observation/incident/review/SignalR pipeline.
-2. Map available invoice/payment correlation and Phase C/D camera rule/zone inputs.
-3. Implement and test Phase G correlation without automatic criminal labels.
+1. Commit this final progress checkpoint.
+2. Supply the planning file plus WORK_PROGRESS_LOG.txt and ALL_PHASE_WORK_PROGRESS.txt
+   to the next AI for operational rollout/tuning without repeating implementation.

@@ -404,3 +404,79 @@ Pending Work:
 Next Step:
 - Implement the domain correlation primitive and evidence-link validator, then update the
   server-authoritative ingestion/maintenance/evidence paths.
+
+========================================================================
+Date/Time: 2026-08-29 09:48 +05:30
+Phase: G - Retail Security Rules (COMPLETE)
+Module/Feature: Retail security correlation, POS reconciliation, human review, and evidence
+Work Completed:
+- Added a server-authoritative ordered correlation primitive for shelf interaction,
+  probable pickup, product/category-aware put-back, checkout-zone visit, and continuing
+  item association signals.
+- Risk evaluation now suppresses exit-only observations; a probable possession signal is
+  mandatory before a suspected unpaid-exit candidate can be created.
+- Candidate incidents now record checkout correlation evaluation and an explicit no-paid-
+  match item status. Existing Phase 18 state machine still requires human confirmation.
+- Extended the maintenance worker to find a later exact paid visit/item match, update item
+  payment status, append an audit action, and resolve only pre-review candidates/alerts.
+- Enabled signed SecuritySnapshot/SecurityClip ingestion through the Phase E encrypted,
+  quota-accounted tenant namespace. Security evidence requires a positive in-scope
+  incident, is forced restricted, and remains tenant/store scoped.
+- Security incident detail/evidence reads now prefer quota-managed CameraEvidence with a
+  backward-compatible fallback to legacy SecurityIncidentEvidence. Review UI can request
+  a signed evidence view ticket without accepting a browser tenant id.
+- Corrected security severity labels in Angular and added the evidence ticket/view flow.
+- Added V1.18.5 repeat-safe incident FK and security-evidence index.
+Files Changed:
+- src/CustSearch.Domain/Entities/PhaseEighteenSecurityRisk.cs
+- src/CustSearch.Application/CamerasTracking/ICameraEvidenceStorageService.cs
+- src/CustSearch.Infrastructure/CamerasTracking/CameraEvidenceStorageService.cs
+- src/CustSearch.Infrastructure/Security/SecurityPlatformService.cs
+- src/CustSearch.Infrastructure/Security/SecurityMaintenanceProcessor.cs
+- src/CustSearch.Infrastructure/Security/SecurityIncidentEvidenceLinkValidator.cs
+- src/CustSearch.Infrastructure/DependencyInjection.cs
+- src/CustSearch.Admin/src/app/features/security/security-api.service.ts
+- src/CustSearch.Admin/src/app/features/security/security-page.ts
+- src/CustSearch.Admin/src/app/features/security/security-api.service.spec.ts
+- tests/CustSearch.UnitTests/PhaseEighteenSecurityTests.cs
+- tests/CustSearch.IntegrationTests/CameraEvidenceStorageServiceTests.cs
+- database/09_Upgrade/V1.18.5_RetailSecurityEvidenceBridge.sql
+- planning_document/WORK_PROGRESS_LOG.txt
+- planning_document/ALL_PHASE_WORK_PROGRESS.txt
+Database/Table/SP Changes:
+- Live SQL Server upgraded/replayed through V1.18.5.
+- V1.18.5 registered exactly once; FK_CameraEvidence_SecurityIncident and
+  IX_CameraEvidence_SecurityIncident verified present.
+- No parallel incident tables or browser-supplied tenant identifiers introduced.
+API/UI Changes:
+- Existing SecurityController endpoints remain the single incident/review API.
+- Evidence view-ticket URL and scoped view action added to the security detail page.
+- Evidence metadata is permission-gated; human review wording remains “Needs human review”
+  and never labels a person as a thief/shoplifter.
+Testing Result:
+- Full .NET unit: PASS 120/120.
+- Full .NET integration: PASS 265/265.
+- CustSearch.API build: PASS, 0 warnings / 0 errors.
+- CustSearch.Worker build: PASS, 0 warnings / 0 errors.
+- Angular: PASS 36 files / 94 tests.
+- Angular production build: PASS; only existing admin-shell.scss +151-byte warning.
+- Python AI suite: PASS 22/22 with PYTHONPATH=src/CustSearch.AI.
+- Live SQL V1.18.5: PASS first apply and PASS idempotent replay.
+- git diff --check: PASS; line-ending conversion notices only.
+Errors/Fixes:
+- Normal integration build initially encountered a file lock from the running Visual
+  Studio/API process; the process was left untouched and validation reran successfully
+  with --artifacts-path isolation.
+- Initial Python invocation lacked the project import path and failed collection with
+  ModuleNotFoundError; rerunning with PYTHONPATH=src/CustSearch.AI passed all 22 tests.
+Pending Work:
+- No remaining implementation item in the supplied A-G planning phases.
+- Operational rollout should monitor candidate precision/false-positive metrics and tune
+  versioned rules with real CCTV/POS data before disabling shadow mode.
+Next Step:
+- Commit this progress checkpoint and hand over the clean A-G implementation state.
+Git Commit:
+- a05489c feat(security): correlate retail signals and link evidence
+Artifact Cleanup:
+- Remove only the verified disposable artifacts/phase-g-validation output after the
+  checkpoint commit; source and user data remain untouched.
