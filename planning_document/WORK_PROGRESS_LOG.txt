@@ -562,3 +562,35 @@ Errors/Fixes: User feedback that the previous plan felt too basic; scope raised 
 Pending Work:
 - Approve sitemap/task mapping, then implement token system and shared AppShell components.
 Next Step: Begin UX-1 shell/navigation implementation after product sign-off on the blueprint.
+
+========================================================================
+Date/Time: 2026-08-29 11:03 +05:30
+Phase: UX-1 - Corporate AppShell and Navigation Foundation
+Module/Feature: Shared AdminShell for Platform Admin and Customer Admin
+Work Completed:
+- Implemented role-aware grouped navigation using permission-filtered items while preserving
+  all existing routes and authorization boundaries.
+- Added workspace context card (platform operations or tenant code), grouped domains,
+  neutral CS/Admin branding, page scope metadata, security settings action and responsive
+  mobile navigation drawer with backdrop/close behavior.
+- Added mobile topbar context and corporate shell visual layer (navigation icons, active states,
+  workspace status, responsive transitions and reduced-motion handling).
+Files Changed:
+- src/CustSearch.Admin/src/app/core/navigation/admin-navigation.ts
+- src/CustSearch.Admin/src/app/shared/admin-shell/admin-shell.ts
+- src/CustSearch.Admin/src/app/shared/admin-shell/admin-shell.html
+- src/CustSearch.Admin/src/app/shared/admin-shell/admin-shell.scss
+Database/Table/SP Changes: None.
+API/UI Changes: UI-only AppShell changes; no route/API/permission contract change.
+Testing Result:
+- AdminShell permission-navigation spec passed (1/1).
+- Production Angular build passed.
+Errors/Fixes:
+- Initial compact Angular control-flow markup caused template block parsing errors; rewritten
+  into explicit nested blocks and revalidated successfully.
+- Existing shell SCSS budget warning increased to 2.13 KB over 4 KB (total 6.13 KB); no build
+  failure. Token extraction/splitting is pending in the design-system phase.
+Pending Work:
+- Extract shared shell styles into design tokens/components and reduce SCSS budget.
+- Implement UX-2 dashboards, scope bars, tables and high-value workflows.
+Next Step: Run full Angular regression, then proceed with dashboard and data-table foundation.

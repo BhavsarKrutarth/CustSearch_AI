@@ -1,6 +1,7 @@
 import { PERMISSIONS } from '../auth/permission-catalog';
 
 export interface AdminNavigationItem { label:string; route:string|null; permission:string; }
+export interface AdminNavigationGroup { label:string; items:readonly AdminNavigationItem[]; }
 
 export const ADMIN_NAVIGATION:Record<'customer'|'platform',readonly AdminNavigationItem[]>={
   customer:[

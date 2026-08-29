@@ -168,3 +168,11 @@ UX PLAN REFINEMENT (CORPORATE LEVEL)
   loading/error/permission states, accessibility and phase acceptance gates.
 - This is planning only; implementation begins with approved sitemap/task mapping and the
   UX-1 AppShell/navigation foundation.
+
+----------------------------------------------------------------
+UX-1 IMPLEMENTATION CHECKPOINT
+- Corporate AppShell is implemented with permission-filtered grouped navigation, workspace
+  context, role-aware metadata and responsive mobile drawer behavior.
+- AdminShell spec passed and production build passed. Shell SCSS budget is currently 2.13 KB
+  over budget and is a tracked design-system cleanup item.
+- Next: dashboard/scope-bar/table foundation, followed by high-value operational workflows.
