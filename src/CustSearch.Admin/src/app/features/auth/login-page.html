@@ -1,16 +1,17 @@
 <main id="main-content" class="login-page">
   <section class="login-card" aria-labelledby="login-title">
-    <div class="brand"><span aria-hidden="true">AI</span><b>CustSearch <i>AI</i></b></div>
+    <div class="brand"><span aria-hidden="true">CS</span><b>CustSearch <i>Admin</i></b></div>
     <p class="eyebrow">Retail intelligence platform</p>
     <h1 id="login-title">Welcome back</h1>
     <p class="intro">Sign in to continue to your secure admin workspace.</p>
     @if (message()) { <p class="success" role="status">{{ message() }}</p> }
-    <form (ngSubmit)="signIn()">
-      <label>Tenant code <small>Optional for Platform Admin</small><input name="tenantCode" [(ngModel)]="tenantCode" autocomplete="organization" placeholder="e.g. acme-retail"></label>
+    <form (ngSubmit)="signIn()" novalidate>
+      <label>Tenant code <small>Required for Customer Admin · leave blank for Platform Admin</small><input name="tenantCode" [(ngModel)]="tenantCode" autocomplete="organization" placeholder="e.g. acme-retail"></label>
       <label>Email or username<input name="username" [(ngModel)]="username" autocomplete="username" required></label>
-      <label>Password<input name="password" [(ngModel)]="password" type="password" autocomplete="current-password" required></label>
+      <label>Password <span class="password-field"><input name="password" [(ngModel)]="password" [type]="showPassword() ? 'text' : 'password'" autocomplete="current-password" required><button class="password-toggle" type="button" (click)="togglePassword()" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'">{{ showPassword() ? 'Hide' : 'Show' }}</button></span></label>
       @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-      <button type="submit" [disabled]="busy() || !username || !password">{{ busy() ? 'Signing in…' : 'Sign in' }}</button>
+      @if (errorReference()) { <p class="error-reference">{{ errorReference() }}</p> }
+      <button class="submit" type="submit" [disabled]="busy() || !username || !password">{{ busy() ? 'Signing in…' : 'Sign in' }}</button>
     </form>
     <small class="security">Your credentials and access token are never stored in browser storage.</small>
   </section>

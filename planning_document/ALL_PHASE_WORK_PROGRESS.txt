@@ -146,3 +146,17 @@ Next exact step:
 Final checkpoint: 19e6316 docs(progress): complete retail security phase
 Disposable validation output artifacts/phase-g-validation was removed after validation
 (433,565,043 bytes; reproducible; no source/user data removed).
+
+----------------------------------------------------------------
+CURRENT CONTINUATION POINT (POST A-G)
+Active phase: UX-0 - Login reliability and UI/UX redesign planning
+Completed:
+- Diagnosed platform vs customer tenant-code login behavior and preserved the API contract.
+- Added the admin/customer redesign plan and implemented login validation, password toggle,
+  actionable error states, correlation references, and a neutral enterprise visual baseline.
+- Targeted login Angular spec is green (1/1); real credential smoke is pending because local
+  API and Angular servers were not running during this checkpoint.
+Next exact step:
+1. Run full Angular tests/build and credential smoke tests with local services.
+2. Implement UX-1 shell/navigation and UX-2 dashboard/table work per
+   ADMIN_CUSTOMER_UI_UX_LOGIN_REDESIGN_PLAN.md.

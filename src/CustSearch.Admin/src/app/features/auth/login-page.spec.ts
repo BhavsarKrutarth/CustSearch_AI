@@ -18,10 +18,10 @@ describe('LoginPage', () => {
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     const fixture = TestBed.createComponent(LoginPage);
     fixture.detectChanges();
-    const inputs = fixture.nativeElement.querySelectorAll('input') as NodeListOf<HTMLInputElement>;
-    inputs[1].value='admin@example.com'; inputs[1].dispatchEvent(new Event('input'));
-    inputs[2].value='secret'; inputs[2].dispatchEvent(new Event('input'));
-    fixture.nativeElement.querySelector('form').dispatchEvent(new Event('submit'));
+    const page = fixture.componentInstance as any;
+    page.username = 'admin@example.com';
+    page.password = 'secret';
+    page.signIn();
     const request = controller.expectOne('/api/auth/login');
     expect(request.request.withCredentials).toBe(true);
     expect(request.request.headers.has('Authorization')).toBe(false);

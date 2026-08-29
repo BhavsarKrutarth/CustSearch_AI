@@ -503,3 +503,39 @@ Next Step:
   repeating completed implementation.
 Git Commit:
 - 19e6316 docs(progress): complete retail security phase
+
+========================================================================
+Date/Time: 2026-08-29 10:07 +05:30
+Phase: UX-0 - Admin/Customer Login Reliability and UI Planning
+Module/Feature: CustSearch.Admin Angular login and future admin/customer shell redesign
+Work Completed:
+- Inspected Angular auth/session/interceptor/guards plus backend AuthController and
+  AuthenticationService. Confirmed blank tenantCode is Platform Admin scope; Customer Admin
+  login requires the matching tenant code. Existing token/session security was preserved.
+- Added ADMIN_CUSTOMER_UI_UX_LOGIN_REDESIGN_PLAN.md with modern enterprise UX direction,
+  IA, accessibility, login reliability requirements and UAT checklist.
+- Hardened login UI/error handling with client validation, password visibility toggle,
+  network/rate-limit/401/5xx-specific messages, correlation reference display, malformed
+  response protection, explicit tenant helper copy, and a neutral non-AI visual baseline.
+Files Changed:
+- src/CustSearch.Admin/src/app/features/auth/login-page.ts
+- src/CustSearch.Admin/src/app/features/auth/login-page.html
+- src/CustSearch.Admin/src/app/features/auth/login-page.scss
+- src/CustSearch.Admin/src/app/features/auth/login-page.spec.ts
+- planning_document/ADMIN_CUSTOMER_UI_UX_LOGIN_REDESIGN_PLAN.md
+Database/Table/SP Changes: None.
+API/UI Changes: No API contract change; UI explains platform/customer tenant scope and safely
+surfaces backend ApiErrorResponse correlation IDs.
+Testing Result:
+- Targeted Angular login spec passed (1/1); git diff --check passed.
+- Local API (https://localhost:7277) and Angular dev server (http://localhost:4200) were not
+  running, so real credential smoke login could not be executed in this session.
+Errors/Fixes:
+- Updated the login unit test to invoke the component sign-in path deterministically after
+  the template contract changed.
+Pending Work:
+- Run full Angular test/build and platform + customer credential smoke tests with local API/SQL.
+- Implement UX-1 shell/navigation and UX-2 dashboard/table improvements from the plan.
+Next Step:
+- Validate the full Angular suite, commit this login hardening checkpoint, then continue the
+  admin/customer shell redesign.
