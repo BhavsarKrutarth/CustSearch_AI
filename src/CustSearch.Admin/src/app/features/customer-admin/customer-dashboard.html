@@ -1,4 +1,5 @@
 <app-admin-shell adminType="customer" eyebrow="Acme Retail · May 1–31, 2026" pageTitle="Dashboard">
+  <section class="scope-bar" aria-label="Dashboard scope"><div><strong>Operations overview</strong><span>Tenant: Acme Retail · All stores · Last synced just now</span></div><div class="scope-actions"><button type="button">All stores</button><button type="button">May 1–31, 2026</button><a routerLink="/customer-admin/reports">Export report</a></div></section>
   <section class="stats-grid" aria-label="Customer overview">
     @for (stat of stats; track stat.label) { <app-stat-card [label]="stat.label" [value]="stat.value" [trend]="stat.trend" [icon]="stat.icon" /> }
   </section>

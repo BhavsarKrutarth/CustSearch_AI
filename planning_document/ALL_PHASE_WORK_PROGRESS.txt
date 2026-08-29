@@ -176,3 +176,10 @@ UX-1 IMPLEMENTATION CHECKPOINT
 - AdminShell spec passed and production build passed. Shell SCSS budget is currently 2.13 KB
   over budget and is a tracked design-system cleanup item.
 - Next: dashboard/scope-bar/table foundation, followed by high-value operational workflows.
+
+----------------------------------------------------------------
+UX-2 IMPLEMENTATION CHECKPOINT
+- Platform Command Center and Customer Operations Dashboard now have corporate context
+  headers, scope visibility, sync metadata and purposeful primary actions.
+- Existing dashboard APIs/data and authorization were preserved. Both dashboard specs pass.
+- Next: shared DataTable, FilterBar, SavedView, EmptyState and workflow components.

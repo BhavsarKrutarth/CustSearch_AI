@@ -594,3 +594,28 @@ Pending Work:
 - Extract shared shell styles into design tokens/components and reduce SCSS budget.
 - Implement UX-2 dashboards, scope bars, tables and high-value workflows.
 Next Step: Run full Angular regression, then proceed with dashboard and data-table foundation.
+
+========================================================================
+Date/Time: 2026-08-29 11:08 +05:30
+Phase: UX-2 - Corporate Dashboard Foundation
+Module/Feature: Platform Command Center and Customer Operations Dashboard
+Work Completed:
+- Added Platform Command Center header with portfolio-health purpose and direct tenant/
+  operations actions.
+- Added Customer Operations scope bar showing tenant, store/date context, sync state and
+  report export action.
+- Preserved existing dashboard data, route links, permissions and API behavior while adding
+  decision-oriented context before KPI/chart/table content.
+Files Changed:
+- src/CustSearch.Admin/src/app/features/platform-admin/platform-dashboard.html
+- src/CustSearch.Admin/src/app/features/platform-admin/platform-dashboard.scss
+- src/CustSearch.Admin/src/app/features/customer-admin/customer-dashboard.html
+- src/CustSearch.Admin/src/app/features/customer-admin/customer-dashboard.scss
+Database/Table/SP Changes: None.
+API/UI Changes: UI-only dashboard context and action affordances; no API contract change.
+Testing Result: Platform and Customer dashboard specs passed (2/2).
+Errors/Fixes: None in dashboard checkpoint.
+Pending Work:
+- Replace static scope controls with API-backed scope/date filters and saved views.
+- Add shared DataTable/FilterBar/EmptyState primitives and migrate management pages.
+Next Step: UX-3 shared data components and high-value operational workflows.
