@@ -160,3 +160,11 @@ Next exact step:
 1. Run full Angular tests/build and credential smoke tests with local services.
 2. Implement UX-1 shell/navigation and UX-2 dashboard/table work per
    ADMIN_CUSTOMER_UI_UX_LOGIN_REDESIGN_PLAN.md.
+
+----------------------------------------------------------------
+UX PLAN REFINEMENT (CORPORATE LEVEL)
+- The redesign plan now covers governed B2B workspaces, role-specific information
+  architecture, enterprise workflows, shared design-system components, responsive density,
+  loading/error/permission states, accessibility and phase acceptance gates.
+- This is planning only; implementation begins with approved sitemap/task mapping and the
+  UX-1 AppShell/navigation foundation.

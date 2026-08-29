@@ -149,3 +149,92 @@ to tenant APIs.
   green; no API accepts a browser-supplied tenant id.
 - `WORK_PROGRESS_LOG.txt` and `ALL_PHASE_WORK_PROGRESS.txt` contain the implementation,
   test, UAT, error/fix, and pending-rollout history.
+
+## Corporate-grade product blueprint (expanded direction)
+
+The redesign must feel like a governed B2B operations product (not a collection of KPI
+cards). Every screen follows the same information hierarchy: page purpose, scope/context,
+primary decision, supporting evidence, then secondary actions.
+
+### Product areas and role workspaces
+
+**Platform Admin workspace**
+
+- Command Center: tenant health, adoption, service incidents, expiring subscriptions and
+  unresolved high-severity alerts.
+- Tenant Operations: tenant directory, lifecycle status, plan/entitlements, usage, contacts,
+  feature flags and an auditable tenant detail workspace.
+- Identity & Governance: users, roles, permission templates, invitations, access reviews,
+  session/security events and audit export.
+- Commercial: plans, invoices, payment status, limits and billing exceptions.
+- Platform Operations: integrations, storage, camera fleet health, jobs and API health.
+
+**Customer Admin workspace**
+
+- Operations Home: store/zone scope, today’s visits, review queue, camera availability and
+  action-required alerts.
+- Customer & Visitor 360: searchable profiles, household relationships, visit timeline,
+  consent/retention indicators and related evidence.
+- Store & Camera Operations: store hierarchy, camera health, coverage, motion rules and
+  incident evidence.
+- Review & Security: recognition review queue, alerts, cases, evidence timeline and audit.
+- Team & Settings: scoped users/roles, integrations, notification preferences and retention.
+
+### Navigation and page composition
+
+- Persistent sidebar with grouped domains, role-filtered items, unread counts and a command
+  search (`/` shortcut) for pages, customers, tenants and actions.
+- Top context bar always shows workspace, tenant/store scope, environment, last sync time,
+  notifications and profile/session controls.
+- Standard page header: breadcrumb, title, one-line purpose, scope selector, last-updated
+  timestamp and one primary action; secondary actions live in an overflow menu.
+- Detail screens use tabs (`Overview`, `Activity`, `Access`, `Evidence`, `Settings`) and a
+  right-side contextual action panel instead of long undifferentiated forms.
+- URL-driven filters and tabs so links are reproducible, bookmarkable and safe to refresh.
+
+### Design system and interaction quality bar
+
+- Figma-ready token contract for color, typography, spacing, elevation, radius, motion and
+  density; implement tokens as Angular CSS custom properties.
+- Three density modes: Comfortable (default), Compact (operations tables), Touch (tablet).
+- Neutral navy/slate foundation with one brand accent and semantic success/warning/danger;
+  no gradients used to encode status and no decorative “AI” motifs.
+- Component library before page work: AppShell, PageHeader, ScopeBar, Metric, DataTable,
+  FilterBar, SavedView, StatusBadge, Timeline, EvidencePanel, Drawer, Dialog, Toast,
+  EmptyState, ErrorState, Skeleton and PermissionGate.
+- Keyboard-first interactions, visible focus, 44px touch targets, WCAG AA contrast, reduced
+  motion support and screen-reader labels for icons/graphs.
+
+### Enterprise workflows (must be designed before coding)
+
+- Tenant onboarding: create → configure plan → invite owner → connect integration → verify
+  health → activate, with resumable steps and audit events.
+- User access: invite → role template → scope selection → approval (if required) → activation;
+  show effective permissions before save.
+- Incident review: alert → evidence/timeline → assign owner → add note → resolve/escalate;
+  preserve immutable history.
+- Camera remediation: offline camera → diagnostics → retry/reconfigure → verify stream →
+  close incident, with clear retry safety and last-seen timestamps.
+- Billing exception: failed payment/limit → impact summary → action → confirmation → audit.
+
+### Responsive and state requirements
+
+- Desktop (1440/1280): three-column operational layouts where useful; tablet (1024/768):
+  collapsible navigation and two-column detail; mobile (390): single-column cards, filter
+  drawer, sticky primary action and table-to-list transformation.
+- Every async page defines loading, partial-data, empty, permission-denied, offline and
+  server-error states before implementation.
+- Destructive operations require reason/confirmation; long operations show progress and
+  allow safe navigation without duplicate submissions.
+
+### Delivery governance and acceptance gates
+
+- Phase 1: inventory and role/task mapping; approve sitemap and critical workflows.
+- Phase 2: tokens and shared components; visual regression baseline.
+- Phase 3: shell and authentication; both roles pass navigation/accessibility UAT.
+- Phase 4: highest-value workflows (tenant onboarding, visitor 360, incident review,
+  camera remediation); API contracts remain unchanged unless explicitly approved.
+- Phase 5: remaining modules, migration, training notes and release checklist.
+- Gate each phase on product sign-off, keyboard/mobile review, no new console errors,
+  Angular tests/build green, authorization/tenant-isolation tests green, and measured
+  performance (LCP/route load) within agreed budgets.
