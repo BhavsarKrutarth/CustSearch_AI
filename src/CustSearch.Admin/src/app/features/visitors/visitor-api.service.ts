@@ -6,6 +6,8 @@ import { CustomerDetail } from '../customers/customer-api.service';
 
 export interface AnonymousVisitorListItem { id:number; visitorCode:string; storeId:number; firstSeenUtc:string; lastSeenUtc:string; isActive:boolean; convertedCustomerId:number|null; convertedUtc:string|null; }
 export interface AnonymousVisitorDetail extends AnonymousVisitorListItem { createdUtc:string; updatedUtc:string; }
+export interface CreateVisitorRequest { storeId:number; visitorCode:string|null; seenUtc:string|null; }
+export interface UpdateVisitorRequest { visitorCode:string; isActive:boolean; }
 export interface ConvertVisitorRequest { customerId:number|null; firstName:string|null; lastName:string|null; mobile:string|null; email:string|null; notes:string|null; }
 
 /** Phase 6F typed Angular client for store-scoped anonymous visitor list/detail/conversion operations. */
@@ -14,5 +16,8 @@ export class VisitorApiService {
   private readonly api=inject(TenantApiClient);
   search(query:PageQuery):Observable<PageResponse<AnonymousVisitorListItem>>{ return this.api.getPage<AnonymousVisitorListItem>('visitors',query); }
   get(id:number):Observable<AnonymousVisitorDetail>{ return this.api.get<AnonymousVisitorDetail>(`visitors/${id}`); }
+  create(body:CreateVisitorRequest):Observable<AnonymousVisitorDetail>{ return this.api.post<AnonymousVisitorDetail>('visitors',body); }
+  update(id:number,body:UpdateVisitorRequest):Observable<AnonymousVisitorDetail>{ return this.api.put<AnonymousVisitorDetail>(`visitors/${id}`,body); }
+  deactivate(id:number):Observable<AnonymousVisitorDetail>{ return this.api.delete<AnonymousVisitorDetail>(`visitors/${id}`); }
   convert(id:number,body:ConvertVisitorRequest):Observable<CustomerDetail>{ return this.api.post<CustomerDetail>(`visitors/${id}/convert`,body); }
 }

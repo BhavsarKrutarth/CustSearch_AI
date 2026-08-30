@@ -28,6 +28,10 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       @case ('menu') { <path d="M4 7h16M4 12h16M4 17h16"/> }
       @case ('chevron-left') { <path d="m15 5-7 7 7 7"/> }
       @case ('chevron-right') { <path d="m9 5 7 7-7 7"/> }
+      @case ('edit') { <path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/> }
+      @case ('trash') { <path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/> }
+      @case ('key') { <circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M16 6l2 2M14 8l2 2"/> }
+      @case ('user-plus') { <circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"/> }
     }
   </svg>`,
   changeDetection: ChangeDetectionStrategy.OnPush,

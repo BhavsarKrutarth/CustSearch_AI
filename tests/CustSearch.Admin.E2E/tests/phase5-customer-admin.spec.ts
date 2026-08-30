@@ -468,6 +468,10 @@ test('tenant user create/update flow calls roles and store assignment APIs', asy
   await expect(page.getByText('User saved.', { exact: true })).toBeVisible();
   await expect.poll(() => state.calls.includes('PUT users/601/roles')).toBe(true);
   await expect.poll(() => state.calls.includes('PUT users/601/stores')).toBe(true);
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByTestId('deactivate-user-601').click();
+  await expect(page.getByText('User deactivated.', { exact: true })).toBeVisible();
+  await expect.poll(() => state.users[0].isActive).toBe(false);
 });
 
 test('quota reactivation rejection is surfaced and does not continue role/store writes', async ({ page }) => {
@@ -509,6 +513,10 @@ test('staff create and update flow is available to authorized tenant administrat
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Staff saved.', { exact: true })).toBeVisible();
   await expect.poll(() => state.staff[0].firstName).toBe('Sales Updated');
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByTestId('deactivate-staff-701').click();
+  await expect(page.getByText('Staff member deactivated.', { exact: true })).toBeVisible();
+  await expect.poll(() => state.staff[0].isActive).toBe(false);
 });
 
 test('store-scoped permission guard blocks pages without required permission', async ({ page }) => {

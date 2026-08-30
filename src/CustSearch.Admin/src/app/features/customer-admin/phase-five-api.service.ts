@@ -18,6 +18,7 @@ export class PhaseFiveApiService {
   user(id:number):Observable<TenantUser>{return this.api.get(`users/${id}`);}
   createUser(body:unknown):Observable<TenantUser>{return this.api.post('users',body);}
   updateUser(id:number,body:unknown):Observable<TenantUser>{return this.api.put(`users/${id}`,body);}
+  deactivateUser(id:number,body:unknown):Observable<TenantUser>{return this.api.put(`users/${id}`,body);}
   setUserRoles(id:number,roles:string[]):Observable<TenantUser>{return this.api.put(`users/${id}/roles`,{roles});}
   setUserStores(id:number,storeIds:number[],primaryStoreId?:number|null):Observable<TenantUser>{return this.api.put(`users/${id}/stores`,{storeIds,primaryStoreId:primaryStoreId??null});}
   resetUserPassword(id:number,newPassword:string,confirmNewPassword:string):Observable<TenantUser>{return this.api.put(`users/${id}/password`,{newPassword,confirmNewPassword});}
@@ -30,6 +31,7 @@ export class PhaseFiveApiService {
   staffById(id:number):Observable<Staff>{return this.api.get(`staff/${id}`);}
   createStaff(body:unknown):Observable<Staff>{return this.api.post('staff',body);}
   updateStaff(id:number,body:unknown):Observable<Staff>{return this.api.put(`staff/${id}`,body);}
+  deactivateStaff(id:number,body:unknown):Observable<Staff>{return this.api.put(`staff/${id}`,body);}
   categories(storeId?:number):Observable<Category[]>{return this.api.get(`store-categories${storeId?`?storeId=${storeId}`:''}`);}
   createCategory(body:unknown):Observable<Category>{return this.api.post('store-categories',body);}
   updateCategory(id:number,body:unknown):Observable<Category>{return this.api.put(`store-categories/${id}`,body);}

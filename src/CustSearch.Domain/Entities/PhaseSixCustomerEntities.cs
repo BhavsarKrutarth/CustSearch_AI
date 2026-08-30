@@ -153,6 +153,15 @@ public sealed class AnonymousVisitor
         UpdatedUtc = seenUtc;
     }
 
+    public void UpdateProfile(string visitorCode, bool isActive, DateTime utcNow)
+    {
+        if (ConvertedCustomerId.HasValue && isActive)
+            throw new InvalidOperationException("A converted visitor cannot be reactivated.");
+        VisitorCode = Require(visitorCode, nameof(visitorCode), 50).ToUpperInvariant();
+        IsActive = isActive;
+        UpdatedUtc = utcNow.Kind == DateTimeKind.Utc ? utcNow : throw new ArgumentException("UpdatedUtc must be UTC.", nameof(utcNow));
+    }
+
     public void ConvertToCustomer(long customerId, DateTime convertedUtc)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(customerId);

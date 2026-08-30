@@ -45,6 +45,7 @@ public sealed record AnonymousVisitorDetail(long Id, string VisitorCode, long St
 
 public sealed record CreateAnonymousVisitorCommand(long StoreId, string? VisitorCode, DateTime? SeenUtc);
 public sealed record TouchAnonymousVisitorCommand(DateTime? SeenUtc);
+public sealed record UpdateAnonymousVisitorCommand(string VisitorCode, bool IsActive);
 
 /// <summary>
 /// Phase 6B explicit conversion command. Supply CustomerId to link an authorized existing customer, or omit it and

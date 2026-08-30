@@ -18,6 +18,8 @@ public interface IShopperCustomerService
     Task<PagedResult<AnonymousVisitorListItem>> SearchVisitorsAsync(AnonymousVisitorSearchQuery query, CancellationToken cancellationToken = default);
     Task<AnonymousVisitorDetail> GetVisitorAsync(long visitorId, CancellationToken cancellationToken = default);
     Task<AnonymousVisitorDetail> CreateVisitorAsync(CreateAnonymousVisitorCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default);
+    Task<AnonymousVisitorDetail> UpdateVisitorAsync(long visitorId, UpdateAnonymousVisitorCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default);
+    Task<AnonymousVisitorDetail> DeactivateVisitorAsync(long visitorId, TenantAuditContext audit, CancellationToken cancellationToken = default);
     Task<AnonymousVisitorDetail> TouchVisitorAsync(long visitorId, TouchAnonymousVisitorCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default);
     Task<CustomerDetail> ConvertVisitorAsync(long visitorId, ConvertAnonymousVisitorCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default);
 }

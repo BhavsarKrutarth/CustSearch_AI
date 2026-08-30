@@ -166,6 +166,38 @@ public sealed class ShopperCustomerService(
         return MapVisitor(visitor);
     }
 
+    public async Task<AnonymousVisitorDetail> UpdateVisitorAsync(long visitorId, UpdateAnonymousVisitorCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ValidateAudit(audit);
+        var visitor = await RequireVisibleVisitorAsync(visitorId, true, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(command.VisitorCode)) throw new TenantBusinessRuleException("Visitor code is required.");
+        var code = command.VisitorCode.Trim().ToUpperInvariant();
+        if (await db.AnonymousVisitors.AnyAsync(x => x.TenantId == RequireTenantId() && x.StoreId == visitor.StoreId && x.Id != visitorId && x.VisitorCode == code, cancellationToken).ConfigureAwait(false))
+            throw new TenantBusinessRuleException("Visitor code already exists in this store.");
+        var before = new { visitor.VisitorCode, visitor.IsActive };
+        try { visitor.UpdateProfile(code, command.IsActive, UtcNow()); }
+        catch (ArgumentException exception) { throw new TenantBusinessRuleException(exception.Message); }
+        catch (InvalidOperationException exception) { throw new TenantBusinessRuleException(exception.Message); }
+        RecordAudit(RequireTenantId(), visitor.StoreId, audit, "AnonymousVisitorUpdated", "AnonymousVisitor", visitor.Id, before,
+            new { visitor.VisitorCode, visitor.IsActive }, UtcNow());
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return MapVisitor(visitor);
+    }
+
+    public async Task<AnonymousVisitorDetail> DeactivateVisitorAsync(long visitorId, TenantAuditContext audit, CancellationToken cancellationToken = default)
+    {
+        ValidateAudit(audit);
+        var visitor = await RequireVisibleVisitorAsync(visitorId, true, cancellationToken).ConfigureAwait(false);
+        if (visitor.ConvertedCustomerId.HasValue) throw new TenantBusinessRuleException("A converted visitor cannot be deleted.");
+        var before = new { visitor.VisitorCode, visitor.IsActive };
+        visitor.UpdateProfile(visitor.VisitorCode, false, UtcNow());
+        RecordAudit(RequireTenantId(), visitor.StoreId, audit, "AnonymousVisitorDeactivated", "AnonymousVisitor", visitor.Id, before,
+            new { visitor.VisitorCode, visitor.IsActive }, UtcNow());
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return MapVisitor(visitor);
+    }
+
     public async Task<AnonymousVisitorDetail> TouchVisitorAsync(long visitorId, TouchAnonymousVisitorCommand command, TenantAuditContext audit, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);

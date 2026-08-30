@@ -103,3 +103,19 @@ Tests executed: `npm run lint`, `npm run test:ci`, `npm run build:production`, a
 Known issue: theme changes currently persist only in the browser under the authenticated tenant code. Cross-device/customer-wide persistence requires a backend endpoint, a tenant-theme permission, validation, and audit logging; those were not invented because no existing contract was available.
 
 Next step: product decision and backend contract for shared tenant branding, then migrate remaining feature-specific buttons/tables to the semantic variants and capture the responsive screenshot matrix.
+
+## UI-15 - Staff, user, and visitor record management
+
+Status: COMPLETE
+
+Files changed: `src/CustSearch.Admin/src/app/features/customer-admin/phase-five-management-page.ts`, `src/CustSearch.Admin/src/app/features/customer-admin/phase-five-api.service.ts`, `src/CustSearch.Admin/src/app/features/visitors/visitor-list-page.ts`, `src/CustSearch.Admin/src/app/features/visitors/visitor-api.service.ts`, `src/CustSearch.Admin/src/app/shared/cs-icon/cs-icon.ts`, `src/CustSearch.Api/Controllers/ShopperCustomersController.cs`, `src/CustSearch.Application/ShopperCustomers/IShopperCustomerService.cs`, `src/CustSearch.Application/ShopperCustomers/ShopperCustomerModels.cs`, `src/CustSearch.Domain/Entities/PhaseSixCustomerEntities.cs`, `src/CustSearch.Infrastructure/ShopperCustomers/ShopperCustomerService.cs`, and the affected Playwright specs.
+
+Results: Users and Staff now have compact semantic tables with client pagination for the existing array API contract, stable icon-only edit/reset/deactivate actions, active-state badges, empty states, and keyboard labels. Visitors now have server-backed pagination with page-size controls, add, edit, convert, and deactivate actions. All actions remain permission-gated by the existing route/API permission (`TenantUsers.Edit`, `Staff.Manage`, and `Visitors.Convert`).
+
+Data safety: “Delete” is presented as deactivation for Users, Staff, and Visitors. No hard delete was added because these rows participate in authentication, visit, CCTV, audit, and tenant-history relationships. Visitor update/deactivation endpoints were added only because no existing browser API contract supported those requested operations; they retain tenant/store visibility checks and audit events. Converted visitors remain immutable.
+
+Tests executed: `npm run lint`, `npm run test:ci` (36 files / 96 tests), `npm run build:production`, .NET unit tests (120/120), API compile verification, and affected Playwright phase 5/6 suite (16/16 including CRUD coverage). Full Playwright regression completed at 54/54.
+
+Known issues: Users and Staff list endpoints still return arrays, so their pagination is client-side until a paged backend contract is introduced. Visitor add currently requires an authorized operator to enter a valid store ID; no store-picker API was invented. Confirmation uses the browser’s native confirmation dialog.
+
+Next step: apply the same table/action treatment to Customers, Households, Visits, Cameras, Alerts, and Reports.

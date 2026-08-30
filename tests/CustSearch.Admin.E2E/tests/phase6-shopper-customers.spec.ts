@@ -66,6 +66,18 @@ async function mockPhaseSixApi(page:Page, user=identity()):Promise<MockState> {
       const target=state.customers.find(x=>x.id===Number(stores[1]))!; const body=req.postDataJSON() as {storeIds:number[];primaryStoreId:number|null}; target.storeIds=body.storeIds;target.primaryStoreId=body.primaryStoreId;return json(route,target);
     }
     if(path==='visitors'&&method==='GET') return json(route,{data:state.visitors,pageNumber:1,pageSize:25,totalCount:state.visitors.length,totalPages:1});
+    if(path==='visitors'&&method==='POST'){
+      const body=req.postDataJSON() as {storeId:number;visitorCode:string|null;seenUtc:string|null};
+      const seen=body.seenUtc??new Date().toISOString(); const created:VisitorState={id:1002,visitorCode:body.visitorCode??'VIS-AUTO-002',storeId:body.storeId,firstSeenUtc:seen,lastSeenUtc:seen,isActive:true,convertedCustomerId:null,convertedUtc:null,createdUtc:seen,updatedUtc:seen};
+      state.visitors.push(created); return json(route,created,201);
+    }
+    const visitorUpdate=path.match(/^visitors\/(\d+)$/);
+    if(visitorUpdate&&method==='PUT'){
+      const target=state.visitors.find(x=>x.id===Number(visitorUpdate[1]))!; Object.assign(target,req.postDataJSON(),{updatedUtc:new Date().toISOString()}); return json(route,target);
+    }
+    if(visitorUpdate&&method==='DELETE'){
+      const target=state.visitors.find(x=>x.id===Number(visitorUpdate[1]))!; target.isActive=false; target.updatedUtc=new Date().toISOString(); return json(route,target);
+    }
     const convert=path.match(/^visitors\/(\d+)\/convert$/);
     if(convert&&method==='POST'){
       const visitor=state.visitors.find(x=>x.id===Number(convert[1]))!; const body=req.postDataJSON() as {customerId:number|null;firstName:string|null;lastName:string|null;mobile:string|null;email:string|null;notes:string|null};
@@ -109,6 +121,15 @@ test('anonymous visitor conversion is explicit and creates a customer only after
   await expect(page.getByText('VIS-001',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Convert'}).click();
   await page.getByPlaceholder('New customer first name').fill('Neha');await page.getByPlaceholder('Last name').fill('Mehta');await page.getByRole('button',{name:'Convert visitor'}).click();
   await expect(page.getByText('Visitor converted to CUST-CONVERTED.',{exact:true})).toBeVisible();await expect.poll(()=>state.visitors[0].convertedCustomerId).toBe(903);
+});
+
+test('anonymous visitor add, edit and deactivate actions preserve the record',async({page})=>{
+  const state=await mockPhaseSixApi(page);await signIn(page);await openDashboardLink(page,'Visitors');
+  await page.getByPlaceholder('Visitor code (optional)').fill('VIS-002');await page.getByLabel('Visitor store ID').fill('101');await page.getByRole('button',{name:'Add visitor'}).click();
+  await expect(page.getByText('Visitor added.',{exact:true})).toBeVisible();await expect.poll(()=>state.visitors.length).toBe(2);
+  const row=page.getByRole('row').filter({hasText:'VIS-002'});await row.getByTestId('edit-visitor-1002').click();await page.getByRole('textbox',{name:'Visitor code',exact:true}).fill('VIS-002-UPDATED');await page.getByRole('button',{name:'Save changes'}).click();
+  await expect(page.getByText('Visitor updated.',{exact:true})).toBeVisible();await expect.poll(()=>state.visitors[1].visitorCode).toBe('VIS-002-UPDATED');
+  page.once('dialog',dialog=>dialog.accept());await page.getByTestId('deactivate-visitor-1002').click();await expect(page.getByText('Visitor deactivated.',{exact:true})).toBeVisible();await expect.poll(()=>state.visitors[1].isActive).toBe(false);
 });
 
 test('customer route permission guard denies a tenant user without Customers.View',async({page})=>{
