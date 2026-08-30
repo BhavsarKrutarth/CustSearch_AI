@@ -33,7 +33,7 @@ export class LoginPage {
   protected password = '';
 
   constructor() {
-    this.theme.applyContextDefault('light');
+    this.theme.applyContextDefault('dark');
   }
 
   protected signIn(): void {

@@ -18,7 +18,7 @@ describe('LoginPage', () => {
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     const fixture = TestBed.createComponent(LoginPage);
     fixture.detectChanges();
-    const page = fixture.componentInstance as any;
+    const page = fixture.componentInstance as unknown as { username: string; password: string; signIn(): void };
     page.username = 'admin@example.com';
     page.password = 'secret';
     page.signIn();

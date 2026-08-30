@@ -22,7 +22,7 @@ export interface SecurityReport{storeId:number|null;fromUtc:string;toUtc:string;
  evidenceTicket(incidentId:number,evidenceId:number):Observable<SecurityEvidenceTicket>{return this.api.post(`security/incidents/${incidentId}/evidence/${evidenceId}/view-ticket`);}
  evidenceUrl(incidentId:number,evidenceId:number,token:string):string{return `/api/tenant/security/incidents/${incidentId}/evidence/${evidenceId}/view?token=${encodeURIComponent(token)}`;}
  settings():Observable<SecuritySettings>{return this.api.get('security/settings');}
- saveSettings(value:SecuritySettings):Observable<SecuritySettings>{const{storeId,ruleVersion,...command}=value;return this.api.put('security/settings',command);}
+ saveSettings(value:SecuritySettings):Observable<SecuritySettings>{const command:Partial<SecuritySettings>={...value};delete command.storeId;delete command.ruleVersion;return this.api.put('security/settings',command);}
  rules():Observable<SecurityRule[]>{return this.api.get('security/rules');}
  report(fromUtc:string,toUtc:string):Observable<SecurityReport>{return this.api.get(`security/reports?fromUtc=${encodeURIComponent(fromUtc)}&toUtc=${encodeURIComponent(toUtc)}`);}
 }

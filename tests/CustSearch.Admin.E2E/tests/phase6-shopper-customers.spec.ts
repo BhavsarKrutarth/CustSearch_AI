@@ -37,6 +37,8 @@ async function mockPhaseSixApi(page:Page, user=identity()):Promise<MockState> {
   };
 
   await page.route('**/api/auth/login', route=>json(route,{accessToken:jwtWithFutureExpiry(),accessTokenExpiresUtc:new Date(Date.now()+3_600_000).toISOString(),user}));
+  await page.route('**/api/auth/refresh', route=>json(route,{accessToken:jwtWithFutureExpiry(),accessTokenExpiresUtc:new Date(Date.now()+3_600_000).toISOString(),user}));
+  await page.route('**/api/auth/me', route=>json(route,{user,accessTokenExpiresUtc:new Date(Date.now()+3_600_000).toISOString()}));
   await page.route('**/api/tenant/**', async route=>{
     const req=route.request(); const url=new URL(req.url()); const path=url.pathname.replace('/api/tenant/',''); const method=req.method();
     state.calls.push(`${method} ${path}${url.search}`);
@@ -111,7 +113,7 @@ test('anonymous visitor conversion is explicit and creates a customer only after
 
 test('customer route permission guard denies a tenant user without Customers.View',async({page})=>{
   await mockPhaseSixApi(page,identity({roles:['StoreManager'],permissions:['TenantDashboard.View','Visitors.View'],storeIds:[101]}));await signIn(page);
-  await page.locator('app-phase-five-dashboard main nav.nav').getByRole('link',{name:'Customers',exact:true}).click();await expect(page).toHaveURL(/\/access-denied$/);await expect(page.getByText(/access denied/i).first()).toBeVisible();
+  await page.goto('/customer-admin/customers');await expect(page).toHaveURL(/\/access-denied$/);await expect(page.getByText(/access denied/i).first()).toBeVisible();
 });
 
 test('store-scoped customer list trusts server-authorized result set and never requests another tenant',async({page})=>{

@@ -1,18 +1,27 @@
 <main id="main-content" class="login-page">
-  <section class="login-card" aria-labelledby="login-title">
-    <div class="brand"><span aria-hidden="true">CS</span><b>CustSearch <i>Admin</i></b></div>
-    <p class="eyebrow">Retail intelligence platform</p>
-    <h1 id="login-title">Welcome back</h1>
-    <p class="intro">Sign in to continue to your secure admin workspace.</p>
-    @if (message()) { <p class="success" role="status">{{ message() }}</p> }
-    <form (ngSubmit)="signIn()" novalidate>
-      <label>Tenant code <small>Required for Customer Admin · leave blank for Platform Admin</small><input name="tenantCode" [(ngModel)]="tenantCode" autocomplete="organization" placeholder="e.g. acme-retail"></label>
-      <label>Email or username<input name="username" [(ngModel)]="username" autocomplete="username" required></label>
-      <label>Password <span class="password-field"><input name="password" [(ngModel)]="password" [type]="showPassword() ? 'text' : 'password'" autocomplete="current-password" required><button class="password-toggle" type="button" (click)="togglePassword()" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'">{{ showPassword() ? 'Hide' : 'Show' }}</button></span></label>
-      @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-      @if (errorReference()) { <p class="error-reference">{{ errorReference() }}</p> }
-      <button class="submit" type="submit" [disabled]="busy() || !username || !password">{{ busy() ? 'Signing in…' : 'Sign in' }}</button>
-    </form>
-    <small class="security">Your credentials and access token are never stored in browser storage.</small>
+  <section class="login-visual" aria-label="CustSearch AI product overview">
+    <div class="visual-grid" aria-hidden="true"></div>
+    <div class="visual-topline"><span class="brand-mark">CS</span><span>CustSearch <b>AI</b></span><span class="secure-chip">SECURE WORKSPACE</span></div>
+    <div class="visual-copy"><p class="eyebrow">Retail intelligence. Reimagined.</p><h1>See the signals<br>behind every visit.</h1><p>Understand customers, visits, store activity and camera intelligence from one secure operational workspace.</p></div>
+    <div class="visual-dashboard" aria-hidden="true"><div class="mini-panel traffic"><div><span>VISIT ACTIVITY</span><b>Live signal</b></div><svg viewBox="0 0 420 120" preserveAspectRatio="none"><path d="M0 95 C42 84 52 92 78 72S118 70 144 78s31-47 60-28 31 13 48 29 34-39 57-28 30 28 42 8 43-16 69-30"/></svg><div class="axis"><span>06:00</span><span>12:00</span><span>18:00</span></div></div><div class="mini-panel signal"><span>CAMERA HEALTH</span><strong><i></i> 98.4%</strong><small>All authorized streams nominal</small><div class="signal-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="mini-panel insight"><span>AI OPERATIONS</span><strong>Customer intelligence</strong><small>Visits · Households · Alerts</small><div class="node-line"><i></i><b></b><i></i><b></b><i></i></div></div></div>
+    <div class="feature-list"><span>Customer Intelligence</span><span>Visit Analytics</span><span>CCTV Monitoring</span><span>Real-time Alerts</span></div>
+    <small class="visual-footer">CUSTSEARCH AI · GOVERNED RETAIL OPERATIONS</small>
+  </section>
+  <section class="login-stage" aria-labelledby="login-title">
+    <div class="login-card">
+      <div class="mobile-brand"><span class="brand-mark">CS</span><span>CustSearch <b>AI</b></span></div>
+      <div class="login-heading"><p class="eyebrow">Secure workspace access</p><h1 id="login-title">Welcome back</h1><p>Sign in to continue to your CustSearch AI workspace.</p></div>
+      @if (message()) { <p class="success" role="status">{{ message() }}</p> }
+      <form (ngSubmit)="signIn()" novalidate>
+        <label for="tenantCode">Tenant code <small>Optional for Platform Admin</small><input id="tenantCode" name="tenantCode" [(ngModel)]="tenantCode" autocomplete="organization" placeholder="e.g. acme-retail"></label>
+        <label for="username">Email or username<input id="username" name="username" [(ngModel)]="username" autocomplete="username" placeholder="you@company.com" required></label>
+        <label for="password">Password <span class="password-field"><input id="password" name="password" [(ngModel)]="password" [type]="showPassword() ? 'text' : 'password'" autocomplete="current-password" required><button class="password-toggle" type="button" (click)="togglePassword()" [attr.aria-label]="showPassword() ? 'Hide' : 'Show'">{{ showPassword() ? 'Hide' : 'Show' }}</button></span></label>
+        <div class="form-options"><label class="checkbox"><input type="checkbox" name="remember" disabled><span>Remember me</span></label><span class="coming-soon">Password recovery available through your administrator</span></div>
+        @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+        @if (errorReference()) { <p class="error-reference">{{ errorReference() }}</p> }
+        <button class="submit" data-testid="sign-in" type="submit" [disabled]="busy() || !username || !password"><span class="spinner" [class.visible]="busy()" aria-hidden="true"></span>{{ busy() ? 'Signing in…' : 'Sign in' }}<span aria-hidden="true">→</span></button>
+      </form>
+      <div class="security"><span class="security-icon" aria-hidden="true">✓</span><span>Secure access <b>•</b> Session protected<br><small>Credentials and access tokens are never stored in browser storage.</small></span></div>
+    </div>
   </section>
 </main>

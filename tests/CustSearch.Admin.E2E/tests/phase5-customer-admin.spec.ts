@@ -200,6 +200,15 @@ async function mockPhaseFiveApi(page: Page, options: MockOptions = {}): Promise<
     accessTokenExpiresUtc: new Date(Date.now() + 3_600_000).toISOString(),
     user: identity,
   }));
+  await page.route('**/api/auth/refresh', route => json(route, {
+    accessToken: jwtWithFutureExpiry(),
+    accessTokenExpiresUtc: new Date(Date.now() + 3_600_000).toISOString(),
+    user: identity,
+  }));
+  await page.route('**/api/auth/me', route => json(route, {
+    user: identity,
+    accessTokenExpiresUtc: new Date(Date.now() + 3_600_000).toISOString(),
+  }));
 
   await page.route('**/api/tenant/**', async route => {
     const request = route.request();
@@ -512,7 +521,7 @@ test('store-scoped permission guard blocks pages without required permission', a
   });
   await signIn(page);
   const dashboard = page.locator('app-phase-five-dashboard');
-  await dashboard.getByRole('link', { name: 'Users', exact: true }).click();
+  await page.goto('/customer-admin/users');
   await expect(page).toHaveURL(/\/access-denied$/);
   await expect(page.getByText(/access denied/i).first()).toBeVisible();
 });

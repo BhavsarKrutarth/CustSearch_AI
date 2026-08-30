@@ -12,6 +12,10 @@ npm start
 
 Open `http://localhost:4200/customer-admin` for Customer Admin or `http://localhost:4200/platform-admin` for Platform Admin. The development proxy sends `/api` requests to `https://localhost:7277`.
 
+## Local/dev/UAT login testing
+
+Do not guess or hardcode login passwords. Before each test run, inspect the latest `Users` and `Tenants` rows. Use the selected active user's `UserName` or `Email`, read its current `DisplayPassword` for local/dev/UAT only, and verify `IsActive = 1`. Tenant testing must use a matching `Users.TenantId = Tenants.Id`; platform testing uses the appropriate platform-scope account with `TenantId = NULL`. Never use another tenant accidentally, and never expose `DisplayPassword` through production APIs or UI.
+
 ## Code scaffolding
 
 Angular CLI includes powerful code scaffolding tools. To generate a new component, run:

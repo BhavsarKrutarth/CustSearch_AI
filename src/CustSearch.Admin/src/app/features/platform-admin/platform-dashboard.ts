@@ -12,4 +12,6 @@ export class PlatformDashboard implements OnInit {
   private readonly api=inject(PlatformTenantApiService); protected readonly data=signal<PlatformDashboardSummary|null>(null); protected readonly loading=signal(true); protected readonly error=signal('');
   ngOnInit():void {this.load();}
   protected load():void {this.loading.set(true);this.error.set('');this.api.dashboard().pipe(finalize(()=>this.loading.set(false))).subscribe({next:v=>this.data.set(v),error:()=>this.error.set('Platform dashboard could not be loaded.')});}
+  protected totalLifecycle(): number { const d=this.data(); return d ? d.activeTenants+d.trialTenants+d.suspendedTenants+d.inactiveTenants : 0; }
+  protected share(value:number): number { const total=this.totalLifecycle(); return total ? Math.round(value/total*100) : 0; }
 }
