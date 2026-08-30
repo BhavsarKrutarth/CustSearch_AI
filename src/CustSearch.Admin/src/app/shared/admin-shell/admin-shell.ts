@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnInit, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { catchError, finalize, of } from 'rxjs';
 import { AuthApiService } from '../../core/auth/auth-api.service';
@@ -49,6 +49,10 @@ export class AdminShell implements OnInit {
     return [...groups.values()];
   });
 
+  constructor() {
+    effect(() => this.theme.setTenantContext(this.adminType() === 'customer' ? this.session.currentUser()?.tenantCode ?? null : null));
+  }
+
   ngOnInit(): void {
     this.theme.applyContextDefault('dark');
   }
@@ -72,6 +76,10 @@ export class AdminShell implements OnInit {
     return this.adminType() === 'platform'
       ? (this.session.currentUser()?.roles?.[0] ?? 'Platform administrator')
       : (this.session.currentUser()?.roles?.[0] ?? 'Tenant administrator');
+  }
+
+  protected canCustomizeTheme(): boolean {
+    return this.adminType() === 'customer' && this.session.roles().some(role => ['TenantAdmin', 'TenantOwner', 'ShopOwner'].includes(role));
   }
 
   protected logout(): void {

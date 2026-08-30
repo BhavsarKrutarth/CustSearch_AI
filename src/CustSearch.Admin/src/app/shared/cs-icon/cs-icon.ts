@@ -23,6 +23,11 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       @case ('security') { <path d="M12 3 20 6v5c0 5-3.4 8.3-8 10-4.6-1.7-8-5-8-10V6z"/><path d="m8.5 12 2.2 2.2 4.8-5"/> }
       @case ('tenant') { <path d="M4 21V4l8-2 8 2v17M2 21h20M8 7h1M15 7h1M8 11h1M15 11h1M8 15h1M15 15h1"/> }
       @case ('operations') { <path d="M4 19V9M10 19V5M16 19v-8M22 19V3"/> }
+      @case ('search') { <circle cx="11" cy="11" r="6.5"/><path d="m16 16 5 5"/> }
+      @case ('close') { <path d="m6 6 12 12M18 6 6 18"/> }
+      @case ('menu') { <path d="M4 7h16M4 12h16M4 17h16"/> }
+      @case ('chevron-left') { <path d="m15 5-7 7 7 7"/> }
+      @case ('chevron-right') { <path d="m9 5 7 7-7 7"/> }
     }
   </svg>`,
   changeDetection: ChangeDetectionStrategy.OnPush,

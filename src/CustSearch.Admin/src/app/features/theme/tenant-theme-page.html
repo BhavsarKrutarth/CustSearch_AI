@@ -1,0 +1,13 @@
+<app-admin-shell pageTitle="Workspace theme" eyebrow="Customer branding">
+  <div class="theme-layout">
+    <section class="panel editor-panel">
+      <div class="panel-heading"><div><p class="section-kicker">Tenant customization</p><h2>Brand and action colors</h2><span>Customize the visual identity for this customer workspace without changing product meaning.</span></div><span class="badge">{{theme.tenantCode()}}</span></div>
+      <label class="mode-field"><span>Editing palette</span><select [ngModel]="mode()" (ngModelChange)="changeMode($event)" aria-label="Editing color mode"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+      @for(field of fields;track field.key){@if(groupStart($index)){<h3 class="group-title">{{field.group}}</h3>}<label class="color-field"><span>{{field.label}}<small>{{palette()[field.key]}}</small></span><input type="color" [ngModel]="palette()[field.key]" (ngModelChange)="setColor(field.key,$event)" [attr.aria-label]="field.label"></label>}
+      <p class="helper">Colors are validated as six-digit hex values. Action colors retain their semantic meaning across all modules.</p>
+      <div class="actions"><button type="button" class="cs-btn cs-btn-primary" (click)="apply()">Apply workspace theme</button><button type="button" class="cs-btn cs-btn-outline" (click)="reset()">Restore default</button></div>
+      @if(message()){<p class="message" role="status">{{message()}}</p>}
+    </section>
+    <aside class="panel preview-panel" aria-label="Theme preview"><p class="section-kicker">Live preview</p><h2>Customer workspace</h2><p class="muted">Preview follows the selected {{mode()}} palette.</p><div class="preview-card"><div><span class="badge">Active workspace</span><h3>Operations overview</h3><p>Customer intelligence and store activity.</p></div><div class="preview-actions"><button type="button" class="cs-btn cs-btn-primary">Save</button><button type="button" class="cs-btn cs-btn-secondary">Export</button><button type="button" class="cs-btn cs-btn-success">Approve</button><button type="button" class="cs-btn cs-btn-warning">Suspend</button><button type="button" class="cs-btn cs-btn-danger">Delete</button></div></div><div class="status-row"><span class="status-badge success">Healthy</span><span class="status-badge warning">Review</span><span class="status-badge danger">Critical</span></div><p class="storage-note">This frontend-only profile is scoped to the tenant in this browser. Backend tenant theme persistence can be connected later without changing the token contract.</p></aside>
+  </div>
+</app-admin-shell>

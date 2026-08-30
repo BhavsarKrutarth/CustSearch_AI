@@ -8,7 +8,7 @@ Files changed: `src/CustSearch.Admin/src/styles.scss`, `src/CustSearch.Admin/src
 
 Tests executed: `npm install`, `npm run lint`, `npm run test:ci`, `npm run build:production`.
 
-Results: semantic dark/light tokens, compatibility aliases, global panel/table/state primitives, focus treatment, and reduced-motion behavior added. No API or guard changes.
+Results: semantic dark/light tokens, compatibility aliases, global panel/table/state primitives, focus treatment, reduced-motion behavior, and semantic action-button variables added. No API or guard changes.
 
 Known issues: two existing dashboard component styles exceed the warning threshold; no error budget remains exceeded.
 
@@ -82,10 +82,24 @@ Keyboard labels, focus states, semantic alerts, navigation current state, and re
 
 Status: COMPLETE
 
-Angular lint and unit suite pass: 36 files / 94 tests. Production build passes. Full Playwright suite passes: 53/53 with one transient tenant-edit DOM timing failure reproduced as 1/1 pass in isolation and then cleared on the complete rerun.
+Angular lint and unit suite pass: 36 files / 96 tests. Production build passes. Full Playwright suite passes: 53/53.
 
 Database/API smoke: SQL Server and API health are reachable. The tenant-scoped account matching the supplied username is active TenantAdmin for `TEN-35D77F00D7F0`, assigned to the UAT store, and already has the configured camera preview grant. DB-sourced `DisplayPassword` login returned 401 for both scoped identities, so the hash/display-password mismatch is unresolved without an authorized credential rotation. Physical preview is also blocked by `CctvPreview.Enabled=false`, unavailable AI frame service, and missing confirmed camera MAC/IP plus runtime RTSP secret.
 
 Files changed for QA: `src/CustSearch.Admin/README.md`, `tenant-detail-page.html`, `auth-authorization.spec.ts`, `phase5-customer-admin.spec.ts`, and `phase6-shopper-customers.spec.ts`.
 
 Next step: capture the responsive viewport screenshot matrix and resolve the local UAT credential/configuration mismatch before live physical-camera validation.
+
+## UI-14 - Customer-wise theme and color system
+
+Status: COMPLETE (frontend foundation)
+
+Files changed: `src/CustSearch.Admin/src/app/core/theme/theme.service.ts`, `theme.service.spec.ts`, `tenant-theme.models.ts`, `theme-buttons.scss`, `src/CustSearch.Admin/src/app/features/theme/tenant-theme-page.ts`, `tenant-theme-page.html`, `tenant-theme-page.scss`, `src/CustSearch.Admin/src/app/shared/admin-shell/admin-shell.ts`, `admin-shell.html`, `src/CustSearch.Admin/src/app/shared/cs-icon/cs-icon.ts`, `src/CustSearch.Admin/src/app/app.routes.ts`, and `src/CustSearch.Admin/src/styles.scss`.
+
+Results: added a role-guarded Custom theme page for customer administrators; placed `Custom theme` below `My profile & security`; separate light/dark tenant palettes; validated six-digit hex input; tenant-scoped browser persistence; tenant context isolation; dedicated high-contrast sidebar tokens; hidden scrollbar chrome; consistent SVG shell controls; and semantic `.cs-btn-primary`, `.cs-btn-secondary`, `.cs-btn-success`, `.cs-btn-warning`, `.cs-btn-danger`, `.cs-btn-neutral`, and `.cs-btn-outline` variants. Existing `light`, `dark`, and `system` theme preferences remain intact. No existing API request, response, camera session, permission, or route contract was changed.
+
+Tests executed: `npm run lint`, `npm run test:ci`, `npm run build:production`, and `npx playwright test --workers=1`. Unit suite: 36 files / 96 tests passed. Production build passed with existing non-failing dashboard style-budget warnings. Playwright: 53/53 passed after the shell changes.
+
+Known issue: theme changes currently persist only in the browser under the authenticated tenant code. Cross-device/customer-wide persistence requires a backend endpoint, a tenant-theme permission, validation, and audit logging; those were not invented because no existing contract was available.
+
+Next step: product decision and backend contract for shared tenant branding, then migrate remaining feature-specific buttons/tables to the semantic variants and capture the responsive screenshot matrix.

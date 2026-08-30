@@ -16,6 +16,7 @@ export const routes:Routes=[
   {path:'account/change-password',title:'Change password | CustSearch AI',canActivate:[authGuard],loadComponent:()=>import('./features/auth/change-password-page').then(m=>m.ChangePasswordPage)},
   {path:'customer-admin',pathMatch:'full',redirectTo:'customer-admin/dashboard'},
   {path:'customer-admin/dashboard',title:'Customer Admin | CustSearch AI',canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantDashboardView])],loadComponent:()=>import('./features/customer-admin/phase-five-dashboard-page').then(m=>m.PhaseFiveDashboardPage)},
+  {path:'customer-admin/theme',title:'Workspace theme | CustSearch AI',canActivate:[authGuard,roleGuard(['TenantAdmin','TenantOwner','ShopOwner'])],loadComponent:()=>import('./features/theme/tenant-theme-page').then(m=>m.TenantThemePage)},
   {path:'customer-admin/stores',title:'Stores | CustSearch AI',data:{mode:'stores',title:'Stores'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantStoresView])],loadComponent:phase5Page},
   {path:'customer-admin/users',title:'Users | CustSearch AI',data:{mode:'users',title:'Tenant users'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.tenantUsersView])],loadComponent:phase5Page},
   {path:'customer-admin/staff',title:'Staff | CustSearch AI',data:{mode:'staff',title:'Staff'},canActivate:[authGuard,roleGuard(tenantRoles),permissionGuard([PERMISSIONS.staffView])],loadComponent:phase5Page},

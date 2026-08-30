@@ -27,6 +27,9 @@ Typography uses an Inter/system sans-serif stack with 24-32px page titles, 15-17
 - `AdminShell` now provides a fixed/sticky 252px sidebar, 74px collapsed rail, mobile drawer, grouped permission-filtered navigation, inline SVG icons, active route indicator, workspace context, global-search shell with `Ctrl K` hint, theme selector, notification/security controls, user menu, and logout.
 - `CsIcon` (`app-cs-icon`) is a dependency-free inline SVG icon set for navigation and shell actions.
 - Global layout primitives include page headers, filter bars, panels, table states, semantic badges, and focus/reduced-motion behavior.
+- Customer-wise theming is implemented through `ThemeService`, `TenantThemePalette`, and the guarded `/customer-admin/theme` route. Tenant admins can customize separate light and dark palettes, including brand, surfaces, text, status colors, and semantic action buttons. The selected tenant context is applied through semantic CSS variables, so switching tenants clears the previous tenant's inline palette.
+- Shared `.cs-btn-*` variants now provide consistent primary, secondary, success, warning, danger, neutral, and outline action treatment without component-level color duplication.
+- The supplied shell review image was handled: profile menu wording is now `My profile & security` followed by `Custom theme`; the custom-theme item opens `/customer-admin/theme`; sidebar labels use dedicated high-contrast sidebar tokens in light mode; navigation scrollbar chrome is hidden without disabling scrolling; and search, menu, close, and collapse controls use consistent SVG icons instead of placeholder characters.
 
 ## Screens implemented
 
@@ -68,6 +71,13 @@ Examples: `smoke.platform`, `smoke.tenantadmin`, and `smoke.staff` must each use
 - `src/CustSearch.Admin/src/app/shared/admin-shell/admin-shell.html`
 - `src/CustSearch.Admin/src/app/shared/admin-shell/admin-shell.scss`
 - `src/CustSearch.Admin/src/app/core/navigation/admin-navigation.ts`
+- `src/CustSearch.Admin/src/app/core/theme/theme.service.ts`
+- `src/CustSearch.Admin/src/app/core/theme/theme.service.spec.ts`
+- `src/CustSearch.Admin/src/app/core/theme/tenant-theme.models.ts`
+- `src/CustSearch.Admin/src/app/core/theme/theme-buttons.scss`
+- `src/CustSearch.Admin/src/app/features/theme/tenant-theme-page.ts`
+- `src/CustSearch.Admin/src/app/features/theme/tenant-theme-page.html`
+- `src/CustSearch.Admin/src/app/features/theme/tenant-theme-page.scss`
 - `src/CustSearch.Admin/src/app/features/auth/login-page.ts`
 - `src/CustSearch.Admin/src/app/features/auth/login-page.html`
 - `src/CustSearch.Admin/src/app/features/auth/login-page.scss`
@@ -86,14 +96,14 @@ Examples: `smoke.platform`, `smoke.tenantadmin`, and `smoke.staff` must each use
 
 - `npm install`: completed; 600 packages audited, no vulnerabilities reported.
 - `npm run lint`: passed.
-- `npm run test:ci`: passed, 36 test files / 94 tests.
+- `npm run test:ci`: passed, 36 test files / 96 tests, including tenant palette isolation and light/dark separation tests.
 - `npm run build:production`: passed. Angular reports non-failing style-budget warnings for existing customer/platform dashboard styles; no production budget errors remain.
-- `npx playwright test --workers=1`: passed, 53/53 tests.
+- `npx playwright test --workers=1`: passed, 53/53 tests. The tenant-edit fixture was stabilized by mocking its existing administrator lookup and waiting for the authoritative form value. No theme route or shell authorization failure was observed.
 - Database/API smoke: SQL Server `KRUTARTH-BHAVSA / CustSearch_AI` connected and API `/health/live` returned 200.
 - Database-backed tenant authorization: the tenant-scoped identity matching the supplied username is active, has the TenantAdmin role, is assigned to the UAT store, has the camera permissions, and already has an active preview grant for the configured UAT camera. No grant mutation was necessary.
 - Credential smoke: current SQL `DisplayPassword` values were used only in process memory and were not printed. Both platform and tenant API login attempts returned 401, indicating the local display-password value and API password hash are not currently synchronized; no password was guessed, reset, or committed.
 - Physical camera smoke: the configured camera row is present, but its documented MAC was not present in the current ARP table. The API has `CctvPreview.Enabled=false`, the AI frame service on `127.0.0.1:8000` is unavailable, and no RTSP secret/IP was added. Live physical monitoring remains blocked until the camera MAC/IP and authorized runtime secret are confirmed and preview is enabled deliberately.
-- Screenshot capture: not produced in this CLI-only pass. Browser viewport review remains a follow-up using the supplied desktop/tablet/mobile matrix.
+- Screenshot capture: the supplied `change.png` review was applied. Automated Chromium browser regression passed after the shell changes; a complete manual screenshot matrix at 1920, 1440, 1366, 1024, 768, 430, 390, and 360 widths remains a follow-up.
 
 ## Remaining TODOs
 
@@ -102,3 +112,4 @@ Examples: `smoke.platform`, `smoke.tenantadmin`, and `smoke.staff` must each use
 3. Apply the new table surface to customer, household, visit, camera, and report pages with stable `data-testid` selectors.
 4. Capture screenshots at 1920, 1440, 1366, 1024, 768, 430, 390, and 360 widths.
 5. Review style-budget warnings during the next per-screen extraction pass.
+6. Add an authenticated backend tenant-theme endpoint and audit trail if themes must be shared across browsers/devices. The current implementation deliberately uses tenant-keyed browser storage because no existing theme persistence API or permission contract was found; no backend contract was changed.
