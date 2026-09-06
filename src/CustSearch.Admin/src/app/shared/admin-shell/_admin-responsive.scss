@@ -1,0 +1,134 @@
+// Shared density and overflow rules for every page projected into the admin shell.
+// The main-content scope intentionally leaves login and the shell controls alone.
+#main-content {
+  .wrap { padding: 0; min-width: 0; }
+  :is(.grid, .layout, .row, .cols, .form, .form-grid, .filters, .summary,
+      .cards, .detail-grid, .metric-grid, .stats-grid, .kpi-grid, .content-grid,
+      .dashboard-grid, .overview-grid, .theme-layout, .zone-layout, .grant-form) > * { min-width: 0; }
+  :is(.panel, .card, .detail, .list, .password-card, .table, .tracks,
+      .table-scroll, .table-wrap) { min-width: 0; max-width: 100%; }
+  :is(.table-scroll, .table-wrap, .panel:has(> table), .card:has(> table)) {
+    position: relative;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+  :is(.toolbar, .page-header, .panel-heading, .panel-head, .dashboard-header,
+      .command-header, .scope-bar, .portfolio-note, .actions, .pager, .pagination) {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  :is(.toolbar, .filters, .actions, .pager) > * { min-width: 0; max-width: 100%; }
+  :is(input, select, textarea) { min-width: 0; max-width: 100%; }
+  :is(input[type='checkbox'], input[type='radio']) {
+    width: 16px; height: 16px; min-height: 16px; padding: 0; flex: 0 0 16px;
+    vertical-align: middle;
+  }
+  label:has(> input[type='checkbox']), label:has(> input[type='radio']) {
+    display: flex; align-items: center; gap: 6px;
+  }
+  :is(td, dd, .alert, .connection, .job, .worker, .camera-tile footer) { overflow-wrap: anywhere; }
+  :is(.grid, .layout):has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+  > :last-child { margin-bottom: 0; }
+  .tenant-filters { align-items: end; gap: 12px; grid-template-columns: minmax(200px, 1.6fr) repeat(2, minmax(130px, 1fr)) auto; }
+  .tenant-filters :is(input, select, button) { width: 100%; min-height: 36px; }
+  .directory table { table-layout: fixed; min-width: 700px; }
+  .tenant-column { width: 30%; }.status-column { width: 10%; }.plan-column { width: 10%; }
+  .usage-column { width: 20%; }.contact-column { width: 23%; }.action-column { width: 7%; }
+}
+
+@media (max-width: 1440px), (max-height: 800px) {
+  #main-content {
+    --cs-input-height: 36px;
+    --cs-table-row: 36px;
+    :is(.panel, .card, .password-card, .detail, .command-header, .scope-bar,
+        .master, .catalog, .setting, .summary > div, .cards > article) { padding: 12px; }
+    :is(.panel, .toolbar, .dashboard-header, .scope-bar, .controls, .billing-nav, .nav) { margin-bottom: 12px; }
+    :is(.grid, .layout, .cols, .form-grid, .detail-grid, .stats-grid, .dashboard-grid,
+        .theme-layout, .zone-layout) { gap: 12px; }
+    .wrap > .toolbar h1 { font-size: 26px; margin: 0 0 4px; }
+    .wrap > .toolbar p { margin: 4px 0; }
+    :is(.card, .panel) > h2 { margin: 0 0 10px; }
+    :is(input:not([type='checkbox']):not([type='radio']):not([type='color']):not([type='range']), select:not([multiple])) {
+      min-height: 36px; padding: 7px 10px;
+    }
+    :is(form, .filters, .actions, .controls, .pager) button {
+      min-height: 36px; padding: 7px 12px;
+    }
+    .icon-action { min-height: 32px; padding: 6px; }
+    :is(th, td) { padding: 7px 8px; }
+    :is(.stat-card, .metric-card, .kpi) { min-height: 96px; padding: 12px; }
+    :is(.metric-card, .kpi) strong { margin-top: 8px; }
+    :is(.metric-card, .kpi) small { margin-top: 4px; }
+    .stat-card p { margin-bottom: 8px; }
+    .stat-card small { margin-top: 6px; }
+    .revenue > strong { margin-top: 18px; }
+    .revenue a { margin-top: 18px; }
+    :is(.metric-list, .lifecycle-list) { margin-top: 14px; gap: 10px; }
+    .camera-tile { grid-template-rows: auto auto auto; }
+    .camera-tile :is(header, footer) { padding: 10px; }
+    .tenant-toolbar > div { display: grid; grid-template-columns: auto auto; column-gap: 12px; align-items: baseline; }
+    .tenant-toolbar .section-kicker { grid-column: 1 / -1; }
+    .directory td { font-size: 13px; line-height: 17px; padding-block: 6px; vertical-align: middle; }
+    .directory td small { font-size: 11px; line-height: 14px; margin-top: 3px; }
+    :is(.toolbar, .detail-heading) h2 { font-size: 20px; line-height: 1.25; }
+    :is(.primary-action, .secondary-action, .lifecycle button) { padding: 8px 12px; }
+    .pagination { padding-top: 10px; }
+    .metric { padding: 12px; }
+    > :last-child { margin-bottom: 0; }
+  }
+}
+
+@media (min-width: 761px) and (max-height: 700px) {
+  #main-content {
+    padding-block: 10px 4px;
+    > .page-heading { margin-bottom: 10px; }
+    > .page-heading > div {
+      display: grid; grid-template-columns: auto 1fr; column-gap: 14px; align-items: baseline;
+    }
+    > .page-heading p { grid-column: 1 / -1; }
+    > .page-heading .page-meta { margin-top: 0; }
+    :is(.tenant-toolbar, .tenant-filters, .directory) { padding-block: 8px; }
+  }
+}
+
+@media (max-width: 740px) {
+  #main-content .tenant-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+// Split views need room for both a useful table and an editable form.
+@media (max-width: 1180px) {
+  #main-content :is(.grid:has(> aside), .layout, .theme-layout, .zone-layout) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #main-content .grant-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  #main-content {
+    .tenant-toolbar > div { display: block; }
+    :is(.grid, .cols, .detail-grid, .dashboard-grid, .overview-grid, .content-grid,
+        .form-grid, .zone-layout, .theme-layout, .grant-form) { grid-template-columns: minmax(0, 1fr); }
+    :is(.summary, .cards, .stats-grid, .metric-grid, .kpi-grid) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .filters:not(.tenant-filters) { display: flex; flex-wrap: wrap; align-items: end; }
+    .filters:not(.tenant-filters) > * { flex: 1 1 160px; }
+    .worker { grid-template-columns: minmax(0, 1fr) auto; }
+    .setting, .master { grid-template-columns: minmax(0, 1fr); }
+    .row { flex-wrap: wrap; }
+    .row > * { min-width: 0; }
+    dl { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
+  }
+}
+
+@media (max-width: 480px) {
+  #main-content {
+    .tenant-filters { grid-template-columns: minmax(0, 1fr); }
+    :is(.row, .quota-grid) { grid-template-columns: minmax(0, 1fr); }
+    .row > * { flex-basis: 100%; }
+    :is(.actions, .command-actions, .scope-actions) > :is(button, a) { flex: 1 1 auto; }
+    :is(.summary, .cards) { grid-template-columns: minmax(0, 1fr); }
+    .panel-heading { align-items: flex-start; }
+    .filters:not(.tenant-filters) > * { flex-basis: 100%; }
+  }
+}

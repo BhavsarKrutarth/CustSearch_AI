@@ -1,1 +1,62 @@
 :host { display: block; min-height: 100dvh; }
+
+// Keep fixed header controls intact while search takes the remaining space.
+.topbar-context, .search, .top-actions, .user-trigger-copy { min-width: 0; }
+.topbar-context { flex: 0 1 140px; }
+.search { flex: 1 1 240px; width: auto; }
+.top-actions, .collapse-button, .menu-button, .search-icon { flex-shrink: 0; }
+.logout-button { white-space: nowrap; }
+.user-trigger-copy small { max-width: 108px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-header, .workspace-label, .sidebar-footer { flex-shrink: 0; }
+.sidebar nav { scrollbar-width: thin; }
+.sidebar nav::-webkit-scrollbar { display: block; width: 4px; }
+.sidebar nav::-webkit-scrollbar-thumb { background: var(--cs-sidebar-border); border-radius: 4px; }
+.user-copy small { overflow-wrap: anywhere; }
+.page-heading > div { min-width: 0; }
+
+@media (max-width: 1440px), (max-height: 800px) {
+  .shell { --cs-sidebar-width: 216px; --cs-sidebar-collapsed: 64px; --cs-topbar-height: 52px; }
+  .sidebar { padding: 12px 10px 10px; }
+  .workspace-label { margin: 12px 2px; min-height: 42px; padding: 6px 8px; }
+  .nav-group { margin-bottom: 8px; }
+  .nav-group p { margin-bottom: 4px; }
+  .nav-group a, .nav-pending { min-height: 32px; padding: 5px 8px; gap: 9px; }
+  .sidebar-footer { padding: 10px 4px 0; }
+  .topbar { gap: 10px; padding-inline: 16px; }
+  .topbar-context { flex-basis: 108px; }
+  .search { margin-left: 0; height: 34px; }
+  .top-actions { gap: 6px; }
+  main { padding: 14px 16px 20px; }
+  .page-heading { gap: 12px; margin-bottom: 12px; }
+  .page-heading p { margin-bottom: 3px; }
+  .page-heading h1 { font-size: 26px; line-height: 1.2; }
+  .page-meta { margin-top: 4px; }
+}
+
+@media (max-width: 1180px) {
+  .user-trigger-copy { display: none; }
+  .topbar-context { flex-basis: 96px; }
+  .search kbd { display: none; }
+}
+
+@media (max-width: 900px) {
+  .shell.sidebar-collapsed .brand-copy,
+  .shell.sidebar-collapsed .workspace-label span:last-child,
+  .shell.sidebar-collapsed .nav-group p,
+  .shell.sidebar-collapsed .nav-label,
+  .shell.sidebar-collapsed .user-copy { display: revert; }
+  .shell.sidebar-collapsed .brand { margin-inline: 0; }
+  .shell.sidebar-collapsed .workspace-label,
+  .shell.sidebar-collapsed .nav-group a,
+  .shell.sidebar-collapsed .nav-pending,
+  .shell.sidebar-collapsed .sidebar-footer { justify-content: flex-start; padding-inline: 8px; }
+}
+
+@media (max-width: 620px) {
+  .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 8px 12px; gap: 8px; }
+  .topbar-context { flex: 1 1 80px; }
+  .theme-picker { display: flex; }
+  .search { display: flex; flex: 1 1 100%; order: 1; max-width: none; }
+  main { padding: 12px; }
+  .page-heading h1 { font-size: 24px; }
+}

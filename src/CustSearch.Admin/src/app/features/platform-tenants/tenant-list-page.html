@@ -1,9 +1,9 @@
 <app-admin-shell adminType="platform" eyebrow="Platform / Tenant Management" pageTitle="Tenants">
-  <section class="toolbar panel" aria-label="Tenant directory controls">
+  <section class="toolbar tenant-toolbar panel" aria-label="Tenant directory controls">
     <div><p class="section-kicker">Portfolio control</p><h2>Client tenants</h2><span>{{ totalCount() }} organizations across the platform</span></div>
     @if (session.hasPermission(permissions.tenantsCreate)) { <a class="primary-action" routerLink="/admin/tenants/new">+ Create tenant</a> }
   </section>
-  <form class="filters panel" (ngSubmit)="applyFilters()" aria-label="Filter tenants">
+  <form class="filters tenant-filters panel" (ngSubmit)="applyFilters()" aria-label="Filter tenants">
     <label><span>Search</span><input name="search" [(ngModel)]="search" placeholder="Name, tenant code or contact"></label>
     <label><span>Status</span><select name="status" [(ngModel)]="status"><option value="">All statuses</option><option>Active</option><option>Suspended</option><option>Inactive</option></select></label>
     <label><span>Plan</span><select name="plan" [(ngModel)]="planId"><option value="">All plans</option>@for(plan of plans();track plan.id){<option [value]="plan.id">{{ plan.planName }}</option>}</select></label>
@@ -14,7 +14,7 @@
     @else if (loading()) { <div class="state">Loading tenants...</div> }
     @else if (!tenants().length) { <div class="state"><b>No tenants found</b><span>Adjust the filters or create the first client account.</span></div> }
     @else {
-      <div class="table-scroll"><table><thead><tr><th>Tenant</th><th>Status</th><th>Plan</th><th>Usage footprint</th><th>Contact</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+      <div class="table-scroll" role="region" aria-label="Tenant directory" tabindex="0"><table><colgroup><col class="tenant-column"><col class="status-column"><col class="plan-column"><col class="usage-column"><col class="contact-column"><col class="action-column"></colgroup><thead><tr><th>Tenant</th><th>Status</th><th>Plan</th><th>Usage footprint</th><th>Contact</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
         @for (tenant of tenants(); track tenant.id) { <tr>
           <td><a class="tenant-name" [routerLink]="['/admin/tenants', tenant.id]">{{ tenant.displayName }}</a><small>{{ tenant.tenantCode }} · {{ tenant.legalName }}</small></td>
           <td><span class="badge" [class]="statusClass(tenant.status)">{{ tenant.status }}</span></td>
